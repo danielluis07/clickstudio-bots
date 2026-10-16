@@ -7,3 +7,34 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## Bun First
+
+Prefer Bun for runtime, package management, scripts, and tests. Use alternatives only when necessary.,
+
+## Language
+
+Everything in English, except for user-facing text, this must be in Brazilian Portuguese (`pt-BR`).
+
+## Code conventions
+
+Before writing or editing any code, read `docs/CONVENTIONS.md`.
+
+Before creating or editing React components, pages, layouts, read `docs/UI-COMPONENTS.md`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in GitHub Issues for `danielluis07/clickstudio-bots`.
+See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five default triage labels.
+See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` and `docs/adr/`.
+See `docs/agents/domain.md`.
