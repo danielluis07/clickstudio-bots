@@ -1,3 +1,7 @@
+## Shadcn UI
+
+Shadcn is the foundation for the design in this project
+
 ## Server vs Client Components
 
 Prefer Server Components by default.  
