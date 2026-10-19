@@ -130,3 +130,77 @@
     @apply font-sans;
   }
 }
+
+.public-site {
+  --background: #ffffff;
+  --foreground: #14264b;
+  --primary: #1945c5;
+  --primary-foreground: #ffffff;
+  --secondary: #eef5ff;
+  --secondary-foreground: #14264b;
+  --muted-foreground: #536078;
+  --border: #d9e2f1;
+  --ring: #1945c5;
+
+  & a:focus-visible,
+  & summary:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 5px;
+  }
+
+  & [id] {
+    scroll-margin-top: 2rem;
+  }
+
+  & .site-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  & .skip-link {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    z-index: 10;
+    padding: 0.75rem 1rem;
+    background: var(--background);
+    transform: translateY(-200%);
+  }
+
+  & .skip-link:focus {
+    transform: translateY(0);
+  }
+}
+
+.legal-copy {
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+
+  & p,
+  & li,
+  & dd {
+    color: var(--muted-foreground);
+  }
+
+  & a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  & ul,
+  & ol {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding-left: 1.25rem;
+  }
+
+  & ul {
+    list-style-type: disc;
+  }
+
+  & ol {
+    list-style-type: decimal;
+  }
+}
