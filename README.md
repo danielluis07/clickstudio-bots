@@ -29,7 +29,7 @@ See [ADR 0003](docs/adr/0003-node-postgres-global-pool-on-neon.md) for why the a
 | --------------------- | --------------------------------------------------------------- |
 | `bun run dev`         | Next.js dev server                                              |
 | `bun run lint`        | ESLint                                                          |
-| `bun run typecheck`   | `tsc --noEmit`                                                  |
+| `bun run typecheck`   | Generate Next.js route types, then `tsc --noEmit`               |
 | `bun run test`        | Bun test runner (PGlite suites included)                        |
 | `bun run db:generate` | Generate a migration in `drizzle/` from `db/schema`             |
 | `bun run db:migrate`  | Apply pending migrations to `DATABASE_URL`                      |
