@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Bun First
 
-Prefer Bun for runtime, package management, scripts, and tests. Use alternatives only when necessary.,
+Prefer Bun for runtime, package management, scripts, and tests. Use alternatives only when necessary.
 
 ## Language
 

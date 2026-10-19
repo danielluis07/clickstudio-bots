@@ -1,6 +1,17 @@
+import type { Database } from "@/db/database";
 import { env } from "@/lib/env";
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { attachDatabasePool } from "@vercel/functions";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 
-const sql = neon(env.DATABASE_URL);
-export const db = drizzle({ client: sql });
+const globalForDb = globalThis as unknown as { pool?: Pool };
+
+const createPool = () => {
+  const pool = new Pool({ connectionString: env.DATABASE_URL });
+  attachDatabasePool(pool);
+  return pool;
+};
+
+const pool = (globalForDb.pool ??= createPool());
+
+export const db: Database = drizzle({ client: pool });
