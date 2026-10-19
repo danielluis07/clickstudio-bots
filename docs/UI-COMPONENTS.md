@@ -1,6 +1,6 @@
 ## Shadcn UI
 
-Shadcn is the foundation for the design in this project
+Shadcn is the foundation for the design in this project. Tailwind for styling
 
 ## Server vs Client Components
 
