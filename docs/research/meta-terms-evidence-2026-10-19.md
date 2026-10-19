@@ -67,12 +67,17 @@ Official CADE records (SEI / process search) were **not** retrieved. Secondary p
 
 Planning implication: Meta's own pricing page lists Brazil as an allowed market for AI Providers, but states no legal basis. Until official CADE records are checked, planning should not depend on a Brazil-specific exception or on its stability. Daniel decides whether to adopt that assumption.
 
+## Planning assumptions confirmed by Daniel (2026-10-19)
+
+- **Instagram route:** Instagram API with Instagram Login (Route A). Route B (Facebook Login / Messenger Platform) is out of scope; its documents were not retrieved and are not needed.
+- **Brazil exception:** planning does NOT rely on any Brazil-specific general-purpose-AI or access-fee exception. Official CADE records are therefore not required.
+
 ## 4. Remaining interpretation questions
 
 1. Does Meta consider ClickStudio an "AI Provider" (4.7), and is the Bot primary or incidental functionality? Meta decides in its sole discretion.
 2. Which role does each Tenant and ClickStudio hold: Client, Solution Provider, or AI Provider acting as Solution Provider?
 3. Does "derived forms of Platform Data" (4.7) cover Bot prompts, summaries or embeddings built from conversations? The exclusive-use fine-tuning carve-out is per business; does one fine-tune per Tenant satisfy "exclusive use"?
 4. Meta Business Agents terms and the Meta Global Processor Terms were not reviewed.
-5. Route B (Instagram with Facebook Login) documents, still missing.
-6. Official CADE status and any superseding court orders, still missing.
+5. Route B documents: closed, Route A chosen.
+6. Official CADE status: closed, Brazil exception excluded from planning.
 7. Why the Terms' "here" link for country exceptions points to a page without one; ask Meta support or an advisor.
