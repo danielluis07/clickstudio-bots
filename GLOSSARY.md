@@ -37,3 +37,7 @@ _Avoid_: Credit, interaction, message
 **Handoff**:
 The moment a Conversation passes from the Bot to the Tenant's Members, whether a Member takes over or the Bot steps aside.
 _Avoid_: Escalation, transfer, takeover
+
+**Knowledge base**:
+Everything a Tenant has told its Bot about the business. The Bot answers Contacts only from it.
+_Avoid_: Training data, training, context, documents
