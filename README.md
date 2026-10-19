@@ -14,12 +14,14 @@ Create `.env` with:
 - `BETTER_AUTH_SECRET`
 - `APP_URL`: e.g. `http://localhost:3000`
 
-Apply migrations, then start the dev server:
+Apply migrations, then start the dev server. Neon recommends the **direct** (unpooled) connection string for migrations, so override `DATABASE_URL` for that command:
 
 ```bash
-bun run db:migrate
+DATABASE_URL="<direct connection string>" bun run db:migrate
 bun run dev
 ```
+
+See [ADR 0003](docs/adr/0003-node-postgres-global-pool-on-neon.md) for why the app connects this way.
 
 ## Scripts
 
