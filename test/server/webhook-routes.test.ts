@@ -90,10 +90,13 @@ describe("WhatsApp webhook route", () => {
     expect((await deliver("not json")).status).toBe(400);
   });
 
-  test("refuses deliveries while the webhook is not configured", async () => {
-    const unconfigured = createWhatsAppWebhookRoute(null);
+  test("refuses deliveries while the inbox is not configured, yet can still answer the handshake", async () => {
+    const tokenOnly = createWhatsAppWebhookRoute({ inbox: null, verifyToken: "verify-me" });
     const body = metaDelivery();
-    expect((await unconfigured.POST(new Request(webhookUrl, { method: "POST", body, headers: { "x-hub-signature-256": signMetaDelivery(body) } }))).status).toBe(503);
+    expect((await tokenOnly.POST(new Request(webhookUrl, { method: "POST", body, headers: { "x-hub-signature-256": signMetaDelivery(body) } }))).status).toBe(503);
+    expect((await tokenOnly.GET(new Request(`${webhookUrl}?hub.mode=subscribe&hub.verify_token=verify-me&hub.challenge=1`))).status).toBe(200);
+
+    const unconfigured = createWhatsAppWebhookRoute({ inbox: null, verifyToken: null });
     expect((await unconfigured.GET(new Request(`${webhookUrl}?hub.mode=subscribe&hub.verify_token=&hub.challenge=1`))).status).toBe(403);
   });
 });

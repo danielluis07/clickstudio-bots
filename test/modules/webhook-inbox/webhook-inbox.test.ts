@@ -7,7 +7,7 @@ import { createWebhookInbox } from "@/modules/webhook-inbox";
 import { createTestClock } from "@/test/support/clock";
 import { createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue, type TestJobQueue } from "@/test/support/job-queue";
-import { metaAppSecret, metaDelivery, signMetaDelivery, statusChange, textMessageChange } from "@/test/support/meta-webhook";
+import { metaAppSecret, metaDelivery, referencingChange, signMetaDelivery, statusChange, textMessageChange } from "@/test/support/meta-webhook";
 
 let db: Database;
 let tenantA: TenantScope;
@@ -155,6 +155,22 @@ describe("Webhook inbox", () => {
 
     expect((await conversationsOf(tenantA)).flatMap(({ messages }) => messages.map(({ text }) => text))).toEqual(["Para A"]);
     expect(await conversationsOf(tenantB)).toMatchObject([{ channelId: "channel-b", messages: [{ text: "Para B" }] }]);
+  });
+
+  test("edits and revokes reusing a message's wamid stay distinct, processable events", async () => {
+    await receive(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1" })));
+    await runJobs();
+
+    const edit = referencingChange({ phoneNumberId: "300", wamid: "wamid.A1", type: "edit" });
+    const revoke = referencingChange({ phoneNumberId: "300", wamid: "wamid.A1", type: "revoke" });
+    await receive(metaDelivery(edit, revoke));
+    expect(queue.jobs).toHaveLength(2);
+    // Showing edits and revokes is #46; until then they change nothing.
+    await runJobs();
+    await receive(metaDelivery(edit));
+    expect(queue.take()).toEqual([]);
+
+    expect((await conversationsOf(tenantA))[0].messages).toMatchObject([{ wamid: "wamid.A1", text: "Olá, vocês abrem sábado?" }]);
   });
 
   test("duplicate jobs for one event, even concurrent ones, store its message once", async () => {

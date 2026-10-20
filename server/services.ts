@@ -6,7 +6,7 @@ import { createResendMailer } from "@/platform/resend-mailer";
 import { createChannelService } from "@/modules/channels";
 import { createWhatsAppGateway } from "@/server/whatsapp";
 import { createWebhookInbox } from "@/modules/webhook-inbox";
-import { createQStashJobQueue, createQStashJobVerifier } from "@/platform/qstash";
+import { createQStashJobQueue, createQStashJobVerifier, qstashJobUrl } from "@/platform/qstash";
 import { createInboxJobRoute, createWhatsAppWebhookRoute } from "@/server/webhook-routes";
 
 export const mailer = createResendMailer({
@@ -41,11 +41,10 @@ const webhookInbox = env.META_APP_SECRET && env.QSTASH_TOKEN
   : null;
 
 // Unconfigured, both routes refuse requests rather than drop events.
-export const whatsAppWebhookRoute = createWhatsAppWebhookRoute(
-  webhookInbox && env.META_WEBHOOK_VERIFY_TOKEN
-    ? { inbox: webhookInbox, verifyToken: env.META_WEBHOOK_VERIFY_TOKEN }
-    : null,
-);
+export const whatsAppWebhookRoute = createWhatsAppWebhookRoute({
+  inbox: webhookInbox,
+  verifyToken: env.META_WEBHOOK_VERIFY_TOKEN ?? null,
+});
 
 export const inboxJobRoute = createInboxJobRoute(
   webhookInbox && env.QSTASH_CURRENT_SIGNING_KEY && env.QSTASH_NEXT_SIGNING_KEY
@@ -55,8 +54,7 @@ export const inboxJobRoute = createInboxJobRoute(
         currentSigningKey: env.QSTASH_CURRENT_SIGNING_KEY,
         nextSigningKey: env.QSTASH_NEXT_SIGNING_KEY,
       }),
-      // The destination the queue adapter publishes to; QStash signs it.
-      url: new URL("/api/jobs/process-inbox-event", env.APP_URL).toString(),
+      url: qstashJobUrl(env.APP_URL, "process-inbox-event"),
     }
     : null,
 );

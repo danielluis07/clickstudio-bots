@@ -20,10 +20,10 @@ Configure these server-only variables on the deployment that hosts `/painel`:
 | `QSTASH_URL` | QStash API URL; defaults to the EU region, `https://qstash-eu-central-1.upstash.io` |
 | `QSTASH_CURRENT_SIGNING_KEY` / `QSTASH_NEXT_SIGNING_KEY` | The EU region's signing keys, used to authenticate jobs |
 
-The webhook stores deliveries only when `META_APP_SECRET`, `QSTASH_TOKEN` and
-`META_WEBHOOK_VERIFY_TOKEN` are set. Without them it answers 503 and Meta keeps
-retrying. The job endpoint also needs both signing keys. QStash tokens and keys
-are per region; use the EU region's.
+The verification handshake needs only `META_WEBHOOK_VERIFY_TOKEN`. The webhook
+stores deliveries only when `META_APP_SECRET` and `QSTASH_TOKEN` are set. Without
+them it answers 503 and Meta keeps retrying. The job endpoint also needs both
+signing keys. QStash tokens and keys are per region; use the EU region's.
 
 Generate each encryption key with:
 
@@ -111,6 +111,9 @@ in any batch, never stores it twice.
 After storing, the webhook enqueues one QStash job per still-pending event,
 carrying only `{ inboxEventId }`, and returns 200. If enqueueing fails it returns
 500. The stored events stay pending, and Meta's redelivery enqueues them again.
+Meta retries for up to seven days. An event still pending after that is
+recovered by the administrator replay in #48. Redelivery can enqueue a duplicate
+job for an event that is already queued; processing treats it as a no-op.
 
 QStash calls `POST /api/jobs/process-inbox-event`. The route rejects requests
 without a valid `Upstash-Signature` for that exact URL and body (401) and payloads

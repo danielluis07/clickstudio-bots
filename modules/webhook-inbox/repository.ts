@@ -25,10 +25,10 @@ export const createInboxRepository = (db: Database) => ({
     return found ?? null;
   },
 
-  async settle(id: string, outcome:
-    | { status: "processed"; processedAt: Date }
-    | { status: "ignored"; ignoredReason: "unknown_channel" | "unsupported_event"; processedAt: Date }) {
-    await db.update(inboxEvent).set(outcome)
+  async settle(id: string, processedAt: Date, outcome:
+    | { status: "processed" }
+    | { status: "ignored"; ignoredReason: NonNullable<typeof inboxEvent.$inferSelect.ignoredReason> }) {
+    await db.update(inboxEvent).set({ ...outcome, processedAt })
       .where(and(eq(inboxEvent.id, id), eq(inboxEvent.status, "pending")));
   },
 });

@@ -11,25 +11,27 @@ const receiveStatus = { invalid_signature: 401, invalid_payload: 400, enqueue_fa
 
 // Request adapters only. Failures are logged without detail: database errors
 // can echo event content, and logs must never carry message text or phones.
-export const createWhatsAppWebhookRoute = (
-  config: { inbox: WebhookInbox; verifyToken: string } | null,
-) => ({
+// Each half works without the other: Meta's handshake needs only the token.
+export const createWhatsAppWebhookRoute = ({ inbox, verifyToken }: {
+  inbox: WebhookInbox | null;
+  verifyToken: string | null;
+}) => ({
   GET(request: Request) {
     const params = new URL(request.url).searchParams;
-    const challenge = config && answerSubscriptionChallenge({
+    const challenge = verifyToken && answerSubscriptionChallenge({
       mode: params.get("hub.mode"),
       token: params.get("hub.verify_token"),
       challenge: params.get("hub.challenge"),
-    }, config.verifyToken);
+    }, verifyToken);
     return challenge
       ? new Response(challenge, { headers: { "content-type": "text/plain; charset=utf-8" } })
       : empty(403);
   },
 
   async POST(request: Request) {
-    if (!config) return empty(503);
+    if (!inbox) return empty(503);
     try {
-      const result = await config.inbox.receive({
+      const result = await inbox.receive({
         body: await request.text(),
         signature: request.headers.get("x-hub-signature-256"),
       });
@@ -49,19 +51,21 @@ export const createInboxJobRoute = (
 ) => ({
   async POST(request: Request) {
     if (!config) return empty(503);
+    let inboxEventId: string | undefined;
     try {
       const body = await request.text();
       const signature = request.headers.get("upstash-signature");
       if (!await config.verifier.verify({ signature, body, url: config.url })) return empty(401);
       const job = inboxJobSchema.safeParse(JSON.parse(body));
       if (!job.success) return empty(400);
+      inboxEventId = job.data.inboxEventId;
       // An event pruned since it was enqueued needs no retry.
-      await config.inbox.process(job.data.inboxEventId);
+      await config.inbox.process(inboxEventId);
       return empty(200);
     } catch (error) {
       if (error instanceof SyntaxError) return empty(400);
       // QStash retries the job; repeated failures reach its dead-letter queue.
-      console.error("Inbox event processing failed");
+      console.error("Inbox event processing failed", { inboxEventId });
       return empty(500);
     }
   },

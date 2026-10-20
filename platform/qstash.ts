@@ -3,6 +3,10 @@ import { Client, Receiver } from "@upstash/qstash";
 // A job is its type plus ids; the type names the route that handles it.
 type QueuedJob = { type: string } & Record<string, string>;
 
+// Where QStash delivers a job, and so the URL its signature is bound to.
+export const qstashJobUrl = (appUrl: string, type: string) =>
+  new URL(`/api/jobs/${type}`, appUrl).toString();
+
 export const createQStashJobQueue = ({ token, baseUrl, appUrl }: {
   token: string;
   baseUrl: string;
@@ -15,7 +19,7 @@ export const createQStashJobQueue = ({ token, baseUrl, appUrl }: {
     async enqueue(jobs: readonly QueuedJob[]) {
       if (jobs.length === 0) return;
       const published = await client.batchJSON(jobs.map(({ type, ...ids }) => ({
-        url: new URL(`/api/jobs/${type}`, appUrl).toString(),
+        url: qstashJobUrl(appUrl, type),
         body: ids,
       })));
       if (published.length !== jobs.length || published.some((result) => !result?.messageId)) {

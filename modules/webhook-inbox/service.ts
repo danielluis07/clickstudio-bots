@@ -49,17 +49,16 @@ export const createWebhookInbox = ({ db, clock, queue, appSecret }: {
       if (!event) return { ok: false as const, error: "not_found" as const };
       if (event.status !== "pending") return { ok: true as const, status: event.status };
       const route = event.phoneNumberId ? await resolveChannelPhoneNumber(db, event.phoneNumberId) : null;
-      if (!route) {
-        await repository.settle(inboxEventId, { status: "ignored", ignoredReason: "unknown_channel", processedAt: clock.now() });
-        return { ok: true as const, status: "ignored" as const };
-      }
-      const inbound = readInboundTextMessage(event.payload);
-      if (!inbound) {
-        await repository.settle(inboxEventId, { status: "ignored", ignoredReason: "unsupported_event", processedAt: clock.now() });
+      const inbound = route && readInboundTextMessage(event.payload);
+      if (!route || !inbound) {
+        await repository.settle(inboxEventId, clock.now(), {
+          status: "ignored",
+          ignoredReason: route ? "unsupported_event" : "unknown_channel",
+        });
         return { ok: true as const, status: "ignored" as const };
       }
       await recordInboundTextMessage(db, route, inbound);
-      await repository.settle(inboxEventId, { status: "processed", processedAt: clock.now() });
+      await repository.settle(inboxEventId, clock.now(), { status: "processed" });
       return { ok: true as const, status: "processed" as const };
     },
   };
