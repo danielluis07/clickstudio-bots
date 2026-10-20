@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 // "file -> import" pairs so a failure says exactly what to change.
 
 const sourceFiles = [
-  ...new Bun.Glob("{app,components,db,hooks,lib,modules,platform,providers,scripts,server,test}/**/*.{ts,tsx}").scanSync(),
+  ...new Bun.Glob("{app,components,db,hooks,lib,modules,platform,providers,scripts,server,test,trpc}/**/*.{ts,tsx}").scanSync(),
   ...new Bun.Glob("*.ts").scanSync(),
 ].map((path) => path.replaceAll("\\", "/"));
 
@@ -44,7 +44,9 @@ describe("architecture", () => {
     const forbidden = [
       /^next(\/|$)/,
       /^react(-dom)?(\/|$)/,
-      /^@\/(app|components|hooks|providers|server)(\/|$)/,
+      /^@\/(app|components|hooks|providers|server|trpc)(\/|$)/,
+      // Transports and client caches belong to the Next.js layer.
+      /^@(trpc|tanstack)\//,
       // The live database pool and environment are wired in by server/.
       /^@\/db$/,
       /^@\/platform\/env$/,
@@ -62,6 +64,8 @@ describe("architecture", () => {
       violations(under("modules").filter(isModuleHook), (specifier) =>
         /^next(\/|$)/.test(specifier) ||
         /^@\/(app|components|server|db)(\/|$)/.test(specifier) ||
+        // Only tRPC's browser entry, never the router or the server caller.
+        /^@\/trpc\/(?!client$)/.test(specifier) ||
         specifier === "@/platform/env",
       ),
     ).toEqual([]);
@@ -88,7 +92,16 @@ describe("architecture", () => {
   test("platform and db never depend on modules or the Next.js layer", () => {
     expect(
       violations([...under("platform"), ...under("db")], (specifier) =>
-        /^@\/(modules|server|app|components)(\/|$)/.test(specifier),
+        /^@\/(modules|server|app|components|trpc)(\/|$)/.test(specifier),
+      ),
+    ).toEqual([]);
+  });
+
+  test("tRPC's browser entry imports the router only as a type", () => {
+    const valueImport = /^import\s+(?!type\b)[^;]*?from\s*["'](@\/(?:server|db|modules|platform)[^"']*|@\/trpc\/(?!query-client)[^"']+)["']/gm;
+    expect(
+      ["trpc/client.tsx", "trpc/query-client.ts"].flatMap((file) =>
+        [...readFileSync(file, "utf8").matchAll(valueImport)].map((match) => `${file} -> ${match[1]}`),
       ),
     ).toEqual([]);
   });

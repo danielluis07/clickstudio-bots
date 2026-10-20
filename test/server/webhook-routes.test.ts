@@ -39,8 +39,8 @@ const runJob = (body: string, signature: string | null = signQStashRequest({ url
 
 const messagesOfTenantA = async () => {
   const repository = createConversationRepository(db, (await resolveTenantScope(db, { userId: "owner-a" }))!);
-  const conversations = await repository.listConversations();
-  return (await Promise.all(conversations.map(({ id }) => repository.listMessages(id)))).flat();
+  const { conversations } = await repository.listConversations();
+  return (await Promise.all(conversations.map(async ({ id }) => (await repository.listMessages(id))!.messages))).flat();
 };
 
 beforeAll(async () => {
