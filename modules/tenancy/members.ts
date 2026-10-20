@@ -60,8 +60,10 @@ export const createMemberManagement = ({
   };
 
   return {
-    // Invitations that can still be accepted, each holding a seat.
+    // Invitations that can still be accepted, each holding a seat. Only the
+    // owner, who manages them, sees them.
     async listPendingInvitations(scope: TenantScope) {
+      if (!isOwner(scope)) return [];
       return db
         .select({
           id: invitation.id,
@@ -190,6 +192,13 @@ export const createMemberManagement = ({
           .returning({ userId: member.userId });
         if (!deleted) return false;
 
+        // Locking the user makes a concurrent acceptance elsewhere wait (its
+        // member insert needs the row), so the check below cannot miss it.
+        await tx
+          .select({ id: user.id })
+          .from(user)
+          .where(eq(user.id, deleted.userId))
+          .for("update");
         const users = createUserRepository(tx);
         const [otherMembership] = await tx
           .select({ id: member.id })

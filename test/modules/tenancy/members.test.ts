@@ -338,6 +338,13 @@ describe("pending invitations", () => {
     ]);
   });
 
+  test("a Member who is not the owner sees no pending invitations", async () => {
+    await invite("ana@sorriso.example");
+    const bia = await joinAsMember(ownerScope, "bia@sorriso.example");
+
+    expect(await members.listPendingInvitations(bia)).toEqual([]);
+  });
+
   test("only the owner cancels an invitation, and only in their own Tenant", async () => {
     const otherScope = await onboardTenant("Outra Clínica", "dono@outra.example");
     const foreign = await invite("vizinho@outra.example", otherScope);

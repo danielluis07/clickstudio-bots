@@ -162,7 +162,7 @@ describe("auth routes", () => {
     expect(await sessionRole(ownerCookie)).toBe("user");
   });
 
-  test("no route creates a Member without the Terms/DPA invitation flow", async () => {
+  test("no route creates a Member outside the invitation flow", async () => {
     const cookie = await signIn("dona@sorriso.example", "senha-segura-123");
 
     for (const [path, body] of [

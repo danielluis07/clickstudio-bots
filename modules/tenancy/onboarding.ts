@@ -1,5 +1,5 @@
 import { hashPassword, verifyPassword } from "better-auth/crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
 import {
@@ -198,6 +198,9 @@ export const createTenantOnboarding = ({
             and(
               eq(invitation.id, invitationId),
               eq(invitation.status, "pending"),
+              // Re-checked here: an invitation that expired since the read
+              // above no longer holds a seat.
+              gt(invitation.expiresAt, clock.now()),
             ),
           )
           .returning();
