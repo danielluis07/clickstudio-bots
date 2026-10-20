@@ -74,7 +74,7 @@ describe("Channels", () => {
     expect(JSON.stringify(connected)).not.toMatch(/secret-token|ciphertext|credential|keyVersion/);
     expect(await service.getChannel(attendant)).toEqual(connected);
     expect(await service.getChannel(otherOwner)).toBeNull();
-    expect(await service.resolvePhoneNumber("300")).toEqual({ channelId: connected!.id, tenantId: "tenant-a" });
+    expect(await service.resolvePhoneNumber("300")).toMatchObject({ channelId: connected!.id, tenantId: "tenant-a" });
     expect(await service.resolvePhoneNumber("unknown")).toBeNull();
   });
 

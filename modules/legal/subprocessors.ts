@@ -17,7 +17,7 @@ export const subprocessors = [
     name: "Upstash QStash",
     purpose: "Agendamento, entrega e repetição de tarefas do serviço.",
     categories: "Somente identificadores de tarefas, negócios e conversas; sem texto de mensagens, telefones ou conteúdo do atendimento nos payloads.",
-    location: "União Europeia, endpoint regional EU previsto.",
+    location: "Estados Unidos (leste), região US East.",
     source: "https://upstash.com/docs/qstash/howto/multi-region",
   },
   {

@@ -19,6 +19,14 @@ export const env = createEnv({
     META_GRAPH_API_VERSION: z.string().regex(/^v\d+\.\d+$/).default("v26.0"),
     WHATSAPP_TOKEN_KEY_VERSION: z.string().min(1).optional(),
     WHATSAPP_TOKEN_KEYS: z.string().min(1).optional(),
+    // The token Meta echoes in the webhook verification handshake.
+    META_WEBHOOK_VERIFY_TOKEN: z.string().min(16).optional(),
+    // QStash's US East region, beside Vercel iad1 and Neon us-east. Tokens
+    // and signing keys are per region, so they must come from this one.
+    QSTASH_URL: z.url().default("https://qstash-us-east-1.upstash.io"),
+    QSTASH_TOKEN: z.string().min(1).optional(),
+    QSTASH_CURRENT_SIGNING_KEY: z.string().min(1).optional(),
+    QSTASH_NEXT_SIGNING_KEY: z.string().min(1).optional(),
   },
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
@@ -32,5 +40,10 @@ export const env = createEnv({
     META_GRAPH_API_VERSION: process.env.META_GRAPH_API_VERSION,
     WHATSAPP_TOKEN_KEY_VERSION: process.env.WHATSAPP_TOKEN_KEY_VERSION,
     WHATSAPP_TOKEN_KEYS: process.env.WHATSAPP_TOKEN_KEYS,
+    META_WEBHOOK_VERIFY_TOKEN: process.env.META_WEBHOOK_VERIFY_TOKEN,
+    QSTASH_URL: process.env.QSTASH_URL,
+    QSTASH_TOKEN: process.env.QSTASH_TOKEN,
+    QSTASH_CURRENT_SIGNING_KEY: process.env.QSTASH_CURRENT_SIGNING_KEY,
+    QSTASH_NEXT_SIGNING_KEY: process.env.QSTASH_NEXT_SIGNING_KEY,
   },
 });

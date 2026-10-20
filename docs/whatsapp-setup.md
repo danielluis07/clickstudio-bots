@@ -15,6 +15,17 @@ Configure these server-only variables on the deployment that hosts `/painel`:
 | `META_GRAPH_API_VERSION` | Graph API version; defaults to `v26.0` |
 | `WHATSAPP_TOKEN_KEY_VERSION` | Active encryption key version, for example `2026-10` |
 | `WHATSAPP_TOKEN_KEYS` | JSON object mapping versions to base64-encoded, random 32-byte keys |
+| `META_WEBHOOK_VERIFY_TOKEN` | Random string (16+ characters) entered as the webhook's **Verify token** in Meta |
+| `QSTASH_TOKEN` | QStash token of the **US East** region |
+| `QSTASH_URL` | QStash API URL; defaults to the US East region, `https://qstash-us-east-1.upstash.io` |
+| `QSTASH_CURRENT_SIGNING_KEY` / `QSTASH_NEXT_SIGNING_KEY` | The US East region's signing keys, used to authenticate jobs |
+
+The verification handshake needs only `META_WEBHOOK_VERIFY_TOKEN`. The webhook
+stores deliveries only when `META_APP_SECRET` and `QSTASH_TOKEN` are set. Without
+them it answers 503 and Meta keeps retrying. The job endpoint also needs both
+signing keys. QStash tokens and keys are per region; use the US East region's.
+A token from another region fails every enqueue: the webhook answers 500 and
+Meta keeps retrying, so events wait in the inbox but are never processed.
 
 Generate each encryption key with:
 
@@ -50,13 +61,14 @@ database deployment changes are performed by the application at build time.
 3. Under Facebook Login for Business settings, enable the JavaScript SDK and
    applicable OAuth login options. Add the actual HTTPS hosting domain to
    **Allowed Domains** and the launch page to the permitted OAuth redirect URIs.
-4. Configure the app's WhatsApp webhook callback and verification token, then
-   subscribe its `whatsapp_business_account` object to **all** of:
+4. Set the app's WhatsApp webhook callback URL to
+   `https://<host>/api/webhooks/whatsapp` and its verify token to
+   `META_WEBHOOK_VERIFY_TOKEN`; Meta checks both with a handshake when saved.
+   Then subscribe its `whatsapp_business_account` object to **all** of:
    `messages`, `account_update`, `smb_message_echoes`, `history`,
    `smb_app_state_sync`. Message delivery statuses use `messages`.
-   The webhook receiver and processing/history jobs are separate delivery work
-   under #37; this issue does not implement that receiver or initiate history
-   imports. Complete them before the live coexistence acceptance run.
+   History imports are separate work (#49); complete them before the live
+   coexistence acceptance run.
 5. Set the configuration ID in the environment. The launch supplies
    `featureType: "whatsapp_business_app_onboarding"`, session logging, and
    `response_type: "code"`. It does not select a legacy signup version or declare
@@ -84,6 +96,38 @@ and routing lookups omit credentials. Tokens are sent to Meta in Authorization
 headers, never URL query parameters, jobs, models or logs. Code exchange uses a
 POST body so the app secret and authorization code do not enter request URLs.
 Vendor errors are replaced with fixed error codes/messages.
+
+## Webhook inbox
+
+Issue: [#43](https://github.com/danielluis07/clickstudio-bots/issues/43).
+Architecture: [ADR 0002](adr/0002-serverless-only-with-qstash-and-postgres-lease.md).
+
+`POST /api/webhooks/whatsapp` checks `X-Hub-Signature-256` against the app secret
+and rejects a bad signature with 401, storing nothing. It splits a valid delivery
+into one `inbox_event` row per message, status or other change. Each row is keyed by
+`<field>:<wamid>` when that wamid identifies the event, otherwise by a hash of the
+event. A status, edit or revoke only refers to a message, so it is hashed. Several
+statuses about one message therefore stay separate events. Redelivering an event,
+in any batch, never stores it twice.
+
+After storing, the webhook enqueues one QStash job per still-pending event,
+carrying only `{ inboxEventId }`, and returns 200. If enqueueing fails it returns
+500. The stored events stay pending, and Meta's redelivery enqueues them again.
+Meta retries for up to seven days. An event still pending after that is
+recovered by the administrator replay in #48. Redelivery can enqueue a duplicate
+job for an event that is already queued; processing treats it as a no-op.
+
+QStash calls `POST /api/jobs/process-inbox-event`. The route rejects requests
+without a valid `Upstash-Signature` for that exact URL and body (401) and payloads
+other than an id (400). Processing resolves the Tenant only from the Channel
+whose phone-number-id the event names. A text message becomes the Contact (unique
+per Tenant and phone), their Conversation on that Channel, and the message
+(unique per wamid). Events for an unknown phone-number-id are marked `ignored`
+(`unknown_channel`) and create nothing. So are events not handled yet
+(`unsupported_event`: statuses, echoes, edits, media, history; see #45, #46,
+#49, #61). Processing is idempotent, so QStash retries and duplicate jobs are
+safe. A job that keeps failing goes to QStash's dead-letter queue; inspecting
+and replaying those is #48.
 
 ## Live validation
 
