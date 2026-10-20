@@ -1,0 +1,3 @@
+[test]
+# Each PGlite database applies every migration, and password hashing is slow by design.
+timeout = 20000

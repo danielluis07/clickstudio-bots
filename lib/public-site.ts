@@ -11,7 +11,13 @@ export const legalLinks = [
   { href: "/subprocessadores", label: "Subprocessadores" },
 ] as const;
 
-export const legalVersion = "19 de outubro de 2026";
+// Stored with each Terms/DPA acceptance; bump it when the legal texts change.
+export const termsVersion = "2026-10-19";
+
+export const legalVersion = new Intl.DateTimeFormat("pt-BR", {
+  dateStyle: "long",
+  timeZone: "UTC",
+}).format(new Date(termsVersion));
 
 export const privacyContact = {
   name: "Daniel Assunção",
