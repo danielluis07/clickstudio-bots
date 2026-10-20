@@ -1,6 +1,6 @@
 # Use TanStack Query and tRPC for live client screens
 
-The shared inbox (#44) needs a client cache for search, refetch on focus/reconnect, and the later invalidations and optimistic updates in #45, #47 and #57. Use TanStack Query with the tRPC TanStack integration, retaining the maintainer's provider, SuperJSON, prefetch/hydration helpers and mutation feedback pattern. Server Actions remain the interface for forms in settings, Knowledge base, Members and admin; tRPC serves data a live client screen reads and changes, including the inbox's Contact editor.
+The shared inbox (#44) needs a client cache for search, refetch on focus/reconnect, and the later invalidations and optimistic updates in #45, #47 and #57. Use TanStack Query with the tRPC TanStack integration, retaining the maintainer's provider, SuperJSON, hydration helper and mutation feedback pattern. Server Actions remain the interface for forms in settings, Knowledge base, Members and admin; tRPC serves data a live client screen reads and changes, including the inbox's Contact editor.
 
 ## Boundaries
 
@@ -10,7 +10,7 @@ The shared inbox (#44) needs a client cache for search, refetch on focus/reconne
 
 ## Rendering and compatibility
 
-The protected page calls its guard before prefetching, inside the segment's `loading.tsx` Suspense boundary. The server loads the initial list through the router in-process and hydrates the same generated query keys with SuperJSON. It awaits that query because the inbox uses `useQuery` for inline loading/error states: streaming a pending cache into a non-suspending consumer produced a hydration mismatch and stalled loading in development. The helpers also support pending-query dehydration for future suspending consumers. Client queries own the displayed data and invalidate the list and Conversation after a Contact edit. Cache Components and Partial Prefetching stay enabled.
+The protected page calls its guard before fetching, inside the segment's `loading.tsx` Suspense boundary. The server calls `getQueryClient().query(...)` directly to fetch the initial list through the router in-process and hydrates the same generated query keys with SuperJSON. It awaits that query because the inbox uses `useQuery` for inline loading/error states: streaming a pending cache into a non-suspending consumer produced a hydration mismatch and stalled loading in development. The query-cache configuration also supports pending-query dehydration for future suspending consumers. Client queries own the displayed data and invalidate the list and Conversation after a Contact edit. Cache Components and Partial Prefetching stay enabled.
 
 This follows the [tRPC App Router guide](https://trpc.io/docs/client/nextjs/app-router-setup) and [TanStack's advanced SSR guidance](https://tanstack.com/query/latest/docs/framework/react/guides/advanced-ssr), checked against the installed Next.js 16.4.2 caching, Route Handler, and Server/Client Component guides. The production build passes with Cache Components and Partial Prefetching enabled. Chromium checks against that build confirm hydrated initial data without a duplicate client list request, persisted Contact edits, search, inline validation, and desktop/mobile layouts without page errors. Recheck those boundaries when upgrading the framework.
 

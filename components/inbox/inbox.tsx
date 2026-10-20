@@ -5,12 +5,12 @@ import { InboxSkeleton } from "@/components/inbox/inbox-skeleton";
 import { SharedInbox } from "@/components/inbox/shared-inbox";
 import type { TenantScope } from "@/modules/tenancy";
 import { TRPCReactProvider } from "@/trpc/client";
-import { HydrateClient, load, trpc } from "@/trpc/server";
+import { getQueryClient, HydrateClient, trpc } from "@/trpc/server";
 
 export async function Inbox({ scope }: { scope: TenantScope }) {
   // useQuery renders loading states without suspending. Resolve the initial
   // cache before hydration so server and browser render the same list.
-  await load(trpc.conversations.list.queryOptions({ search: "" }));
+  await getQueryClient().query(trpc.conversations.list.queryOptions({ search: "" }));
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
