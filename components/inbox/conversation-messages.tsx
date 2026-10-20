@@ -5,10 +5,10 @@ import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Message, MessageContent, MessageFooter } from "@/components/ui/message";
 import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport } from "@/components/ui/message-scroller";
 import { formatDateTime } from "@/lib/format";
-import type { RouterOutput } from "@/server/trpc/router";
+import type { ConversationMessage } from "@/modules/conversations";
 import { InboxEmpty } from "@/components/inbox/inbox-empty";
 
-export function ConversationMessages({ messages }: { messages: RouterOutput["conversations"]["messages"] }) {
+export function ConversationMessages({ messages }: { messages: ConversationMessage[] }) {
   if (messages.length === 0) return <InboxEmpty title="Nenhuma mensagem" description="As mensagens recebidas nesta conversa aparecem aqui." />;
   return (
     <MessageScrollerProvider autoScroll defaultScrollPosition="end">

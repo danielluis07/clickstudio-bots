@@ -4,7 +4,7 @@ The shared inbox (#44) needs a client cache for search, refetch on focus/reconne
 
 ## Boundaries
 
-- Routers and request adapters live in `server/trpc/`, call module interfaces and keep domain code framework-free (ADR 0005). The shared/browser integration and server-only hydration helpers live in `trpc/`. Module hooks receive procedure options from components.
+- Routers and request adapters live in `server/trpc/`, call module interfaces and keep domain code framework-free (ADR 0005). The shared/browser integration and server-only hydration helpers live in `trpc/`. At the maintainer's request during #44 review, domain client hooks now own the browser tRPC calls, generated query keys, invalidation and transport error parsing. Components call hooks such as `useConversationList()`, `useConversation(id)` and `useContactEditor(contact, conversationId)` and consume domain types. This replaces the original procedure-options injection from each component, which spread transport wiring across the UI. Server Actions in other forms remain injected as callbacks.
 - Every inbox procedure uses `tenantProcedure`: validate the session, call `resolveTenantScope` from server-authenticated membership, and pass the resulting `TenantScope` to the repository (ADR 0004). Procedure inputs never accept a Tenant id. HTTP responses use `private, no-store`.
 - Mount the provider only around the inbox, keyed by Tenant and Member. Server query clients are request-scoped with React `cache`; browser clients live for that provider's lifetime. No Tenant data enters a shared Next.js cache.
 

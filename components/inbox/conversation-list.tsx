@@ -4,14 +4,12 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/format";
 import { useConversationList } from "@/modules/conversations/hooks";
-import { useTRPC } from "@/trpc/client";
 import { InboxEmpty } from "@/components/inbox/inbox-empty";
 import { InboxError } from "@/components/inbox/inbox-error";
 import { InboxSkeleton } from "@/components/inbox/inbox-skeleton";
 
 export function ConversationList({ selectedId, onSelect }: { selectedId: string | null; onSelect: (id: string) => void }) {
-  const trpc = useTRPC();
-  const query = useConversationList(trpc.conversations);
+  const query = useConversationList();
   return (
     <aside aria-label="Conversas" className={cn("flex min-h-0 flex-col border-b lg:border-r lg:border-b-0", selectedId && "hidden lg:flex")}>
       <div className="flex flex-col gap-3 border-b p-4">

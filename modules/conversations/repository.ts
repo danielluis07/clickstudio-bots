@@ -67,3 +67,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope) =
       .orderBy(asc(message.sentAt), asc(message.id));
   },
 });
+
+type ConversationRepository = ReturnType<typeof createConversationRepository>;
+export type ConversationDetails = NonNullable<Awaited<ReturnType<ConversationRepository["getConversation"]>>>;
+export type ConversationMessage = Awaited<ReturnType<ConversationRepository["listMessages"]>>[number];

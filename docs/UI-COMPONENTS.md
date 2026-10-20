@@ -2,6 +2,10 @@
 
 Shadcn is the foundation for the design in this project. Tailwind for styling
 
+## Live client data
+
+Call the domain hooks exposed by `@/modules/<area>/hooks` from components. Hooks own tRPC access, query keys, invalidation and transport error parsing; UI receives domain data, state and callbacks. Do not import `useTRPC` into components or derive their props from generated router types. Import domain types through the module's public interface. Server Actions for other forms continue to be passed as callbacks.
+
 ## File placement
 
 `components/` holds only `.tsx` files for UI. Domain-specific hooks and supporting browser logic belong in `modules/<area>/hooks/`, exposed through `@/modules/<area>/hooks`. Keep that entry point browser-safe and pass Server Actions into hooks from components.

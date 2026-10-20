@@ -20,7 +20,7 @@ Keep files focused on composition and wiring — never leave markup or functions
 | `server/trpc/` | Typed request adapters and Tenant middleware for live client screens | module interfaces, `db/`, auth; never UI or browser transport |
 | `trpc/` | Browser transport/provider, shared query-cache configuration, and server-only RSC hydration helpers | type-only router imports in browser files; server helpers may import `server/` |
 | `modules/<area>/` (except `hooks/`) | Framework-free domain logic, one folder per glossary area (`tenancy`, `identity`, `legal`, …) | other modules' `index.ts`, `platform/`, `db/schema`, `db/database` |
-| `modules/<area>/hooks/` | Client hooks and their browser helpers for that domain | React, browser-safe dependencies and domain types; server operations are passed as callbacks |
+| `modules/<area>/hooks/` | Client hooks and their browser helpers for that domain | React, browser-safe dependencies, the browser tRPC client and domain types; Server Actions are passed as callbacks |
 | `platform/` | Environment, `Clock`, ports shared by several modules (`Mailer`) and the vendor adapters behind them | `db/`, vendor SDKs |
 | `db/` | Drizzle schema (`schema/<area>.ts`), the pool and the `Database` type | `platform/` |
 | `lib/` | Generic helpers with no domain meaning (`cn`, formatting) | nothing project-specific |
@@ -35,5 +35,9 @@ Rules (enforced by `test/architecture.test.ts`; see ADR 0005):
 - Repositories for Tenant-owned data take a `TenantScope` (`@/modules/tenancy`) and live in the module that owns the data.
 - The one exception is inbound Meta events, which have no Member. They write Tenant-owned data under a `ChannelRoute` (`@/modules/channels`). Only `resolveChannelPhoneNumber` creates one, from the phone-number-id of a signed event. Never build either proof from a request's Tenant id.
 - Route handlers in `app/` stay one line each. Their request adapters (status codes, headers, body parsing) live in `server/` (for example `server/webhook-routes.ts`), so tests can exercise them with plain `Request` objects.
-- Use Server Actions for forms and tRPC for data a live client screen reads and changes (ADR 0006). The inbox's hooks receive typed tRPC procedure options from components, keeping operations injected. Server routers call module interfaces, and `tenantProcedure` rechecks membership with `resolveTenantScope`; inputs never choose a Tenant.
+- Use Server Actions for forms and tRPC for data a live client screen reads and changes (ADR 0006). Domain hooks in `modules/<area>/hooks/` own `useTRPC()`, generated query keys, cache invalidation and transport error parsing. Components call those domain hooks and use domain types; they never import `useTRPC` or handle generated router/error shapes. ESLint enforces the import restriction. Server routers call module interfaces, and `tenantProcedure` rechecks membership with `resolveTenantScope`; inputs never choose a Tenant.
 - Start a module when a glossary area gets its first code. Do not create empty folders ahead of time.
+
+## Deprecations
+
+Use supported APIs and types from the installed dependency versions. `bun run lint` enables type-aware `@typescript-eslint/no-deprecated` checking for TypeScript files, including references to deprecated dependency APIs and types. Resolve these errors before committing; the existing CI lint step enforces the same rule. For example, form submissions use React's `SubmitEvent<HTMLFormElement>` instead of the deprecated `FormEvent` type.

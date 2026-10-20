@@ -7,11 +7,9 @@ import { InboxError } from "@/components/inbox/inbox-error";
 import { InboxSkeleton } from "@/components/inbox/inbox-skeleton";
 import { Button } from "@/components/ui/button";
 import { useConversation } from "@/modules/conversations/hooks";
-import { useTRPC } from "@/trpc/client";
 
 export function ConversationDetail({ id, onBack }: { id: string; onBack: () => void }) {
-  const trpc = useTRPC();
-  const { conversation, messages } = useConversation(trpc.conversations, id);
+  const { conversation, messages } = useConversation(id);
   if (conversation.isPending) return <div className="lg:col-span-2"><InboxSkeleton /></div>;
   if (conversation.isError) return <div className="lg:col-span-2"><Button variant="ghost" onClick={onBack}>Voltar às conversas</Button><InboxError retry={() => void conversation.refetch()} /></div>;
   return (

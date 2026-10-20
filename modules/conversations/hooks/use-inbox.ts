@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { useEffect, useState, type FormEvent } from "react";
-import type { useTRPC } from "@/trpc/client";
+import { useEffect, useState, type SubmitEvent } from "react";
+import { useTRPC } from "@/trpc/client";
+import type { ConversationDetails } from "@/modules/conversations/repository";
 
-type InboxProcedures = ReturnType<typeof useTRPC>["conversations"];
-
-export const useConversationList = (queries: InboxProcedures) => {
+export const useConversationList = () => {
+  const { conversations: queries } = useTRPC();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   useEffect(() => {
@@ -18,14 +18,16 @@ export const useConversationList = (queries: InboxProcedures) => {
   return { ...query, search, setSearch };
 };
 
-export const useConversation = (queries: InboxProcedures, id: string) => ({
-  conversation: useQuery(queries.get.queryOptions({ id })),
-  messages: useQuery(queries.messages.queryOptions({ conversationId: id })),
-});
+export const useConversation = (id: string) => {
+  const { conversations: queries } = useTRPC();
+  return {
+    conversation: useQuery(queries.get.queryOptions({ id })),
+    messages: useQuery(queries.messages.queryOptions({ conversationId: id })),
+  };
+};
 
-export const useContactEditor = (queries: InboxProcedures, contact: {
-  id: string; name: string | null; phone: string;
-}, conversationId: string) => {
+export const useContactEditor = (contact: ConversationDetails["contact"], conversationId: string) => {
+  const { conversations: queries } = useTRPC();
   const queryClient = useQueryClient();
   const [name, setName] = useState(contact.name ?? "");
   const [phone, setPhone] = useState(contact.phone);
@@ -40,9 +42,18 @@ export const useContactEditor = (queries: InboxProcedures, contact: {
       ]);
     },
   });
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     mutation.mutate({ id: contact.id, name, phone });
   };
-  return { name, setName, phone, setPhone, submit, mutation };
+  const errors = mutation.error?.data?.zodError?.properties;
+  return {
+    name, setName, phone, setPhone, submit,
+    isPending: mutation.isPending,
+    isSuccess: mutation.isSuccess,
+    fieldErrors: {
+      name: errors?.name?.errors.join(" "),
+      phone: errors?.phone?.errors.join(" "),
+    },
+  };
 };
