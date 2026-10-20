@@ -89,6 +89,22 @@ describe("auth routes", () => {
     );
   });
 
+  test("the session carries the platform role, which users cannot change themselves", async () => {
+    const sessionRole = async (cookie: string) => {
+      const response = await auth.handler(
+        new Request(`${baseURL}/api/auth/get-session`, { headers: { cookie } }),
+      );
+      return (await response.json()).user.role;
+    };
+    const adminCookie = await signIn("admin@clickstudio.example", "admin-password-123");
+    const ownerCookie = await signIn("dona@sorriso.example", "senha-segura-123");
+
+    await post("/update-user", { role: "admin" }, ownerCookie);
+
+    expect(await sessionRole(adminCookie)).toBe("admin");
+    expect(await sessionRole(ownerCookie)).toBe("user");
+  });
+
   test("no route creates a Member without the Terms/DPA invitation flow", async () => {
     const cookie = await signIn("dona@sorriso.example", "senha-segura-123");
 

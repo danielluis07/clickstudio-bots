@@ -2,10 +2,10 @@ import { LegalAcceptanceList } from "@/components/dashboard/legal-acceptance-lis
 import { MemberList } from "@/components/dashboard/member-list";
 import { db } from "@/db";
 import { createTenantRepository } from "@/db/repositories/tenant";
-import { requireTenantScope } from "@/lib/auth-guards";
+import type { TenantScope } from "@/db/tenant-scope";
 
-export async function TenantOverview() {
-  const tenant = createTenantRepository(db, await requireTenantScope());
+export async function TenantOverview({ scope }: { scope: TenantScope }) {
+  const tenant = createTenantRepository(db, scope);
   const [profile, members, acceptances] = await Promise.all([
     tenant.getTenant(),
     tenant.listMembers(),

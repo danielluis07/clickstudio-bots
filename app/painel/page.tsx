@@ -1,17 +1,14 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
-import { ContentSkeleton } from "@/components/app-shell/content-skeleton";
 import { TenantOverview } from "@/components/dashboard/tenant-overview";
+import { requireTenantScope } from "@/lib/auth-guards";
 
 export const metadata: Metadata = {
   title: "Painel",
   robots: { index: false },
 };
 
-export default function DashboardPage() {
-  return (
-    <Suspense fallback={<ContentSkeleton />}>
-      <TenantOverview />
-    </Suspense>
-  );
+export default async function DashboardPage() {
+  const scope = await requireTenantScope();
+
+  return <TenantOverview scope={scope} />;
 }

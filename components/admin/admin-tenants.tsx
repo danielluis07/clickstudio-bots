@@ -1,10 +1,6 @@
 import { CreateTenantForm } from "@/components/admin/create-tenant-form";
-import { requireAdmin } from "@/lib/auth-guards";
 
-// Everything on the admin surface renders after the server-side check.
-export async function AdminTenants() {
-  await requireAdmin();
-
+export function AdminTenants() {
   return (
     <div className="flex flex-col gap-8">
       <h1 className="text-3xl font-semibold tracking-tight">Administração</h1>

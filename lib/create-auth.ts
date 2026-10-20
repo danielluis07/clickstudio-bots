@@ -40,6 +40,18 @@ export const createAuth = ({ db, baseURL, secret }: AuthOptions) =>
       enabled: true,
       disableSignUp: true,
     },
+    user: {
+      additionalFields: {
+        // Platform role, exposed as session.user.role. `input: false` keeps it
+        // out of /update-user, so only the admin:create CLI sets "admin".
+        role: {
+          type: ["admin", "user"],
+          required: false,
+          defaultValue: "user",
+          input: false,
+        },
+      },
+    },
     disabledPaths: disabledAuthPaths,
     advanced: {
       database: {

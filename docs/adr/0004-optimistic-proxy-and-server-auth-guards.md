@@ -5,10 +5,10 @@
 Authorization lives in the guards in `lib/auth-guards.ts`:
 
 - `requireAuth` validates the session with Better Auth.
-- `requireAdmin` also reads the platform role from the database.
+- `requireAdmin` also checks `session.user.role`. It is a Better Auth field with `input: false`, so users cannot change it through `/update-user`. The platform has a single administrator, provisioned with `bun run admin:create`.
 - `requireTenantScope` also resolves the Tenant from authorized membership.
 
-Every protected page calls one inside its Suspense boundary, and every Server Action calls one before doing anything. Domain modules check again where they own the rule. For example, `createTenant` refuses a non-admin actor.
+Every protected `page.tsx` calls one on its first line, and every Server Action calls one before doing anything. With Cache Components a session read must sit inside a Suspense boundary, so each protected segment has a `loading.tsx`, which wraps the page in one. Domain modules check again where they own the rule. For example, `createTenant` refuses a non-admin actor.
 
 ## Considered Options
 
@@ -21,6 +21,7 @@ Every protected page calls one inside its Suspense boundary, and every Server Ac
 ## Consequences
 
 - **A forged or stale cookie passes the proxy.** The page's guard then redirects or returns a 404, so the cookie check is never trusted for access.
-- **New protected areas need two edits:** add the prefix to the proxy's `matcher`, and call a guard in each page and action. Forgetting the matcher only costs a wasted render. Forgetting the guard is a security bug, so review new pages for it.
+- **Guard redirects happen after streaming starts.** The `loading.tsx` fallback is already on its way, so a failed guard redirects on the client and `notFound()` comes with HTTP 200, not 404. Signed-out visitors still get a real 307 from the proxy.
+- **New protected areas need three edits:** add the prefix to the proxy's `matcher`, add a `loading.tsx` to the segment, and call a guard in each page and action. Without the `loading.tsx` the build fails, so that one cannot be forgotten. Forgetting the matcher only costs a wasted render. Forgetting the guard is a security bug, so review new pages for it.
 - **`voltar` is untrusted input.** The sign-in action follows it only through `safeReturnPath`, which keeps same-origin paths and falls back to `/painel`.
 - **No redirect away from `/entrar` for cookie holders.** A stale cookie would otherwise bounce between `/entrar` and `/painel`.
