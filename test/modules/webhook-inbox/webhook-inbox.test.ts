@@ -25,9 +25,12 @@ const runJobs = async () => {
 
 const conversationsOf = async (scope: TenantScope) => {
   const repository = createConversationRepository(db, scope);
-  return Promise.all((await repository.listConversations()).map(async (found) => ({
-    ...found,
-    messages: await repository.listMessages(found.id),
+  return Promise.all((await repository.listConversations()).conversations.map(async ({ id, channelId, contact }) => ({
+    id,
+    channelId,
+    contactPhone: contact.phone,
+    contactProfileName: contact.profileName,
+    messages: (await repository.listMessages(id))!.messages,
   })));
 };
 
@@ -75,7 +78,7 @@ describe("Webhook inbox", () => {
       channelId: "channel-a",
       contactPhone: "5511988887777",
       contactProfileName: "Maria Teste",
-      messages: [{ wamid: "wamid.A1", direction: "inbound", type: "text", text: "Olá!", sentAt: new Date("2026-10-20T12:00:00Z") }],
+      messages: [{ id: expect.any(String), wamid: "wamid.A1", direction: "inbound", type: "text", text: "Olá!", sentAt: new Date("2026-10-20T12:00:00Z") }],
     }]);
     expect(await conversationsOf(tenantB)).toEqual([]);
   });

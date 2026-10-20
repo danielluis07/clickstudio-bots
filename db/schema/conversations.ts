@@ -11,6 +11,9 @@ export const contact = pgTable("contact", {
   phone: text("phone").notNull(),
   // The WhatsApp profile name, refreshed from each inbound message.
   profileName: text("profile_name"),
+  // The name a Member gave the Contact. Shown instead of the profile name and
+  // never overwritten by inbound messages.
+  name: text("name"),
   ...timestamps(),
 }, (t) => [uniqueIndex("contact_tenant_id_phone_unique").on(t.tenantId, t.phone)]);
 
@@ -21,10 +24,12 @@ export const conversation = pgTable("conversation", {
   channelId: text("channel_id").notNull().references(() => channel.id),
   contactId: text("contact_id").notNull()
     .references(() => contact.id, { onDelete: "cascade" }),
+  // When the latest message was sent; the inbox lists the most recent first.
+  lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull(),
   ...timestamps(),
 }, (t) => [
   uniqueIndex("conversation_channel_id_contact_id_unique").on(t.channelId, t.contactId),
-  index("conversation_tenant_id_idx").on(t.tenantId),
+  index("conversation_tenant_id_last_message_at_idx").on(t.tenantId, t.lastMessageAt.desc(), t.id.desc()),
 ]);
 
 export const message = pgTable("message", {

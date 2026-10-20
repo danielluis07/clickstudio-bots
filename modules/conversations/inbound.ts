@@ -24,9 +24,12 @@ export const recordInboundTextMessage = (db: Database, route: ChannelRoute, inbo
       })
       .returning({ contactId: contact.id });
     const [{ conversationId }] = await tx.insert(conversation)
-      .values({ tenantId: route.tenantId, channelId: route.channelId, contactId })
-      // A no-op update so RETURNING yields the existing Conversation.
-      .onConflictDoUpdate({ target: [conversation.channelId, conversation.contactId], set: { tenantId: route.tenantId } })
+      .values({ tenantId: route.tenantId, channelId: route.channelId, contactId, lastMessageAt: inbound.sentAt })
+      // Messages can arrive out of order, so the latest activity only moves forward.
+      .onConflictDoUpdate({
+        target: [conversation.channelId, conversation.contactId],
+        set: { lastMessageAt: sql`greatest(${conversation.lastMessageAt}, excluded.last_message_at)` },
+      })
       .returning({ conversationId: conversation.id });
     await tx.insert(message).values({
       tenantId: route.tenantId,
