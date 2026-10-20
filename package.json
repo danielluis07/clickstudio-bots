@@ -17,6 +17,7 @@
   "dependencies": {
     "@base-ui/react": "^1.9.0",
     "@t3-oss/env-nextjs": "^0.13.11",
+    "@upstash/qstash": "^2.12.1",
     "@vercel/functions": "^3.10.1",
     "better-auth": "^1.7.10",
     "class-variance-authority": "^0.7.1",

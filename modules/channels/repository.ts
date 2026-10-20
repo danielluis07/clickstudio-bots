@@ -43,10 +43,21 @@ export const createChannelRepository = (db: Database, scope: TenantScope) => ({
   },
 });
 
+declare const channelRouteBrand: unique symbol;
+
+// Proof that a signed Meta event addressed this Channel. Only
+// resolveChannelPhoneNumber can create one, so inbound data is never filed
+// under a Tenant id taken from anywhere else.
+export type ChannelRoute = {
+  readonly channelId: string;
+  readonly tenantId: string;
+  readonly [channelRouteBrand]: true;
+};
+
 // Trusted webhook routing is intentionally separate from Member-scoped reads.
 // It exposes only routing ids, never credentials or a browser-selectable scope.
-export const resolveChannelPhoneNumber = async (db: Database, phoneNumberId: string) => {
+export const resolveChannelPhoneNumber = async (db: Database, phoneNumberId: string): Promise<ChannelRoute | null> => {
   const [found] = await db.select({ channelId: channel.id, tenantId: channel.tenantId })
     .from(channel).where(eq(channel.phoneNumberId, phoneNumberId)).limit(1);
-  return found ?? null;
+  return found ? (found as ChannelRoute) : null;
 };

@@ -1,0 +1,5 @@
+// The Meta webhook inbox (ADR 0002): signed deliveries stored once per event,
+// enqueued for processing, and processed into Contacts and Conversations.
+export type { Job, JobQueue } from "@/modules/webhook-inbox/job-queue";
+export { createWebhookInbox, type WebhookInbox } from "@/modules/webhook-inbox/service";
+export { answerSubscriptionChallenge } from "@/modules/webhook-inbox/signature";

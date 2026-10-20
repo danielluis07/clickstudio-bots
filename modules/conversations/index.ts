@@ -1,0 +1,4 @@
+// Contacts, their Conversations with a Tenant on one Channel, and the
+// messages in them.
+export { recordInboundTextMessage, type InboundTextMessage } from "@/modules/conversations/inbound";
+export { createConversationRepository } from "@/modules/conversations/repository";
