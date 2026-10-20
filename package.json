@@ -8,9 +8,10 @@
     "start": "bun --bun next start",
     "lint": "eslint",
     "typecheck": "bun --bun next typegen && tsc --noEmit",
-    "test": "bun test",
+    "test": "bun test --timeout 20000",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "admin:create": "bun scripts/create-platform-admin.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

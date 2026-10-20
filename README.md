@@ -13,6 +13,8 @@ Create `.env` with:
 - `DATABASE_URL`: Neon **pooled** connection string. The app keeps one global `pg` pool and registers it with `attachDatabasePool`.
 - `BETTER_AUTH_SECRET`
 - `APP_URL`: e.g. `http://localhost:3000`
+- `RESEND_API_KEY`: Resend API key used for invitation emails.
+- `EMAIL_FROM`: verified Resend sender, e.g. `ClickStudio Bots <convites@example.com>`.
 
 Apply migrations, then start the dev server. Neon recommends the **direct** (unpooled) connection string for migrations, so override `DATABASE_URL` for that command:
 
@@ -33,6 +35,21 @@ See [ADR 0003](docs/adr/0003-node-postgres-global-pool-on-neon.md) for why the a
 | `bun run test`        | Bun test runner (PGlite suites included)                        |
 | `bun run db:generate` | Generate a migration in `drizzle/` from `db/schema`             |
 | `bun run db:migrate`  | Apply pending migrations to `DATABASE_URL`                      |
+| `bun run admin:create` | Create a platform administrator (see below)                    |
+
+## Platform administrators and Tenants
+
+Public sign-up is disabled. Create the first platform administrator from the CLI:
+
+```bash
+ADMIN_PASSWORD="<at least 8 characters>" bun run admin:create admin@example.com "Nome do Admin"
+```
+
+The administrator signs in at `/entrar` and creates each Tenant at `/admin`, which emails the owner an invitation (pt-BR, via Resend). The owner opens `/convite/<id>`, accepts the Terms and DPA, sets a password and lands on `/painel`. A Tenant is a Better Auth organization. Public sign-up and the organization plugin's HTTP routes are disabled in `lib/create-auth.ts`, so nobody can create a Tenant or join one outside that flow.
+
+`proxy.ts` sends visitors without a session cookie from `/admin` and `/painel` to `/entrar`. That is only a shortcut. Every protected `page.tsx` must call a guard from `lib/auth-guards.ts` (`requireAuth`, `requireAdmin` or `requireTenantScope`) on its first line, and so must every Server Action. Each protected segment needs a `loading.tsx` for the page to read the session; see [ADR 0004](docs/adr/0004-optimistic-proxy-and-server-auth-guards.md).
+
+Member-facing code reaches Tenant-owned data only through `createTenantRepository(db, scope)`. The `TenantScope` it requires can only come from `resolveTenantScope`, which checks membership on the server, so a Tenant id from the browser is never trusted.
 
 ## Database migrations
 
