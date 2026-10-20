@@ -1,5 +1,5 @@
 import { hashPassword, verifyPassword } from "better-auth/crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
 import {
@@ -13,11 +13,13 @@ import {
 import { createUserRepository, isPlatformAdmin } from "@/modules/identity";
 import { termsVersion } from "@/modules/legal";
 import { tenantOwnerInvitationEmail } from "@/modules/tenancy/invitation-email";
+import {
+  invitationExpiry,
+  invitationLifetimeDays,
+  invitationUrl,
+} from "@/modules/tenancy/invitations";
 import type { Clock } from "@/platform/clock";
 import type { Mailer } from "@/platform/mailer";
-
-export const invitationLifetimeDays = 7;
-const dayInMilliseconds = 24 * 60 * 60 * 1000;
 
 type TenantOnboardingDependencies = {
   db: Database;
@@ -74,14 +76,12 @@ export const createTenantOnboarding = ({
   clock,
   appUrl,
 }: TenantOnboardingDependencies) => {
-  const invitationUrlFor = (invitationId: string) =>
-    `${appUrl}/convite/${invitationId}`;
-
   const findInvitation = async (invitationId: string) => {
     const [found] = await db
       .select({
         id: invitation.id,
         email: invitation.email,
+        role: invitation.role,
         status: invitation.status,
         expiresAt: invitation.expiresAt,
         tenantName: organization.name,
@@ -127,22 +127,20 @@ export const createTenantOnboarding = ({
             organizationId: tenantId,
             email: ownerEmail,
             role: "owner",
-            expiresAt: new Date(
-              clock.now().getTime() + invitationLifetimeDays * dayInMilliseconds,
-            ),
+            expiresAt: invitationExpiry(clock),
             inviterId: actorUserId,
           })
           .returning({ id: invitation.id });
         return ownerInvitation;
       });
 
-      const invitationUrl = invitationUrlFor(created.id);
+      const url = invitationUrl(appUrl, created.id);
       const emailSent = await mailer
         .send(
           tenantOwnerInvitationEmail({
             to: ownerEmail,
             tenantName,
-            invitationUrl,
+            invitationUrl: url,
             expiresInDays: invitationLifetimeDays,
           }),
         )
@@ -154,20 +152,22 @@ export const createTenantOnboarding = ({
         tenantId,
         ownerEmail,
         invitationId: created.id,
-        invitationUrl,
+        invitationUrl: url,
         emailSent,
       };
     },
 
     async acceptInvitation(input: InvitationAcceptance) {
       const { invitationId, acceptedTerms, password } = input;
-      if (!acceptedTerms) {
-        return { ok: false as const, error: "terms_required" as const };
-      }
 
       const pending = await findInvitation(invitationId);
       if (!pending?.canAccept) {
         return { ok: false as const, error: "unavailable" as const };
+      }
+      // The owner assents to the Terms and DPA on the business's behalf;
+      // Members join under that assent.
+      if (pending.role === "owner" && !acceptedTerms) {
+        return { ok: false as const, error: "terms_required" as const };
       }
 
       const existingUser = await findUserWithPassword(db, pending.email);
@@ -198,6 +198,9 @@ export const createTenantOnboarding = ({
             and(
               eq(invitation.id, invitationId),
               eq(invitation.status, "pending"),
+              // Re-checked here: an invitation that expired since the read
+              // above no longer holds a seat.
+              gt(invitation.expiresAt, clock.now()),
             ),
           )
           .returning();
@@ -223,13 +226,15 @@ export const createTenantOnboarding = ({
             role: claimed.role ?? "member",
           })
           .onConflictDoNothing();
-        await tx.insert(legalAcceptance).values({
-          tenantId: claimed.organizationId,
-          userId,
-          invitationId: claimed.id,
-          termsVersion,
-          acceptedAt: clock.now(),
-        });
+        if (claimed.role === "owner") {
+          await tx.insert(legalAcceptance).values({
+            tenantId: claimed.organizationId,
+            userId,
+            invitationId: claimed.id,
+            termsVersion,
+            acceptedAt: clock.now(),
+          });
+        }
         return { userId, tenantId: claimed.organizationId, email: claimed.email };
       });
 

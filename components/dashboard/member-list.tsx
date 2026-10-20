@@ -1,10 +1,13 @@
+import { RemoveMemberButton } from "@/components/dashboard/remove-member-button";
 import { memberRoleLabel } from "@/modules/tenancy";
 
 type MemberListProps = {
   members: { id: string; name: string; email: string; role: string }[];
+  // Shown to the owner, who is the only one allowed to remove Members.
+  canRemove: boolean;
 };
 
-export function MemberList({ members }: MemberListProps) {
+export function MemberList({ members, canRemove }: MemberListProps) {
   return (
     <section aria-labelledby="equipe" className="flex flex-col gap-4">
       <h2 id="equipe" className="text-xl font-semibold">Equipe</h2>
@@ -15,7 +18,12 @@ export function MemberList({ members }: MemberListProps) {
               <span className="font-medium">{member.name}</span>
               <span className="text-sm break-all text-muted-foreground">{member.email}</span>
             </span>
-            <span className="text-sm text-muted-foreground">{memberRoleLabel(member.role)}</span>
+            <span className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">{memberRoleLabel(member.role)}</span>
+              {canRemove && member.role !== "owner" && (
+                <RemoveMemberButton memberId={member.id} memberName={member.name} />
+              )}
+            </span>
           </li>
         ))}
       </ul>

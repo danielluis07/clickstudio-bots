@@ -1,6 +1,8 @@
 export const signInPath = "/entrar";
 export const signedInHomePath = "/painel";
 export const returnToParam = "voltar";
+// Set on the sign-in page after a password reset, to confirm it worked.
+export const passwordResetDoneParam = "senha-redefinida";
 
 const parseBase = "http://app.invalid";
 

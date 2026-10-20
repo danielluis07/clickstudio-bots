@@ -9,7 +9,7 @@ import { tenantOnboarding } from "@/server/services";
 const errorMessages = {
   terms_required: "Para continuar, aceite os Termos de Uso e o DPA.",
   unavailable:
-    "Este convite não está mais disponível. Peça um novo convite à equipe ClickStudio.",
+    "Este convite não está mais disponível. Peça um novo convite a quem convidou você.",
   invalid: "Informe seu nome e uma senha com pelo menos 8 caracteres.",
   wrong_password: "Senha incorreta para a conta que já usa este e-mail.",
 } as const;

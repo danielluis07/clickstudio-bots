@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { Database } from "@/db/database";
-import { account, user } from "@/db/schema";
+import { account, session, user } from "@/db/schema";
 
 type NewUser = typeof user.$inferInsert;
 
@@ -36,6 +36,17 @@ export const createUserRepository = (db: Database) => {
         .where(eq(user.email, email))
         .limit(1);
       return found ?? null;
+    },
+
+    // Signs the user out everywhere: Better Auth checks the session table on
+    // every request, so a deleted row rejects the cookie that carried it.
+    async revokeSessions(userId: string) {
+      await db.delete(session).where(eq(session.userId, userId));
+    },
+
+    // Deletes the user with their credentials, sessions and memberships.
+    async delete(userId: string) {
+      await db.delete(user).where(eq(user.id, userId));
     },
   };
 };
