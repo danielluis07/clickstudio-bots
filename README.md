@@ -26,6 +26,8 @@ bun run dev
 
 See [ADR 0003](docs/adr/0003-node-postgres-global-pool-on-neon.md) for why the app connects this way.
 
+To enable owner-managed WhatsApp Channels, follow [WhatsApp Channel setup](docs/whatsapp-setup.md) for the Meta v4 configuration, encrypted-token keys and live validation steps.
+
 ## Scripts
 
 | Script                | What it does                                                    |

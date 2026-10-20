@@ -2,6 +2,10 @@
 
 Shadcn is the foundation for the design in this project. Tailwind for styling
 
+## File placement
+
+`components/` holds only `.tsx` files for UI. Domain-specific hooks and supporting browser logic belong in `modules/<area>/hooks/`, exposed through `@/modules/<area>/hooks`. Keep that entry point browser-safe and pass Server Actions into hooks from components.
+
 ## Server vs Client Components
 
 Prefer Server Components by default.  

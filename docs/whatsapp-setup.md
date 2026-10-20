@@ -1,0 +1,122 @@
+# WhatsApp Channel setup
+
+Issue: [#42](https://github.com/danielluis07/clickstudio-bots/issues/42).
+Architecture: [ADR 0001](adr/0001-direct-meta-tech-provider.md).
+
+## Environment and database
+
+Configure these server-only variables on the deployment that hosts `/painel`:
+
+| Variable | Value |
+| --- | --- |
+| `META_APP_ID` | Meta Tech Provider app ID |
+| `META_APP_SECRET` | The app secret |
+| `META_WHATSAPP_SIGNUP_CONFIG_ID` | Facebook Login for Business **v4** configuration ID |
+| `META_GRAPH_API_VERSION` | Graph API version; defaults to `v26.0` |
+| `WHATSAPP_TOKEN_KEY_VERSION` | Active encryption key version, for example `2026-10` |
+| `WHATSAPP_TOKEN_KEYS` | JSON object mapping versions to base64-encoded, random 32-byte keys |
+
+Generate each encryption key with:
+
+```powershell
+bun -e 'console.log(require("node:crypto").randomBytes(32).toString("base64"))'
+```
+
+Set `WHATSAPP_TOKEN_KEYS` to `{"2026-10":"<generated base64 key>"}` and
+`WHATSAPP_TOKEN_KEY_VERSION` to `2026-10`. Keep the keys in the deployment's secret
+store. To rotate, add a new key and change the active version; retain every old
+version while stored Channels still use it. Removing an old key prevents those
+Channels from authenticating. Restore that key before retrying their subscription.
+
+Run `bun run db:migrate` against the direct database endpoint before deploying the
+new code. The migration adds a Channel table with unique Tenant, WABA and
+phone-number IDs. It does not modify existing Tenant data. A Tenant's Channel is
+deleted when its Tenant is deleted.
+
+Without the Meta configuration or encryption variables, the dashboard remains
+available and explains that Channel connection is unavailable. No Meta or
+database deployment changes are performed by the application at build time.
+
+## Meta app configuration
+
+1. Use our direct Tech Provider app with Cloud API access. Complete the required
+   App Review/Advanced Access before onboarding paying Tenants.
+2. In **Facebook Login for Business → Configurations**, create a configuration
+   with the **Embedded Signup** variation and select the **Cloud API** product.
+   Product selection makes this a v4 configuration; the JavaScript session
+   payload can still report version 3. Use a Business Integration System User
+   business token. Request `whatsapp_business_management` and
+   `whatsapp_business_messaging`; avoid unrelated permissions.
+3. Under Facebook Login for Business settings, enable the JavaScript SDK and
+   applicable OAuth login options. Add the actual HTTPS hosting domain to
+   **Allowed Domains** and the launch page to the permitted OAuth redirect URIs.
+4. Configure the app's WhatsApp webhook callback and verification token, then
+   subscribe its `whatsapp_business_account` object to **all** of:
+   `messages`, `account_update`, `smb_message_echoes`, `history`,
+   `smb_app_state_sync`. Message delivery statuses use `messages`.
+   The webhook receiver and processing/history jobs are separate delivery work
+   under #37; this issue does not implement that receiver or initiate history
+   imports. Complete them before the live coexistence acceptance run.
+5. Set the configuration ID in the environment. The launch supplies
+   `featureType: "whatsapp_business_app_onboarding"`, session logging, and
+   `response_type: "code"`. It does not select a legacy signup version or declare
+   product permissions in the JavaScript call.
+
+The server exchanges the code and discovers the phone on the authorized WABA,
+requiring `is_on_biz_app: true` and `platform_type: "CLOUD_API"`. If Meta omits
+`phone_number_id`, exactly one eligible number must be discoverable. The server
+rejects an ambiguous WABA rather than selecting an arbitrary number. Coexistence
+numbers are already registered; this flow does not register them again.
+
+The server checks the app's active webhook fields through `/{app-id}/subscriptions`
+and calls `POST /{waba-id}/subscribed_apps` with the business token. WABA
+subscriptions inherit the app's fields. The Channel records the required fields,
+attempt time and success/failure; only confirmed success marks it subscribed.
+Missing fields, rejected requests and timeouts leave the encrypted credential
+stored and the Bot off. The owner can retry from the dashboard after correcting
+the app setup, without repeating signup. A persisted `pending` attempt is also
+retryable if execution stopped after storing the Channel.
+
+Plaintext tokens exist only inside the WhatsApp adapter. The database receives an
+AES-256-GCM envelope with a random 96-bit IV and key version. Authenticated data
+binds it to Tenant, WABA, phone and version. Channel summaries, action responses
+and routing lookups omit credentials. Tokens are sent to Meta in Authorization
+headers, never URL query parameters, jobs, models or logs. Code exchange uses a
+POST body so the app secret and authorization code do not enter request URLs.
+Vendor errors are replaced with fixed error codes/messages.
+
+## Live validation
+
+Use the dedicated Brazilian demo WhatsApp Business number required by #37:
+
+1. Sign in as the Tenant owner, read the pt-BR instructions, and click
+   **Conectar WhatsApp Business**. Confirm the popup is permitted by the browser.
+2. Select the existing Business app number and complete the phone confirmation.
+   Confirm the callback/code can arrive in either order, and the connected number
+   appears once, with the Bot off and the subscription confirmed.
+   Spend more than three minutes in the Meta popup and confirm completion still
+   works; there is no timeout while the owner navigates Meta. After either the
+   code or session result arrives, a one-minute timeout bounds the wait for its
+   complementary result.
+3. Verify cancellation, denied permissions and blocked SDK/popups show a useful
+   message; verify an attendant cannot launch signup or retry subscriptions.
+4. Remove a required app field temporarily on the demo app, connect a fresh demo
+   Tenant and verify the saved Channel shows an unconfirmed subscription. Restore
+   the field and retry as owner. Confirm the Bot stays off.
+5. After webhook/history work lands, complete the broader #37 real-number gate:
+   inbound/status delivery, app echoes, history/app-state events and app
+   continuity. Explicitly check Windows/WearOS gaps. Do not infer this gate passed
+   from automated tests or subscription success.
+
+Automated checks use PGlite and fake Meta HTTP responses through the public
+Channel service and WhatsApp adapter. They do not use a real number or grant.
+
+## Official references
+
+Consulted on 2026-10-20:
+
+- [Embedded Signup implementation](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/implementation)
+- [Embedded Signup v4](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/version-4)
+- [Onboarding as a Tech Provider](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-customers-as-a-tech-provider)
+- [Onboarding Business app users (coexistence)](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users)
+- [App subscription reference](https://developers.facebook.com/docs/graph-api/reference/app/subscriptions/)
