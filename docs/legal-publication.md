@@ -12,7 +12,7 @@ Implements [#39](https://github.com/danielluis07/clickstudio-bots/issues/39), us
 
 All pages are public, server-rendered and available without authentication. The public route group owns its header/footer and scoped theme; dashboard routes can retain their own layout. No advertising or analytics tags, non-essential cookies or cookie banner are introduced.
 
-The owner confirmed **Daniel Assunção** as encarregado and **bombdaniel@hotmail.com** as the public privacy mailbox during implementation. This explicit confirmation supersedes the `privacidade@` mailbox proposal in #36. The shared contact is in `lib/public-site.ts`.
+The owner confirmed **Daniel Assunção** as encarregado and **bombdaniel@hotmail.com** as the public privacy mailbox during implementation. This explicit confirmation supersedes the `privacidade@` mailbox proposal in #36. The shared contact is in `modules/legal/public-site.ts`.
 
 ## Before production publication with real data
 

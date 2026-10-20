@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { LegalDocument, LegalSection } from "@/components/public-site/legal-document";
 import { PrivacyContact } from "@/components/public-site/privacy-contact";
-import { privacyContact } from "@/lib/public-site";
+import { privacyContact } from "@/modules/legal";
 
 export function PrivacyPolicy() {
   return (

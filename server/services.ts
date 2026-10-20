@@ -1,8 +1,8 @@
 import { db } from "@/db";
-import { systemClock } from "@/lib/clock";
-import { env } from "@/lib/env";
-import { createTenantOnboarding } from "@/lib/onboarding/tenant-onboarding";
-import { createResendMailer } from "@/lib/resend-mailer";
+import { systemClock } from "@/platform/clock";
+import { env } from "@/platform/env";
+import { createTenantOnboarding } from "@/modules/tenancy";
+import { createResendMailer } from "@/platform/resend-mailer";
 
 export const tenantOnboarding = createTenantOnboarding({
   db,

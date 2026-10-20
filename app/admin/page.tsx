@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { AdminTenants } from "@/components/admin/admin-tenants";
-import { requireAdmin } from "@/lib/auth-guards";
+import { requireAdmin } from "@/server/auth/guards";
 
 export const metadata: Metadata = {
   title: "Administração",

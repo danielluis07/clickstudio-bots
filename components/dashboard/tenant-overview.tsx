@@ -1,8 +1,8 @@
 import { LegalAcceptanceList } from "@/components/dashboard/legal-acceptance-list";
 import { MemberList } from "@/components/dashboard/member-list";
 import { db } from "@/db";
-import { createTenantRepository } from "@/db/repositories/tenant";
-import type { TenantScope } from "@/db/tenant-scope";
+import { createTenantRepository } from "@/modules/tenancy";
+import type { TenantScope } from "@/modules/tenancy";
 
 export async function TenantOverview({ scope }: { scope: TenantScope }) {
   const tenant = createTenantRepository(db, scope);

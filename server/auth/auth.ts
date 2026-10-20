@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { createAuth } from "@/lib/create-auth";
-import { env } from "@/lib/env";
+import { createAuth } from "@/server/auth/create-auth";
+import { env } from "@/platform/env";
 
 export const auth = createAuth({
   db,

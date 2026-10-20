@@ -3,9 +3,9 @@
 import { isAPIError } from "better-auth/api";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { formText, type FormState } from "@/lib/actions/form-state";
-import { auth } from "@/lib/auth";
-import { returnToParam, safeReturnPath, signInPath } from "@/lib/auth-redirects";
+import { formText, type FormState } from "@/server/actions/form-state";
+import { auth } from "@/server/auth/auth";
+import { returnToParam, safeReturnPath, signInPath } from "@/server/auth/redirects";
 
 export async function signInAction(
   _previous: FormState,

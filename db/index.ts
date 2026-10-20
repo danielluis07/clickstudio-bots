@@ -1,5 +1,5 @@
 import type { Database } from "@/db/database";
-import { env } from "@/lib/env";
+import { env } from "@/platform/env";
 import { attachDatabasePool } from "@vercel/functions";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";

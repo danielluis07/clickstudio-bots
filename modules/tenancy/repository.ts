@@ -7,7 +7,7 @@ import {
   organization,
   user,
 } from "@/db/schema";
-import type { TenantScope } from "@/db/tenant-scope";
+import type { TenantScope } from "@/modules/tenancy/scope";
 
 // The single entry point to Tenant-owned data for Members: every query is
 // bound to the scope's Tenant, whatever record ids the caller passes.

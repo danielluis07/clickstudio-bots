@@ -2,7 +2,6 @@ import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
-import { createUserRepository } from "@/db/repositories/users";
 import {
   account,
   invitation,
@@ -11,11 +10,11 @@ import {
   organization,
   user,
 } from "@/db/schema";
-import type { Clock } from "@/lib/clock";
-import { tenantOwnerInvitationEmail } from "@/lib/emails/tenant-owner-invitation";
-import type { Mailer } from "@/lib/mailer";
-import { isPlatformAdmin } from "@/lib/platform-admin";
-import { termsVersion } from "@/lib/public-site";
+import { createUserRepository, isPlatformAdmin } from "@/modules/identity";
+import { termsVersion } from "@/modules/legal";
+import { tenantOwnerInvitationEmail } from "@/modules/tenancy/invitation-email";
+import type { Clock } from "@/platform/clock";
+import type { Mailer } from "@/platform/mailer";
 
 export const invitationLifetimeDays = 7;
 const dayInMilliseconds = 24 * 60 * 60 * 1000;

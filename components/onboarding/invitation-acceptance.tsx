@@ -4,7 +4,7 @@ import { ExistingAccountFields } from "@/components/onboarding/existing-account-
 import { InvitationAcceptanceForm } from "@/components/onboarding/invitation-acceptance-form";
 import { LegalAcceptanceField } from "@/components/onboarding/legal-acceptance-field";
 import { NewAccountFields } from "@/components/onboarding/new-account-fields";
-import { tenantOnboarding } from "@/lib/onboarding/service";
+import { tenantOnboarding } from "@/server/services";
 
 type InvitationAcceptanceProps = {
   params: Promise<{ invitationId: string }>;

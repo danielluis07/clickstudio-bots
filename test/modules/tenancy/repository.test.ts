@@ -1,10 +1,13 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
-import { createTenantRepository } from "@/db/repositories/tenant";
 import { invitation } from "@/db/schema";
-import { resolveTenantScope, type TenantScope } from "@/db/tenant-scope";
-import { createTenantOnboarding } from "@/lib/onboarding/tenant-onboarding";
-import { createPlatformAdmin } from "@/lib/platform-admin";
+import { createPlatformAdmin } from "@/modules/identity";
+import {
+  createTenantOnboarding,
+  createTenantRepository,
+  resolveTenantScope,
+  type TenantScope,
+} from "@/modules/tenancy";
 import { createTestClock } from "@/test/support/clock";
 import { createTestDatabase } from "@/test/support/database";
 import { createTestMailer } from "@/test/support/mailer";

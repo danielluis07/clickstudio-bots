@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
-import { createTenantOnboarding } from "@/lib/onboarding/tenant-onboarding";
-import { createPlatformAdmin } from "@/lib/platform-admin";
+import { createTenantOnboarding } from "@/modules/tenancy";
+import { createPlatformAdmin } from "@/modules/identity";
 import { createTestClock, type TestClock } from "@/test/support/clock";
 import { createTestDatabase } from "@/test/support/database";
 import { createTestMailer, type TestMailer } from "@/test/support/mailer";

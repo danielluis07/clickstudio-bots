@@ -1,4 +1,4 @@
-import type { FormState } from "@/lib/actions/form-state";
+import type { FormState } from "@/server/actions/form-state";
 
 export function FormMessage({ state }: { state: FormState }) {
   if (state.status === "idle") return null;

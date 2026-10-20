@@ -4,8 +4,8 @@ import { useActionState, type ReactNode } from "react";
 import { FormMessage } from "@/components/forms/form-message";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { FieldGroup } from "@/components/ui/field";
-import { idleFormState } from "@/lib/actions/form-state";
-import { acceptInvitationAction } from "@/lib/actions/invitation";
+import { idleFormState } from "@/server/actions/form-state";
+import { acceptInvitationAction } from "@/server/actions/invitation";
 
 type InvitationAcceptanceFormProps = {
   invitationId: string;

@@ -1,4 +1,4 @@
-import type { Clock } from "@/lib/clock";
+import type { Clock } from "@/platform/clock";
 
 export type TestClock = Clock & {
   set(date: Date): void;

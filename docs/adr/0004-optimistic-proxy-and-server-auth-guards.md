@@ -2,7 +2,7 @@
 
 `proxy.ts` matches the protected areas (`/admin`, `/painel`) and redirects a request to `/entrar?voltar=<path>` when it has no Better Auth session cookie (`getSessionCookie`). It does not validate the session or read any role. The proxy is an optimistic check that saves a render for signed-out visitors.
 
-Authorization lives in the guards in `lib/auth-guards.ts`:
+Authorization lives in the guards in `server/auth/guards.ts`:
 
 - `requireAuth` validates the session with Better Auth.
 - `requireAdmin` also checks `session.user.role`. It is a Better Auth field with `input: false`, so users cannot change it through `/update-user`. The platform has a single administrator, provisioned with `bun run admin:create`.

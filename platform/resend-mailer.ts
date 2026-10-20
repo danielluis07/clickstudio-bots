@@ -1,4 +1,4 @@
-import type { Mailer } from "@/lib/mailer";
+import type { Mailer } from "@/platform/mailer";
 
 type ResendMailerOptions = {
   apiKey: string;

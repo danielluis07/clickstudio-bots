@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
-import { publicOffer } from "@/lib/public-site";
+import { publicOffer } from "@/modules/legal";
 
 export function PricingSection() {
   return (

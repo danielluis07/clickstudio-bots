@@ -2,9 +2,9 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { formText, type FormState } from "@/lib/actions/form-state";
-import { auth } from "@/lib/auth";
-import { tenantOnboarding } from "@/lib/onboarding/service";
+import { formText, type FormState } from "@/server/actions/form-state";
+import { auth } from "@/server/auth/auth";
+import { tenantOnboarding } from "@/server/services";
 
 const errorMessages = {
   terms_required: "Para continuar, aceite os Termos de Uso e o DPA.",

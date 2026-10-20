@@ -6,7 +6,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { user } from "@/db/schema/auth";
-import { id, timestamps } from "@/db/utils/columns";
+import { id, timestamps } from "@/db/columns";
 
 // A Tenant is a Better Auth organization; the table keeps the plugin's names.
 export const organization = pgTable("organization", {

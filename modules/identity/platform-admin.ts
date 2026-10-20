@@ -1,7 +1,7 @@
 import { hashPassword } from "better-auth/crypto";
 import { and, eq } from "drizzle-orm";
 import type { Database } from "@/db/database";
-import { createUserRepository } from "@/db/repositories/users";
+import { createUserRepository } from "@/modules/identity/users";
 import { user } from "@/db/schema";
 
 type NewPlatformAdmin = {

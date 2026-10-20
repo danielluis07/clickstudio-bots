@@ -1,8 +1,8 @@
 "use server";
 
-import { formText, type FormState } from "@/lib/actions/form-state";
-import { requireAuth } from "@/lib/auth-guards";
-import { tenantOnboarding } from "@/lib/onboarding/service";
+import { formText, type FormState } from "@/server/actions/form-state";
+import { requireAuth } from "@/server/auth/guards";
+import { tenantOnboarding } from "@/server/services";
 
 const errorMessages = {
   forbidden: "Você não tem permissão para criar negócios.",

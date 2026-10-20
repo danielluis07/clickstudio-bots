@@ -1,4 +1,4 @@
-import type { Email } from "@/lib/mailer";
+import type { Email } from "@/platform/mailer";
 
 type TenantOwnerInvitation = {
   to: string;

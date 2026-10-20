@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { safeReturnPath } from "@/lib/auth-redirects";
+import { safeReturnPath } from "@/server/auth/redirects";
 
 describe("return path after signing in", () => {
   test("keeps a path inside the app, with its query", () => {

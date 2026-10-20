@@ -7,7 +7,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { id, timestamps } from "@/db/utils/columns";
+import { id, timestamps } from "@/db/columns";
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
 

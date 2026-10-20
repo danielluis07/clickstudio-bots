@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createUserRepository } from "@/db/repositories/users";
+import { createUserRepository } from "@/modules/identity";
 import { createTestDatabase } from "@/test/support/database";
 
 describe("user repository", () => {

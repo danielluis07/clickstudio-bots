@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { signOutAction } from "@/lib/actions/session";
+import { signOutAction } from "@/server/actions/session";
 
 export function AppHeader({ homeHref }: { homeHref: string }) {
   return (

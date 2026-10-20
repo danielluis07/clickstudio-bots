@@ -2,9 +2,9 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { db } from "@/db";
-import { resolveTenantScope } from "@/db/tenant-scope";
-import { auth } from "@/lib/auth";
-import { signInPath } from "@/lib/auth-redirects";
+import { resolveTenantScope } from "@/modules/tenancy";
+import { auth } from "@/server/auth/auth";
+import { signInPath } from "@/server/auth/redirects";
 
 // The authoritative checks behind `proxy.ts`, which only looks for a cookie.
 // Call one at the top of every protected page (its segment needs a

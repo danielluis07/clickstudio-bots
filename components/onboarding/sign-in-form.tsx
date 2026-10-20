@@ -6,9 +6,9 @@ import { FormMessage } from "@/components/forms/form-message";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { idleFormState } from "@/lib/actions/form-state";
-import { signInAction } from "@/lib/actions/session";
-import { returnToParam } from "@/lib/auth-redirects";
+import { idleFormState } from "@/server/actions/form-state";
+import { signInAction } from "@/server/actions/session";
+import { returnToParam } from "@/server/auth/redirects";
 
 export function SignInForm() {
   const [state, formAction, pending] = useActionState(signInAction, idleFormState);

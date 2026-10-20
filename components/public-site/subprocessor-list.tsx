@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { LegalDocument, LegalSection } from "@/components/public-site/legal-document";
 import { PrivacyContact } from "@/components/public-site/privacy-contact";
-import { retentionSources, subprocessors } from "@/lib/subprocessors";
+import { retentionSources, subprocessors } from "@/modules/legal";
 
 function SubprocessorTable() {
   return (

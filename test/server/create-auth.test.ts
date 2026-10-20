@@ -1,10 +1,9 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
-import { createUserRepository } from "@/db/repositories/users";
-import { createAuth } from "@/lib/create-auth";
-import { createTenantOnboarding } from "@/lib/onboarding/tenant-onboarding";
-import { createPlatformAdmin } from "@/lib/platform-admin";
-import { systemClock } from "@/lib/clock";
+import { createPlatformAdmin, createUserRepository } from "@/modules/identity";
+import { createTenantOnboarding } from "@/modules/tenancy";
+import { systemClock } from "@/platform/clock";
+import { createAuth } from "@/server/auth/create-auth";
 import { createTestDatabase } from "@/test/support/database";
 import { createTestMailer } from "@/test/support/mailer";
 

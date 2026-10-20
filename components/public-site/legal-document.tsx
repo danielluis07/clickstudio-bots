@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { legalVersion } from "@/lib/public-site";
+import { legalVersion } from "@/modules/legal";
 
 type LegalDocumentProps = {
   title: string;

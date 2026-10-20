@@ -5,8 +5,8 @@ import { FormMessage } from "@/components/forms/form-message";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { createTenantAction } from "@/lib/actions/admin";
-import { idleFormState } from "@/lib/actions/form-state";
+import { createTenantAction } from "@/server/actions/admin";
+import { idleFormState } from "@/server/actions/form-state";
 
 export function CreateTenantForm() {
   const [state, formAction, pending] = useActionState(createTenantAction, idleFormState);

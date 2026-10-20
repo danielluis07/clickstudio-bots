@@ -1,4 +1,4 @@
-import type { Email, Mailer } from "@/lib/mailer";
+import type { Email, Mailer } from "@/platform/mailer";
 
 export type TestMailer = Mailer & {
   sent: Email[];

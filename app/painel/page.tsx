@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { TenantOverview } from "@/components/dashboard/tenant-overview";
-import { requireTenantScope } from "@/lib/auth-guards";
+import { requireTenantScope } from "@/server/auth/guards";
 
 export const metadata: Metadata = {
   title: "Painel",

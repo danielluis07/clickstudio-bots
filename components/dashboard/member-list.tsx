@@ -1,4 +1,4 @@
-import { memberRoleLabel } from "@/lib/tenant-display";
+import { memberRoleLabel } from "@/modules/tenancy";
 
 type MemberListProps = {
   members: { id: string; name: string; email: string; role: string }[];

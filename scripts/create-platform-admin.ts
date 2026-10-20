@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { createPlatformAdmin } from "@/lib/platform-admin";
+import { createPlatformAdmin } from "@/modules/identity";
 
 // Usage: ADMIN_PASSWORD=... bun run admin:create <email> <name>
 const [email, ...nameParts] = process.argv.slice(2);

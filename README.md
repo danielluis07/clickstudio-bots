@@ -45,9 +45,9 @@ Public sign-up is disabled. Create the first platform administrator from the CLI
 ADMIN_PASSWORD="<at least 8 characters>" bun run admin:create admin@example.com "Nome do Admin"
 ```
 
-The administrator signs in at `/entrar` and creates each Tenant at `/admin`, which emails the owner an invitation (pt-BR, via Resend). The owner opens `/convite/<id>`, accepts the Terms and DPA, sets a password and lands on `/painel`. A Tenant is a Better Auth organization. Public sign-up and the organization plugin's HTTP routes are disabled in `lib/create-auth.ts`, so nobody can create a Tenant or join one outside that flow.
+The administrator signs in at `/entrar` and creates each Tenant at `/admin`, which emails the owner an invitation (pt-BR, via Resend). The owner opens `/convite/<id>`, accepts the Terms and DPA, sets a password and lands on `/painel`. A Tenant is a Better Auth organization. Public sign-up and the organization plugin's HTTP routes are disabled in `server/auth/create-auth.ts`, so nobody can create a Tenant or join one outside that flow.
 
-`proxy.ts` sends visitors without a session cookie from `/admin` and `/painel` to `/entrar`. That is only a shortcut. Every protected `page.tsx` must call a guard from `lib/auth-guards.ts` (`requireAuth`, `requireAdmin` or `requireTenantScope`) on its first line, and so must every Server Action. Each protected segment needs a `loading.tsx` for the page to read the session; see [ADR 0004](docs/adr/0004-optimistic-proxy-and-server-auth-guards.md).
+`proxy.ts` sends visitors without a session cookie from `/admin` and `/painel` to `/entrar`. That is only a shortcut. Every protected `page.tsx` must call a guard from `server/auth/guards.ts` (`requireAuth`, `requireAdmin` or `requireTenantScope`) on its first line, and so must every Server Action. Each protected segment needs a `loading.tsx` for the page to read the session; see [ADR 0004](docs/adr/0004-optimistic-proxy-and-server-auth-guards.md).
 
 Member-facing code reaches Tenant-owned data only through `createTenantRepository(db, scope)`. The `TenantScope` it requires can only come from `resolveTenantScope`, which checks membership on the server, so a Tenant id from the browser is never trusted.
 
@@ -59,8 +59,12 @@ CI fails if `db/schema` and `drizzle/` disagree. The PGlite test harness (`test/
 
 A database created earlier with `drizzle-kit push` already has the auth tables, so the initial migration fails on it. Use a fresh database (e.g. a new Neon branch) and run `bun run db:migrate`.
 
+## Code layout
+
+Layout and import rules are in [docs/CONVENTIONS.md](docs/CONVENTIONS.md#layout) and [ADR 0005](docs/adr/0005-domain-modules-with-enforced-dependency-direction.md).
+
 ## Tests
 
-Tests are `*.test.ts` files run by `bun test`. Repository tests build their database with `createTestDatabase()` from `@/test/support/database`: an in-memory PGlite with all migrations applied. Code that depends on time takes a `Clock` (`@/lib/clock`); tests pass `createTestClock()` from `@/test/support/clock` and move it with `set` or `advance`.
+Tests are `*.test.ts` files under `test/`, organised like the code they exercise (`test/modules/tenancy/…`, `test/server/…`), and run by `bun test`. `test/architecture.test.ts` enforces the import rules. Repository tests build their database with `createTestDatabase()` from `@/test/support/database`: an in-memory PGlite with all migrations applied. Code that depends on time takes a `Clock` (`@/platform/clock`); tests pass `createTestClock()` from `@/test/support/clock` and move it with `set` or `advance`.
 
 CI (`.github/workflows/ci.yml`) runs lint, typecheck, the migration drift check and the tests on every push and pull request.
