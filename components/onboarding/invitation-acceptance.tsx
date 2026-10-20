@@ -20,18 +20,25 @@ export async function InvitationAcceptance({ params }: InvitationAcceptanceProps
     return (
       <AuthCard
         title="Convite indisponível"
-        description="Este convite expirou, já foi usado ou não existe. Peça um novo convite à equipe ClickStudio."
+        description="Este convite expirou, já foi usado ou não existe. Peça um novo convite a quem convidou você."
       />
     );
   }
 
+  // Only the owner assents to the Terms and DPA, on the business's behalf.
+  const isOwner = invitation.role === "owner";
+
   return (
     <AuthCard
       title={`Convite para ${invitation.tenantName}`}
-      description={<>Você vai administrar este negócio no ClickStudio Bots com o e-mail <strong>{invitation.email}</strong>.</>}>
+      description={
+        isOwner
+          ? <>Você vai administrar este negócio no ClickStudio Bots com o e-mail <strong>{invitation.email}</strong>.</>
+          : <>Você vai fazer parte da equipe deste negócio no ClickStudio Bots com o e-mail <strong>{invitation.email}</strong>.</>
+      }>
       <InvitationAcceptanceForm invitationId={invitation.id}>
         {invitation.hasAccount ? <ExistingAccountFields /> : <NewAccountFields />}
-        <LegalAcceptanceField />
+        {isOwner && <LegalAcceptanceField />}
       </InvitationAcceptanceForm>
     </AuthCard>
   );

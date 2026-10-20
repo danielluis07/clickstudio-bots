@@ -1,16 +1,26 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { createPlatformAdmin, createUserRepository } from "@/modules/identity";
-import { createTenantOnboarding } from "@/modules/tenancy";
+import {
+  createMemberManagement,
+  createTenantOnboarding,
+  resolveTenantScope,
+  type TenantScope,
+} from "@/modules/tenancy";
 import { systemClock } from "@/platform/clock";
 import { createAuth } from "@/server/auth/create-auth";
 import { createTestDatabase } from "@/test/support/database";
-import { createTestMailer } from "@/test/support/mailer";
+import { createTestMailer, type TestMailer } from "@/test/support/mailer";
 
 const baseURL = "http://localhost:3000";
 
 let db: Database;
 let auth: ReturnType<typeof createAuth>;
+let mailer: TestMailer;
+let onboarding: ReturnType<typeof createTenantOnboarding>;
+let members: ReturnType<typeof createMemberManagement>;
+let ownerScope: TenantScope;
+let otherOwnerScope: TenantScope;
 let pendingInvitationId: string;
 
 const post = (path: string, body: unknown, cookie?: string) =>
@@ -32,14 +42,48 @@ const signIn = async (email: string, password: string) => {
   return response.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 };
 
+const sessionUser = async (cookie: string) => {
+  const response = await auth.handler(
+    new Request(`${baseURL}/api/auth/get-session`, { headers: { cookie } }),
+  );
+  return (await response.json())?.user ?? null;
+};
+
+const scopeOf = async (userId: string, activeTenantId?: string) => {
+  const scope = await resolveTenantScope(db, { userId, activeTenantId });
+  if (!scope) throw new Error("expected a Tenant scope");
+  return scope;
+};
+
+const joinAsMember = async (scope: TenantScope, email: string) => {
+  const invited = await members.inviteMember(scope, { email });
+  if (!invited.ok) throw new Error(`setup failed: ${invited.error}`);
+  const accepted = await onboarding.acceptInvitation({
+    invitationId: invited.invitationId,
+    acceptedTerms: false,
+    name: "Membro",
+    password: "senha-segura-123",
+  });
+  if (!accepted.ok) throw new Error(`setup failed: ${accepted.error}`);
+  return scopeOf(accepted.userId, scope.tenantId);
+};
+
 beforeAll(async () => {
   db = await createTestDatabase();
+  mailer = createTestMailer();
   auth = createAuth({
     db,
     baseURL,
     secret: "test-secret-with-enough-entropy-0123456789",
+    mailer,
   });
-  const onboarding = createTenantOnboarding({
+  onboarding = createTenantOnboarding({
+    db,
+    mailer: createTestMailer(),
+    clock: systemClock,
+    appUrl: baseURL,
+  });
+  members = createMemberManagement({
     db,
     mailer: createTestMailer(),
     clock: systemClock,
@@ -60,12 +104,26 @@ beforeAll(async () => {
   });
   if (!owned.ok || !pending.ok) throw new Error("setup failed");
   pendingInvitationId = pending.invitationId;
-  await onboarding.acceptInvitation({
+  const owner = await onboarding.acceptInvitation({
     invitationId: owned.invitationId,
     acceptedTerms: true,
     name: "Dona Sorriso",
     password: "senha-segura-123",
   });
+  const other = await onboarding.createTenant(admin.id, {
+    tenantName: "Clínica Vizinha",
+    ownerEmail: "dono@vizinha.example",
+  });
+  if (!owner.ok || !other.ok) throw new Error("setup failed");
+  const otherOwner = await onboarding.acceptInvitation({
+    invitationId: other.invitationId,
+    acceptedTerms: true,
+    name: "Dono Vizinha",
+    password: "senha-segura-123",
+  });
+  if (!otherOwner.ok) throw new Error("setup failed");
+  ownerScope = await scopeOf(owner.userId, owned.tenantId);
+  otherOwnerScope = await scopeOf(otherOwner.userId, other.tenantId);
 });
 
 describe("auth routes", () => {
@@ -139,5 +197,99 @@ describe("auth routes", () => {
       const response = await post(path, body, cookie);
       expect({ path, status: response.status }).toEqual({ path, status: 404 });
     }
+  });
+});
+
+describe("password reset", () => {
+  const requestReset = (email: string) =>
+    post("/request-password-reset", { email });
+
+  test("a Member resets a forgotten password through the pt-BR email", async () => {
+    await joinAsMember(ownerScope, "ana@sorriso.example");
+    const staleCookie = await signIn("ana@sorriso.example", "senha-segura-123");
+    mailer.sent.length = 0;
+
+    expect((await requestReset("ana@sorriso.example")).status).toBe(200);
+
+    expect(mailer.sent).toHaveLength(1);
+    const [email] = mailer.sent;
+    expect(email.to).toBe("ana@sorriso.example");
+    expect(email.subject).toBe("Redefina sua senha do ClickStudio Bots");
+    const link = email.text.match(/https?:\/\/\S+/)?.[0] ?? "";
+    expect(link).toStartWith(`${baseURL}/redefinir-senha?token=`);
+    expect(email.html).toContain(link);
+
+    const token = new URL(link).searchParams.get("token");
+    const reset = await post("/reset-password", {
+      token,
+      newPassword: "senha-nova-456",
+    });
+    expect(reset.status).toBe(200);
+
+    expect(await signIn("ana@sorriso.example", "senha-nova-456")).toContain(
+      "better-auth.session_token=",
+    );
+    const oldPassword = await post("/sign-in/email", {
+      email: "ana@sorriso.example",
+      password: "senha-segura-123",
+    });
+    expect(oldPassword.ok).toBe(false);
+    expect(await sessionUser(staleCookie)).toBeNull();
+  });
+
+  test("a reset link works only once", async () => {
+    mailer.sent.length = 0;
+    await requestReset("dona@sorriso.example");
+    const token = new URL(
+      mailer.sent[0].text.match(/https?:\/\/\S+/)?.[0] ?? "",
+    ).searchParams.get("token");
+
+    expect(
+      (await post("/reset-password", { token, newPassword: "senha-segura-123" }))
+        .status,
+    ).toBe(200);
+    expect(
+      (await post("/reset-password", { token, newPassword: "outra-senha-789" }))
+        .ok,
+    ).toBe(false);
+  });
+
+  test("an unknown email gets the same answer and no email", async () => {
+    mailer.sent.length = 0;
+
+    const response = await requestReset("ninguem@example.com");
+
+    expect(response.status).toBe(200);
+    expect(mailer.sent).toHaveLength(0);
+  });
+});
+
+describe("removing a Member", () => {
+  test("rejects the removed Member's existing session at once", async () => {
+    const bia = await joinAsMember(ownerScope, "bia@sorriso.example");
+    const cookie = await signIn("bia@sorriso.example", "senha-segura-123");
+    expect(await sessionUser(cookie)).toMatchObject({ id: bia.userId });
+
+    await members.removeMember(ownerScope, bia.memberId);
+
+    expect(await sessionUser(cookie)).toBeNull();
+    const signInAgain = await post("/sign-in/email", {
+      email: "bia@sorriso.example",
+      password: "senha-segura-123",
+    });
+    expect(signInAgain.ok).toBe(false);
+  });
+
+  test("rejects existing sessions even when the identity stays for another Tenant", async () => {
+    const caio = await joinAsMember(ownerScope, "caio@sorriso.example");
+    await joinAsMember(otherOwnerScope, "caio@sorriso.example");
+    const cookie = await signIn("caio@sorriso.example", "senha-segura-123");
+
+    await members.removeMember(ownerScope, caio.memberId);
+
+    expect(await sessionUser(cookie)).toBeNull();
+    expect(await signIn("caio@sorriso.example", "senha-segura-123")).toContain(
+      "better-auth.session_token=",
+    );
   });
 });
