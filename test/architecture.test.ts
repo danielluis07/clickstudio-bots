@@ -30,9 +30,17 @@ const under = (folder: string) =>
   sourceFiles.filter((path) => path.startsWith(`${folder}/`));
 
 const moduleOf = (path: string) => path.match(/^modules\/([^/]+)\//)?.[1];
+const isModuleHook = (path: string) => /^modules\/[^/]+\/hooks\//.test(path);
 
 describe("architecture", () => {
-  test("modules stay framework-free and receive their dependencies", () => {
+  test("components contain only TSX files", () => {
+    expect(
+      [...new Bun.Glob("components/**/*").scanSync({ onlyFiles: true })]
+        .filter((path) => !path.endsWith(".tsx")),
+    ).toEqual([]);
+  });
+
+  test("module domain code stays framework-free and receives its dependencies", () => {
     const forbidden = [
       /^next(\/|$)/,
       /^react(-dom)?(\/|$)/,
@@ -40,26 +48,40 @@ describe("architecture", () => {
       // The live database pool and environment are wired in by server/.
       /^@\/db$/,
       /^@\/platform\/env$/,
+      /^@\/modules\/[^/]+\/hooks(\/|$)/,
     ];
     expect(
-      violations(under("modules"), (specifier) =>
+      violations(under("modules").filter((file) => !isModuleHook(file)), (specifier) =>
         forbidden.some((pattern) => pattern.test(specifier)),
       ),
     ).toEqual([]);
   });
 
-  test("code outside a module imports only its index", () => {
+  test("module hooks stay browser-safe and receive server operations as dependencies", () => {
+    expect(
+      violations(under("modules").filter(isModuleHook), (specifier) =>
+        /^next(\/|$)/.test(specifier) ||
+        /^@\/(app|components|server|db)(\/|$)/.test(specifier) ||
+        specifier === "@/platform/env",
+      ),
+    ).toEqual([]);
+  });
+
+  test("code outside a module imports only its domain or hooks index", () => {
     expect(
       violations(sourceFiles, (specifier, file) => {
-        const target = specifier.match(/^@\/modules\/([^/]+)\/.+/)?.[1];
-        return target !== undefined && target !== moduleOf(file);
+        const target = specifier.match(/^@\/modules\/([^/]+)\/(.+)/);
+        return target !== null && target[1] !== moduleOf(file) && target[2] !== "hooks";
       }),
     ).toEqual([]);
   });
 
   test("a module's own files import each other directly, not through its index", () => {
     expect(
-      violations(under("modules"), (specifier, file) => specifier === `@/modules/${moduleOf(file)}`),
+      violations(under("modules"), (specifier, file) =>
+        specifier === `@/modules/${moduleOf(file)}` ||
+        (isModuleHook(file) && specifier === `@/modules/${moduleOf(file)}/hooks`),
+      ),
     ).toEqual([]);
   });
 

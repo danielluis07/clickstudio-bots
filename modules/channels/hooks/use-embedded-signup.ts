@@ -1,9 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { parseSignupSession, type EmbeddedSignupConfig } from "@/components/channels/embedded-signup";
-import { connectWhatsAppAction } from "@/server/actions/channels";
-import type { FormState } from "@/server/actions/form-state";
+import { parseSignupSession, type EmbeddedSignupConfig } from "@/modules/channels/hooks/embedded-signup";
+import type { ChannelSignup } from "@/modules/channels/service";
+
+type SignupState =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "success"; message: string };
+
+type CompleteSignup = (input: ChannelSignup) => Promise<SignupState>;
 
 type SignupAttempt = {
   code?: string;
@@ -13,10 +19,10 @@ type SignupAttempt = {
   timer?: ReturnType<typeof setTimeout>;
 };
 
-export const useEmbeddedSignup = (config: EmbeddedSignupConfig) => {
+export const useEmbeddedSignup = (config: EmbeddedSignupConfig, completeSignup: CompleteSignup) => {
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [state, setState] = useState<FormState>({ status: "idle" });
+  const [state, setState] = useState<SignupState>({ status: "idle" });
   const [, startTransition] = useTransition();
   const active = useRef<SignupAttempt | null>(null);
 
@@ -43,7 +49,7 @@ export const useEmbeddedSignup = (config: EmbeddedSignupConfig) => {
     attempt.code = undefined;
     startTransition(async () => {
       try {
-        setState(await connectWhatsAppAction(input));
+        setState(await completeSignup(input));
       } catch {
         setState({ status: "error", message: "Não foi possível confirmar a conexão. Atualize a página antes de tentar novamente." });
       } finally {
@@ -51,7 +57,7 @@ export const useEmbeddedSignup = (config: EmbeddedSignupConfig) => {
         setBusy(false);
       }
     });
-  }, [fail]);
+  }, [completeSignup, fail]);
 
   useEffect(() => {
     const receiveSession = (event: MessageEvent) => {
