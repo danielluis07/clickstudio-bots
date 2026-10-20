@@ -1,4 +1,5 @@
 import { LegalAcceptanceList } from "@/components/dashboard/legal-acceptance-list";
+import { WhatsAppChannel } from "@/components/channels/whatsapp-channel";
 import { MemberInvitations } from "@/components/dashboard/member-invitations";
 import { MemberList } from "@/components/dashboard/member-list";
 import { db } from "@/db";
@@ -20,6 +21,7 @@ export async function TenantOverview({ scope }: { scope: TenantScope }) {
   return (
     <div className="flex flex-col gap-10">
       <h1 className="text-3xl font-semibold tracking-tight wrap-break-word">{profile?.name}</h1>
+      <WhatsAppChannel scope={scope} />
       <MemberList members={members} canRemove={isOwner} />
       {isOwner && <MemberInvitations memberCount={members.length} invitations={invitations} />}
       <LegalAcceptanceList acceptances={acceptances} />
