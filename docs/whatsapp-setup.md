@@ -16,14 +16,16 @@ Configure these server-only variables on the deployment that hosts `/painel`:
 | `WHATSAPP_TOKEN_KEY_VERSION` | Active encryption key version, for example `2026-10` |
 | `WHATSAPP_TOKEN_KEYS` | JSON object mapping versions to base64-encoded, random 32-byte keys |
 | `META_WEBHOOK_VERIFY_TOKEN` | Random string (16+ characters) entered as the webhook's **Verify token** in Meta |
-| `QSTASH_TOKEN` | QStash token of the **EU** region |
-| `QSTASH_URL` | QStash API URL; defaults to the EU region, `https://qstash-eu-central-1.upstash.io` |
-| `QSTASH_CURRENT_SIGNING_KEY` / `QSTASH_NEXT_SIGNING_KEY` | The EU region's signing keys, used to authenticate jobs |
+| `QSTASH_TOKEN` | QStash token of the **US East** region |
+| `QSTASH_URL` | QStash API URL; defaults to the US East region, `https://qstash-us-east-1.upstash.io` |
+| `QSTASH_CURRENT_SIGNING_KEY` / `QSTASH_NEXT_SIGNING_KEY` | The US East region's signing keys, used to authenticate jobs |
 
 The verification handshake needs only `META_WEBHOOK_VERIFY_TOKEN`. The webhook
 stores deliveries only when `META_APP_SECRET` and `QSTASH_TOKEN` are set. Without
 them it answers 503 and Meta keeps retrying. The job endpoint also needs both
-signing keys. QStash tokens and keys are per region; use the EU region's.
+signing keys. QStash tokens and keys are per region; use the US East region's.
+A token from another region fails every enqueue: the webhook answers 500 and
+Meta keeps retrying, so events wait in the inbox but are never processed.
 
 Generate each encryption key with:
 

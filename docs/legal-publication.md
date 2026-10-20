@@ -21,7 +21,7 @@ The legal pages are drafts, as required by #39. They disclose pending configurat
 - Confirm the privacy mailbox is monitored and test delivery of a deletion request.
 - Confirm the selected model provider after evaluation. Anthropic is provisional in the locked plan and these drafts. If it changes, update Privacy, Terms/DPA and Subprocessors together before sending data to the replacement.
 - Record the actual Neon plan and recovery window, Vercel plan/log retention, Sentry retention, QStash message/log/dead-letter retention and Ably region constraints. Replace pending statements in the public drafts with the actual production configuration.
-- Verify US East hosting, EU QStash, EU Sentry, diagnostics scrubbing, identifiers-only queue/realtime payloads and Groq zero retention against the deployed configuration.
+- Verify US East hosting, US East QStash, EU Sentry, diagnostics scrubbing, identifiers-only queue/realtime payloads and Groq zero retention against the deployed configuration.
 - Record content vendors' answers about ANPD standard clauses. Obtain Brazilian counsel's opinion on the art. 33 IX / art. 7 V transfer approach; the draft makes no claim that vendor EU clauses establish Brazilian compliance.
 - Have Brazilian counsel review the final texts and contracting-party details before the first paying Tenant goes live, as required by #36. Keep the interim drafts accessible for App Review by build week 4.
 - After the app is deployed to its production domain, use the public Privacy, Terms and deletion URLs in Meta's app settings. These routes are written instructions, not a deletion callback endpoint.

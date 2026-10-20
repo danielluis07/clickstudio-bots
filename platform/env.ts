@@ -21,8 +21,9 @@ export const env = createEnv({
     WHATSAPP_TOKEN_KEYS: z.string().min(1).optional(),
     // The token Meta echoes in the webhook verification handshake.
     META_WEBHOOK_VERIFY_TOKEN: z.string().min(16).optional(),
-    // The spec (#37) keeps queue data in QStash's EU region.
-    QSTASH_URL: z.url().default("https://qstash-eu-central-1.upstash.io"),
+    // QStash's US East region, beside Vercel iad1 and Neon us-east. Tokens
+    // and signing keys are per region, so they must come from this one.
+    QSTASH_URL: z.url().default("https://qstash-us-east-1.upstash.io"),
     QSTASH_TOKEN: z.string().min(1).optional(),
     QSTASH_CURRENT_SIGNING_KEY: z.string().min(1).optional(),
     QSTASH_NEXT_SIGNING_KEY: z.string().min(1).optional(),
