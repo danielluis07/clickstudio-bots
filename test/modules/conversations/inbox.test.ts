@@ -64,14 +64,12 @@ describe("Inbox Conversation list", () => {
         channelId: "channel-a",
         contact: { id: expect.any(String), phone: "5511900000001", profileName: "Ana", name: null },
         lastMessageAt: new Date("2026-10-20T11:00:00Z"),
-        lastMessageText: "Ainda estão abertos?",
       },
       {
         id: expect.any(String),
         channelId: "channel-a",
         contact: { id: expect.any(String), phone: "5511900000002", profileName: "Bruno", name: null },
         lastMessageAt: new Date("2026-10-20T10:00:00Z"),
-        lastMessageText: "Olá",
       },
     ]);
   });

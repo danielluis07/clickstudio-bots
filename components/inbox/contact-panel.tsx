@@ -13,12 +13,6 @@ export function ContactPanel({ contact }: { contact: Contact }) {
           <dt className="text-muted-foreground">Telefone</dt>
           <dd>{formatContactPhone(contact.phone)}</dd>
         </div>
-        {contact.profileName && (
-          <div>
-            <dt className="text-muted-foreground">Nome no WhatsApp</dt>
-            <dd className="wrap-break-word">{contact.profileName}</dd>
-          </div>
-        )}
       </dl>
       <ContactNameForm key={contact.id} contact={contact} />
     </aside>

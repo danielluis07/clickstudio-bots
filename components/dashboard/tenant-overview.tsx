@@ -1,6 +1,4 @@
-import Link from "next/link";
 import { LegalAcceptanceList } from "@/components/dashboard/legal-acceptance-list";
-import { buttonVariants } from "@/components/ui/button";
 import { WhatsAppChannel } from "@/components/channels/whatsapp-channel";
 import { MemberInvitations } from "@/components/dashboard/member-invitations";
 import { MemberList } from "@/components/dashboard/member-list";
@@ -22,10 +20,7 @@ export async function TenantOverview({ scope }: { scope: TenantScope }) {
 
   return (
     <div className="flex flex-col gap-10">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-semibold tracking-tight wrap-break-word">{profile?.name}</h1>
-        <Link href="/painel/conversas" className={buttonVariants({ size: "lg" })}>Abrir conversas</Link>
-      </div>
+      <h1 className="text-3xl font-semibold tracking-tight wrap-break-word">{profile?.name}</h1>
       <WhatsAppChannel scope={scope} />
       <MemberList members={members} canRemove={isOwner} />
       {isOwner && <MemberInvitations memberCount={members.length} invitations={invitations} />}

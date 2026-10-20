@@ -4,14 +4,6 @@ import type { Database } from "@/db/database";
 import { contact, conversation, message } from "@/db/schema";
 import type { TenantScope } from "@/modules/tenancy";
 
-// The latest message's text, for the list preview.
-const lastMessageText = sql<string | null>`(
-  select ${message.text} from ${message}
-  where ${message.conversationId} = ${conversation.id}
-  order by ${message.sentAt} desc, ${message.id} desc
-  limit 1
-)`;
-
 // Matches the Contact name a Member gave, the WhatsApp profile name, or the
 // phone digits, so "(21) 98888-7777" finds 5521988887777.
 const matchesSearch = (search: string) => {
@@ -76,7 +68,6 @@ export const createConversationRepository = (db: Database, scope: TenantScope) =
         channelId: conversation.channelId,
         contact: contactFields,
         lastMessageAt: conversation.lastMessageAt,
-        lastMessageText,
       }).from(conversation)
         .innerJoin(contact, eq(contact.id, conversation.contactId))
         .where(and(
