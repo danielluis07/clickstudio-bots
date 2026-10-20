@@ -2,7 +2,7 @@ import { LegalAcceptanceList } from "@/components/dashboard/legal-acceptance-lis
 import { MemberList } from "@/components/dashboard/member-list";
 import { db } from "@/db";
 import { createTenantRepository } from "@/db/repositories/tenant";
-import { requireTenantScope } from "@/lib/session";
+import { requireTenantScope } from "@/lib/auth-guards";
 
 export async function TenantOverview() {
   const tenant = createTenantRepository(db, await requireTenantScope());

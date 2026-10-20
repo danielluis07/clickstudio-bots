@@ -47,6 +47,8 @@ ADMIN_PASSWORD="<at least 8 characters>" bun run admin:create admin@example.com 
 
 The administrator signs in at `/entrar` and creates each Tenant at `/admin`, which emails the owner an invitation (pt-BR, via Resend). The owner opens `/convite/<id>`, accepts the Terms and DPA, sets a password and lands on `/painel`. A Tenant is a Better Auth organization. Public sign-up and the organization plugin's HTTP routes are disabled in `lib/create-auth.ts`, so nobody can create a Tenant or join one outside that flow.
 
+`proxy.ts` sends visitors without a session cookie from `/admin` and `/painel` to `/entrar`. That is only a shortcut. Every protected page and Server Action must call a guard from `lib/auth-guards.ts` (`requireAuth`, `requireAdmin` or `requireTenantScope`); see [ADR 0004](docs/adr/0004-optimistic-proxy-and-server-auth-guards.md).
+
 Member-facing code reaches Tenant-owned data only through `createTenantRepository(db, scope)`. The `TenantScope` it requires can only come from `resolveTenantScope`, which checks membership on the server, so a Tenant id from the browser is never trusted.
 
 ## Database migrations

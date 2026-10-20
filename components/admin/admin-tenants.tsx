@@ -1,9 +1,9 @@
 import { CreateTenantForm } from "@/components/admin/create-tenant-form";
-import { requirePlatformAdmin } from "@/lib/session";
+import { requireAdmin } from "@/lib/auth-guards";
 
 // Everything on the admin surface renders after the server-side check.
 export async function AdminTenants() {
-  await requirePlatformAdmin();
+  await requireAdmin();
 
   return (
     <div className="flex flex-col gap-8">

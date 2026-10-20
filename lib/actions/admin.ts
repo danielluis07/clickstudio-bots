@@ -1,8 +1,8 @@
 "use server";
 
 import { formText, type FormState } from "@/lib/actions/form-state";
+import { requireAuth } from "@/lib/auth-guards";
 import { tenantOnboarding } from "@/lib/onboarding/service";
-import { requireSession } from "@/lib/session";
 
 const errorMessages = {
   forbidden: "Você não tem permissão para criar negócios.",
@@ -13,7 +13,7 @@ export async function createTenantAction(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const { user } = await requireSession();
+  const { user } = await requireAuth();
 
   // The onboarding module re-checks that the actor is a platform administrator.
   const result = await tenantOnboarding.createTenant(user.id, {

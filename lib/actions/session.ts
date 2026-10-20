@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { formText, type FormState } from "@/lib/actions/form-state";
 import { auth } from "@/lib/auth";
+import { returnToParam, safeReturnPath, signInPath } from "@/lib/auth-redirects";
 
 export async function signInAction(
   _previous: FormState,
@@ -24,10 +25,10 @@ export async function signInAction(
     }
     throw error;
   }
-  redirect("/painel");
+  redirect(safeReturnPath(formText(formData, returnToParam)));
 }
 
 export async function signOutAction() {
   await auth.api.signOut({ headers: await headers() });
-  redirect("/entrar");
+  redirect(signInPath);
 }
