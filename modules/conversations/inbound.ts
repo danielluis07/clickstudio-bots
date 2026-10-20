@@ -17,9 +17,9 @@ export type InboundTextMessage = {
 export const recordInboundTextMessage = (db: Database, route: ChannelRoute, inbound: InboundTextMessage) =>
   db.transaction(async (tx) => {
     const [{ contactId }] = await tx.insert(contact)
-      .values({ tenantId: route.tenantId, phone: inbound.from, profileName: inbound.profileName })
+      .values({ tenantId: route.tenantId, whatsappId: inbound.from, phone: inbound.from, profileName: inbound.profileName })
       .onConflictDoUpdate({
-        target: [contact.tenantId, contact.phone],
+        target: [contact.tenantId, contact.whatsappId],
         set: { profileName: sql`coalesce(excluded.profile_name, ${contact.profileName})` },
       })
       .returning({ contactId: contact.id });

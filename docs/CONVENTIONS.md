@@ -17,6 +17,8 @@ Keep files focused on composition and wiring — never leave markup or functions
 | `app/` | Routes only: thin pages, layouts and route handlers | anything |
 | `components/` | `.tsx` UI files only. `ui/` is shadcn; other folders group one area of the product | anything except `app/` |
 | `server/` | The Next.js layer: Server Actions (`actions/`), Better Auth and guards (`auth/`), and `services.ts`, which builds module instances from real adapters | `modules/`, `platform/`, `db/`, `next/*` |
+| `server/trpc/` | Typed request adapters and Tenant middleware for live client screens | module interfaces, `db/`, auth; never UI or browser transport |
+| `trpc/` | Browser transport/provider, shared query-cache configuration, and server-only RSC hydration helpers | type-only router imports in browser files; server helpers may import `server/` |
 | `modules/<area>/` (except `hooks/`) | Framework-free domain logic, one folder per glossary area (`tenancy`, `identity`, `legal`, …) | other modules' `index.ts`, `platform/`, `db/schema`, `db/database` |
 | `modules/<area>/hooks/` | Client hooks and their browser helpers for that domain | React, browser-safe dependencies and domain types; server operations are passed as callbacks |
 | `platform/` | Environment, `Clock`, ports shared by several modules (`Mailer`) and the vendor adapters behind them | `db/`, vendor SDKs |
@@ -27,10 +29,11 @@ Keep files focused on composition and wiring — never leave markup or functions
 Rules (enforced by `test/architecture.test.ts`; see ADR 0005):
 
 - A module's `index.ts` is its domain interface. Its optional `hooks/index.ts` is a separate browser interface. Code outside the module imports only `@/modules/<area>` or `@/modules/<area>/hooks`, never their internal files. Files inside a module import each other directly, not through their own entry points.
-- Module domain code never imports `next/*`, `react`, `server/`, `app/`, `components/`, `hooks/`, the live `db` pool or `env`. It takes dependencies (`db`, `clock`, `mailer`, …) as arguments; `server/services.ts` wires the real ones.
+- Module domain code never imports `next/*`, `react`, tRPC, TanStack Query, `trpc/`, `server/`, `app/`, `components/`, `hooks/`, the live `db` pool or `env`. It takes dependencies (`db`, `clock`, `mailer`, …) as arguments; `server/services.ts` wires the real ones.
 - Module hooks may import React, but never `next/*`, `server/`, `app/`, `components/`, `db/` or `env`. Components pass Server Actions as callbacks. Domain code must never import module hooks, and the domain `index.ts` must never re-export them.
 - A port lives in the module that needs it. It moves to `platform/` only when several modules share it.
 - Repositories for Tenant-owned data take a `TenantScope` (`@/modules/tenancy`) and live in the module that owns the data.
 - The one exception is inbound Meta events, which have no Member. They write Tenant-owned data under a `ChannelRoute` (`@/modules/channels`). Only `resolveChannelPhoneNumber` creates one, from the phone-number-id of a signed event. Never build either proof from a request's Tenant id.
 - Route handlers in `app/` stay one line each. Their request adapters (status codes, headers, body parsing) live in `server/` (for example `server/webhook-routes.ts`), so tests can exercise them with plain `Request` objects.
+- Use Server Actions for forms and tRPC for data a live client screen reads and changes (ADR 0006). The inbox's hooks receive typed tRPC procedure options from components, keeping operations injected. Server routers call module interfaces, and `tenantProcedure` rechecks membership with `resolveTenantScope`; inputs never choose a Tenant.
 - Start a module when a glossary area gets its first code. Do not create empty folders ahead of time.

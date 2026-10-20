@@ -7,12 +7,15 @@ export const contact = pgTable("contact", {
   id: id(),
   tenantId: text("tenant_id").notNull()
     .references(() => organization.id, { onDelete: "cascade" }),
-  // The Contact's WhatsApp id (wa_id), their phone number in digits.
+  // Stable inbound identity; Member edits must never change webhook routing.
+  whatsappId: text("whatsapp_id").notNull(),
+  // Editable Contact details. The WhatsApp profile is only a default name.
   phone: text("phone").notNull(),
+  name: text("name"),
   // The WhatsApp profile name, refreshed from each inbound message.
   profileName: text("profile_name"),
   ...timestamps(),
-}, (t) => [uniqueIndex("contact_tenant_id_phone_unique").on(t.tenantId, t.phone)]);
+}, (t) => [uniqueIndex("contact_tenant_id_whatsapp_id_unique").on(t.tenantId, t.whatsappId)]);
 
 export const conversation = pgTable("conversation", {
   id: id(),

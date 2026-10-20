@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 // "file -> import" pairs so a failure says exactly what to change.
 
 const sourceFiles = [
-  ...new Bun.Glob("{app,components,db,hooks,lib,modules,platform,providers,scripts,server,test}/**/*.{ts,tsx}").scanSync(),
+  ...new Bun.Glob("{app,components,db,hooks,lib,modules,platform,providers,scripts,server,test,trpc}/**/*.{ts,tsx}").scanSync(),
   ...new Bun.Glob("*.ts").scanSync(),
 ].map((path) => path.replaceAll("\\", "/"));
 
@@ -49,6 +49,9 @@ describe("architecture", () => {
       /^@\/db$/,
       /^@\/platform\/env$/,
       /^@\/modules\/[^/]+\/hooks(\/|$)/,
+      /^@\/trpc(\/|$)/,
+      /^@trpc\//,
+      /^@tanstack\/react-query(\/|$)/,
     ];
     expect(
       violations(under("modules").filter((file) => !isModuleHook(file)), (specifier) =>
@@ -88,8 +91,15 @@ describe("architecture", () => {
   test("platform and db never depend on modules or the Next.js layer", () => {
     expect(
       violations([...under("platform"), ...under("db")], (specifier) =>
-        /^@\/(modules|server|app|components)(\/|$)/.test(specifier),
+        /^@\/(modules|server|app|components|trpc)(\/|$)/.test(specifier),
       ),
     ).toEqual([]);
+  });
+
+  test("tRPC request adapters stay independent of UI and browser transport", () => {
+    expect(violations(under("server/trpc"), (specifier) =>
+      /^@\/(app|components|hooks|providers)(\/|$)/.test(specifier) ||
+      /^@\/trpc\/client(\/|$)/.test(specifier),
+    )).toEqual([]);
   });
 });

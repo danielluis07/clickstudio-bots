@@ -3,6 +3,7 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { inter } from "@/fonts";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/toast";
 
 export const metadata: Metadata = {
   title: {
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={cn("h-full antialiased font-sans", inter.variable)}>
       <body className="min-h-full flex flex-col">
         <TooltipProvider>{children}</TooltipProvider>
+        <Toaster />
       </body>
     </html>
   );

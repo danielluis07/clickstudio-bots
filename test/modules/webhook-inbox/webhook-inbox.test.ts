@@ -75,6 +75,10 @@ describe("Webhook inbox", () => {
       channelId: "channel-a",
       contactPhone: "5511988887777",
       contactProfileName: "Maria Teste",
+      contactId: expect.any(String),
+      contactName: "Maria Teste",
+      lastMessageText: "Olá!",
+      lastMessageAt: new Date("2026-10-20T12:00:00Z"),
       messages: [{ wamid: "wamid.A1", direction: "inbound", type: "text", text: "Olá!", sentAt: new Date("2026-10-20T12:00:00Z") }],
     }]);
     expect(await conversationsOf(tenantB)).toEqual([]);

@@ -6,6 +6,8 @@ import { db } from "@/db";
 import { createTenantRepository } from "@/modules/tenancy";
 import type { TenantScope } from "@/modules/tenancy";
 import { memberManagement } from "@/server/services";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export async function TenantOverview({ scope }: { scope: TenantScope }) {
   const tenant = createTenantRepository(db, scope);
@@ -21,6 +23,7 @@ export async function TenantOverview({ scope }: { scope: TenantScope }) {
   return (
     <div className="flex flex-col gap-10">
       <h1 className="text-3xl font-semibold tracking-tight wrap-break-word">{profile?.name}</h1>
+      <Button className="self-start" render={<Link href="/painel/conversas" />}>Abrir caixa de entrada</Button>
       <WhatsAppChannel scope={scope} />
       <MemberList members={members} canRemove={isOwner} />
       {isOwner && <MemberInvitations memberCount={members.length} invitations={invitations} />}
