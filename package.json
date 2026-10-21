@@ -12,9 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:migrate:test": "bun scripts/with-test-database.ts bun run db:migrate",
-    "db:seed:test": "bun scripts/with-test-database.ts bun scripts/seed-test-database.ts",
-    "dev:test": "bun scripts/with-test-database.ts bun run dev",
+    "db:seed": "bun scripts/seed-demo-tenant.ts",
     "admin:create": "bun scripts/create-platform-admin.ts"
   },
   "dependencies": {

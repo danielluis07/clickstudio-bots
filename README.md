@@ -10,19 +10,25 @@ bun install
 
 Create `.env` with:
 
-- `DATABASE_URL`: Neon **pooled** connection string. The app keeps one global `pg` pool and registers it with `attachDatabasePool`.
+- `DATABASE_URL`: Neon **pooled** connection string of the **dev branch**. Production's URL lives only in Vercel's environment variables, never in `.env`. The app keeps one global `pg` pool and registers it with `attachDatabasePool`.
   Use `sslmode=verify-full` in both pooled and direct connection strings to preserve certificate and hostname verification and avoid the `pg` warning about changing SSL mode semantics.
 - `BETTER_AUTH_SECRET`
 - `APP_URL`: e.g. `http://localhost:3000`
 - `RESEND_API_KEY`: Resend API key used for invitation emails.
 - `EMAIL_FROM`: verified Resend sender, e.g. `ClickStudio Bots <convites@example.com>`.
-- `DATABASE_URL_TEST` (optional): a disposable Neon test branch for local checks; see [Local test database](#local-test-database).
 
-Apply migrations, then start the dev server. Neon recommends the **direct** (unpooled) connection string for migrations, so override `DATABASE_URL` for that command:
+Apply migrations, optionally seed the demo Tenant, then start the dev server:
 
 ```bash
-DATABASE_URL="<direct connection string>" bun run db:migrate
+bun run db:migrate
+bun run db:seed
 bun run dev
+```
+
+Neon recommends the **direct** (unpooled) connection string for migrations. To migrate production, pass its direct string for that one command rather than storing it:
+
+```bash
+DATABASE_URL="<production direct connection string>" bun run db:migrate
 ```
 
 See [ADR 0003](docs/adr/0003-node-postgres-global-pool-on-neon.md) for why the app connects this way.
@@ -40,9 +46,7 @@ To enable owner-managed WhatsApp Channels, follow [WhatsApp Channel setup](docs/
 | `bun run db:generate` | Generate a migration in `drizzle/` from `db/schema`             |
 | `bun run db:migrate`  | Apply pending migrations to `DATABASE_URL`                      |
 | `bun run admin:create` | Create a platform administrator (see below)                    |
-| `bun run db:migrate:test` | Apply pending migrations to `DATABASE_URL_TEST`             |
-| `bun run db:seed:test` | Recreate the demo Tenant on `DATABASE_URL_TEST`                |
-| `bun run dev:test`    | Dev server on `DATABASE_URL_TEST`                               |
+| `bun run db:seed`     | Recreate the demo Tenant on the dev database (see below)        |
 
 ## Platform administrators and Tenants
 
@@ -66,17 +70,9 @@ CI fails if `db/schema` and `drizzle/` disagree. It also fails when a migration 
 
 A database created earlier with `drizzle-kit push` already has the auth tables, so the initial migration fails on it. Use a fresh database (e.g. a new Neon branch) and run `bun run db:migrate`.
 
-## Local test database
+## Demo Tenant
 
-To try a change in the running app, use the Neon test branch in `DATABASE_URL_TEST` rather than the main database. The `:test` scripts run their command with `DATABASE_URL` set to it (`scripts/with-test-database.ts`) and refuse to start when it is missing or equals `DATABASE_URL`.
-
-```bash
-bun run db:migrate:test   # after any new migration
-bun run db:seed:test      # resets the demo Tenant; re-run to reopen its service window
-bun run dev:test
-```
-
-The seed recreates the Tenant "Clínica Teste" with an owner, `dono.teste@example.com`, whose password is `SEED_PASSWORD` or `senha-teste-123`. Its Conversations cover an open and a closed service window, dashboard replies in each delivery status, and a reply by a removed Member. Its Channel has a placeholder credential, so dashboard sends from it are refused: nothing reaches Meta.
+`bun run db:seed` resets a demo Tenant on the dev database, for trying a change in the running app; re-run it to reopen its service window. It refuses to run unless `APP_URL` is local. It recreates the Tenant "Clínica Teste" with an owner, `dono.teste@example.com`, whose password is `SEED_PASSWORD` or `senha-teste-123`. Its Conversations cover an open and a closed service window, dashboard replies in each delivery status, and a reply by a removed Member. Its Channel has a placeholder credential, so dashboard sends from it are refused: nothing reaches Meta.
 
 ## Code layout
 

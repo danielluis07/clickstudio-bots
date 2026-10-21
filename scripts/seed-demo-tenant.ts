@@ -9,13 +9,15 @@ import { createMemberManagement, resolveTenantScope } from "@/modules/tenancy";
 import { systemClock } from "@/platform/clock";
 import { env } from "@/platform/env";
 
-// Usage: bun run db:seed:test
-// Recreates a demo Tenant on the test branch: an owner who can sign in, an
+// Usage: bun run db:seed
+// Recreates a demo Tenant on the dev database: an owner who can sign in, an
 // open and a closed service window, replies in each delivery status, and a
 // reply by a removed Member. Times are relative to now, so re-run it to
 // reopen the window.
-if (!process.env.DATABASE_URL_TEST || env.DATABASE_URL !== process.env.DATABASE_URL_TEST) {
-  console.error("Refusing to seed: run it through `bun run db:seed:test`, which targets DATABASE_URL_TEST.");
+// Local `.env` holds the dev branch; production's URL lives only in Vercel.
+// A local APP_URL is the sign that this is not a deployment.
+if (!["localhost", "127.0.0.1", "[::1]"].includes(new URL(env.APP_URL).hostname)) {
+  console.error(`Refusing to seed: APP_URL (${env.APP_URL}) is not local.`);
   process.exit(1);
 }
 
