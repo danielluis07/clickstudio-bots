@@ -6,11 +6,15 @@ import { createResendMailer } from "@/platform/resend-mailer";
 import { createChannelService } from "@/modules/channels";
 import { createReplyService } from "@/modules/conversations";
 import { createWhatsAppGateway } from "@/server/whatsapp";
-import { createWebhookInbox } from "@/modules/webhook-inbox";
+import { createWebhookInbox, pruneInboxEvents } from "@/modules/webhook-inbox";
 import { createQStashJobQueue, createQStashJobVerifier, qstashJobUrl } from "@/platform/qstash";
-import { createInboxJobRoute, createWhatsAppWebhookRoute } from "@/server/webhook-routes";
+import { createInboxFailureRoute, createInboxJobRoute, createWhatsAppWebhookRoute } from "@/server/webhook-routes";
 import { createAblyRealtime } from "@/platform/ably";
 import type { Notifier } from "@/platform/notifier";
+import { createDiagnostics } from "@/platform/sentry";
+import { createDailyCronRoute } from "@/server/daily-cron";
+
+const diagnostics = createDiagnostics({ dsn: env.SENTRY_DSN });
 
 export const realtime = env.ABLY_API_KEY ? createAblyRealtime({ apiKey: env.ABLY_API_KEY }) : null;
 // Messaging continues when realtime has not been configured locally.
@@ -45,11 +49,12 @@ export const replyService = createReplyService({
   getSender: createWhatsAppGateway,
 });
 
-const webhookInbox = env.META_APP_SECRET && env.QSTASH_TOKEN
+export const webhookInbox = env.META_APP_SECRET && env.QSTASH_TOKEN
   ? createWebhookInbox({
     db,
     clock: systemClock,
     notifier,
+    diagnostics,
     appSecret: env.META_APP_SECRET,
     queue: createQStashJobQueue({ token: env.QSTASH_TOKEN, baseUrl: env.QSTASH_URL, appUrl: env.APP_URL }),
   })
@@ -72,4 +77,25 @@ export const inboxJobRoute = createInboxJobRoute(
       url: qstashJobUrl(env.APP_URL, "process-inbox-event"),
     }
     : null,
+  diagnostics,
 );
+
+export const inboxFailureRoute = createInboxFailureRoute(
+  webhookInbox && env.QSTASH_CURRENT_SIGNING_KEY && env.QSTASH_NEXT_SIGNING_KEY
+    ? {
+      inbox: webhookInbox,
+      verifier: createQStashJobVerifier({
+        currentSigningKey: env.QSTASH_CURRENT_SIGNING_KEY,
+        nextSigningKey: env.QSTASH_NEXT_SIGNING_KEY,
+      }),
+      url: qstashJobUrl(env.APP_URL, "inbox-event-failed"),
+      sourceUrl: qstashJobUrl(env.APP_URL, "process-inbox-event"),
+    }
+    : null,
+);
+
+export const dailyCronRoute = createDailyCronRoute({
+  secret: env.CRON_SECRET ?? null,
+  diagnostics,
+  tasks: [{ name: "prune-inbox", run: () => pruneInboxEvents(db, systemClock) }],
+});

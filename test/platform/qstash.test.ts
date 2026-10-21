@@ -31,10 +31,14 @@ describe("QStash job queue", () => {
 
     expect(received).toHaveLength(1);
     expect(received[0]).toMatchObject({ path: "/v2/batch", authorization: "Bearer qstash-token" });
-    const messages = received[0].body as { destination: string; body: string }[];
+    const messages = received[0].body as { destination: string; body: string; headers: Record<string, string> }[];
     expect(messages.map(({ destination, body }) => ({ destination, body: JSON.parse(body) }))).toEqual([
       { destination: "https://bots.example.com/api/jobs/process-inbox-event", body: { inboxEventId: "event-1" } },
       { destination: "https://bots.example.com/api/jobs/process-inbox-event", body: { inboxEventId: "event-2" } },
+    ]);
+    expect(messages.map(({ headers }) => new Headers(headers).get("upstash-failure-callback"))).toEqual([
+      "https://bots.example.com/api/jobs/inbox-event-failed",
+      "https://bots.example.com/api/jobs/inbox-event-failed",
     ]);
   });
 
