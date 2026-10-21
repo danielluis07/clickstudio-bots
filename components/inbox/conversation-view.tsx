@@ -3,6 +3,7 @@
 import { ContactPanel } from "@/components/inbox/contact-panel";
 import { InboxNotice } from "@/components/inbox/inbox-notice";
 import { MessageList } from "@/components/inbox/message-list";
+import { ReplyComposer } from "@/components/inbox/reply-composer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { contactDisplayName, formatContactPhone, useConversation } from "@/modules/conversations/hooks";
 
@@ -20,6 +21,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
           <p className="text-sm text-muted-foreground">{formatContactPhone(conversation.contact.phone)}</p>
         </header>
         <MessageList conversationId={conversationId} />
+        <ReplyComposer conversationId={conversationId} serviceWindowClosesAt={conversation.serviceWindowClosesAt} />
       </section>
       <ContactPanel contact={conversation.contact} />
     </div>

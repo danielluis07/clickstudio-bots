@@ -3,16 +3,22 @@ import { TRPCError } from "@trpc/server";
 import type { Database } from "@/db/database";
 import { channel, member, organization, user } from "@/db/schema";
 import { resolveChannelPhoneNumber } from "@/modules/channels";
-import { recordInboundTextMessage } from "@/modules/conversations";
+import { createReplyService, recordInboundTextMessage } from "@/modules/conversations";
 import type { TRPCContext } from "@/trpc/init";
 import { appRouter } from "@/trpc/routers/_app";
+import { createTestClock } from "@/test/support/clock";
 import { createTestDatabase } from "@/test/support/database";
+import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
 
 let db: Database;
 let conversationOfB: string;
 let contactOfB: string;
 
-const callerFor = (session: TRPCContext["session"]) => appRouter.createCaller({ db, session });
+const callerFor = (session: TRPCContext["session"]) => appRouter.createCaller({
+  db,
+  session,
+  replies: createReplyService({ db, clock: createTestClock(), getSender: createTestWhatsAppSender }),
+});
 const ownerA = { userId: "owner-a", activeTenantId: "tenant-a" };
 
 const codeOf = async (call: Promise<unknown>) => {
@@ -79,6 +85,7 @@ describe("tRPC router", () => {
     expect(await codeOf(caller.conversations.get({ conversationId: conversationOfB }))).toBe("NOT_FOUND");
     expect(await codeOf(caller.conversations.messages({ conversationId: conversationOfB }))).toBe("NOT_FOUND");
     expect(await codeOf(caller.contacts.rename({ contactId: contactOfB, name: "Invasor" }))).toBe("NOT_FOUND");
+    expect(await codeOf(caller.replies.send({ conversationId: conversationOfB, text: "Invasão" }))).toBe("NOT_FOUND");
   });
 
   test("a Member reads and renames their own Tenant's Contacts", async () => {

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import type { InboundTextMessage } from "@/modules/conversations";
+import type { InboundTextMessage, MessageStatusUpdate } from "@/modules/conversations";
 
 export type InboxEventInput = {
   dedupeKey: string;
@@ -109,4 +109,22 @@ export const readInboundTextMessage = (payload: unknown): InboundTextMessage | n
     text: inbound.text.body,
     sentAt: new Date(Number(inbound.timestamp) * 1000),
   };
+};
+
+const statusEventSchema = z.object({
+  field: z.literal("messages"),
+  value: z.object({
+    statuses: z.tuple([z.object({
+      id: z.string().min(1),
+      status: z.enum(["sent", "delivered", "read", "failed"]),
+    })]),
+  }),
+});
+
+// The delivery status of a sent message an inbox event carries, if any.
+export const readMessageStatus = (payload: unknown): MessageStatusUpdate | null => {
+  const parsed = statusEventSchema.safeParse(payload);
+  if (!parsed.success) return null;
+  const [{ id, status }] = parsed.data.value.statuses;
+  return { wamid: id, status };
 };

@@ -126,11 +126,12 @@ describe("Conversation view", () => {
       id,
       channelId: "channel-a",
       contact: { id: expect.any(String), phone: "5511900000001", profileName: "Ana", name: null },
+      serviceWindowClosesAt: new Date("2026-10-21T09:05:00Z"),
     });
     expect(await inbox.listMessages(id)).toEqual({
       messages: [
-        { id: expect.any(String), wamid: expect.any(String), direction: "inbound", type: "text", text: "Primeira", sentAt: new Date("2026-10-20T09:00:00Z") },
-        { id: expect.any(String), wamid: expect.any(String), direction: "inbound", type: "text", text: "Segunda", sentAt: new Date("2026-10-20T09:05:00Z") },
+        { id: expect.any(String), wamid: expect.any(String), direction: "inbound", origin: "contact", authorName: null, status: null, type: "text", text: "Primeira", sentAt: new Date("2026-10-20T09:00:00Z") },
+        { id: expect.any(String), wamid: expect.any(String), direction: "inbound", origin: "contact", authorName: null, status: null, type: "text", text: "Segunda", sentAt: new Date("2026-10-20T09:05:00Z") },
       ],
       nextCursor: null,
     });

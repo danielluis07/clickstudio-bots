@@ -113,5 +113,26 @@ export const createWhatsAppAdapter = (options: Options) => {
         return { ok: false as const, error: "subscription_failed" as const };
       }
     },
+
+    async sendText(input: WhatsAppCredentialContext & { credential: EncryptedWhatsAppToken; to: string; text: string }) {
+      try {
+        const token = cipher.decrypt(input.credential, input);
+        const result = await request(`${input.phoneNumberId}/messages`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: input.to,
+            type: "text",
+            text: { body: input.text, preview_url: false },
+          }),
+        });
+        const { messages: [sent] } = z.object({ messages: z.tuple([z.object({ id: z.string().min(1) })]) }).parse(result);
+        return { wamid: sent.id };
+      } catch {
+        throw new Error("WhatsApp send failed");
+      }
+    },
   };
 };

@@ -27,7 +27,7 @@ export const textMessageChange = ({ phoneNumberId, wamid, from = "5511988887777"
 
 export const statusChange = ({ phoneNumberId, wamid, status, timestamp = "1792497700" }: Metadata & {
   wamid: string;
-  status: "sent" | "delivered" | "read";
+  status: "sent" | "delivered" | "read" | "failed";
   timestamp?: string;
 }) => ({
   field: "messages",

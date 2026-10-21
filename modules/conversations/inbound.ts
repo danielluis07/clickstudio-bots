@@ -36,6 +36,7 @@ export const recordInboundTextMessage = (db: Database, route: ChannelRoute, inbo
       conversationId,
       wamid: inbound.wamid,
       direction: "inbound",
+      origin: "contact",
       type: "text",
       text: inbound.text,
       sentAt: inbound.sentAt,

@@ -29,7 +29,7 @@ export const createChannelRepository = (db: Database, scope: TenantScope) => ({
   },
   async getCredential() {
     const [found] = await db.select({
-      tenantId: channel.tenantId, wabaId: channel.wabaId,
+      channelId: channel.id, tenantId: channel.tenantId, wabaId: channel.wabaId,
       phoneNumberId: channel.phoneNumberId, credential: channel.credential,
     }).from(channel).where(eq(channel.tenantId, scope.tenantId)).limit(1);
     return found ?? null;
@@ -42,6 +42,13 @@ export const createChannelRepository = (db: Database, scope: TenantScope) => ({
     await db.update(channel).set(input).where(eq(channel.tenantId, scope.tenantId));
   },
 });
+
+// The Tenant's Channel credential, still encrypted, for the WhatsApp adapter
+// that sends from it. Null unless that Channel is still the Tenant's.
+export const findChannelCredential = async (db: Database, scope: TenantScope, channelId: string) => {
+  const stored = await createChannelRepository(db, scope).getCredential();
+  return stored?.channelId === channelId ? stored : null;
+};
 
 declare const channelRouteBrand: unique symbol;
 

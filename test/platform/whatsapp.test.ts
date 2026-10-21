@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createWhatsAppAdapter, whatsAppWebhookFields } from "@/platform/whatsapp";
+import { createWhatsAppTokenCipher } from "@/platform/whatsapp-credentials";
 
 const accessToken = "secret-business-token";
 const options = {
@@ -116,5 +117,47 @@ describe("WhatsApp adapter", () => {
       const adapter = createWhatsAppAdapter({ ...options, fetch });
       await expect(adapter.exchangeSignup({ tenantId: "tenant-a", code: "code", wabaId: "200" })).rejects.toThrow("WhatsApp signup failed");
     }
+  });
+
+  test("sends a text reply from the Channel's number and returns Meta's wamid", async () => {
+    const context = { tenantId: "tenant-a", wabaId: "200", phoneNumberId: "300" };
+    const credential = createWhatsAppTokenCipher(options.activeKeyVersion, options.encryptionKeys).encrypt(accessToken, context);
+    const requests: { url: string; init?: RequestInit }[] = [];
+    const adapter = createWhatsAppAdapter({ ...options, async fetch(url, init) {
+      requests.push({ url: String(url), init });
+      return Response.json({ messaging_product: "whatsapp", contacts: [{ input: "5511988887777", wa_id: "5511988887777" }], messages: [{ id: "wamid.OUT1" }] });
+    } });
+
+    expect(await adapter.sendText({ ...context, credential, to: "5511988887777", text: "Abrimos às 9h!" })).toEqual({ wamid: "wamid.OUT1" });
+    expect(requests).toHaveLength(1);
+    expect(requests[0].url).toBe("https://graph.facebook.com/v26.0/300/messages");
+    expect(requests[0].init).toMatchObject({
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    });
+    expect(JSON.parse(String(requests[0].init?.body))).toEqual({
+      messaging_product: "whatsapp", recipient_type: "individual", to: "5511988887777",
+      type: "text", text: { body: "Abrimos às 9h!", preview_url: false },
+    });
+  });
+
+  test("a refused or malformed send fails without forwarding sensitive details, and a foreign credential sends nothing", async () => {
+    const context = { tenantId: "tenant-a", wabaId: "200", phoneNumberId: "300" };
+    const credential = createWhatsAppTokenCipher(options.activeKeyVersion, options.encryptionKeys).encrypt(accessToken, context);
+    for (const fetch of [
+      async () => { throw new Error(accessToken); },
+      async () => Response.json({ error: { message: accessToken } }, { status: 400 }),
+      async () => Response.json({ messages: [] }),
+    ]) {
+      const adapter = createWhatsAppAdapter({ ...options, fetch });
+      await expect(adapter.sendText({ ...context, credential, to: "5511988887777", text: "Oi" })).rejects.toThrow(/^WhatsApp send failed$/);
+    }
+    let calls = 0;
+    const adapter = createWhatsAppAdapter({ ...options, async fetch() {
+      calls++;
+      return Response.json({ messages: [{ id: "wamid.OUT1" }] });
+    } });
+    await expect(adapter.sendText({ ...context, tenantId: "tenant-b", credential, to: "5511988887777", text: "Oi" })).rejects.toThrow("WhatsApp send failed");
+    expect(calls).toBe(0);
   });
 });

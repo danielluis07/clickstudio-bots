@@ -1,6 +1,7 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { Database } from "@/db/database";
+import type { ReplyService } from "@/modules/conversations";
 import { resolveTenantScope } from "@/modules/tenancy";
 
 // Built per request by `@/trpc/context`. Tests pass their own database and
@@ -10,6 +11,8 @@ export type TRPCContext = {
   // The signed-in user and the session's active Tenant, read from the cookie
   // on the server. The active Tenant is re-checked against membership.
   session: { userId: string; activeTenantId: string | null } | null;
+  // Sends through WhatsApp; tests pass one built on a fake sender.
+  replies: ReplyService;
 };
 
 const t = initTRPC.context<TRPCContext>().create({
@@ -30,5 +33,5 @@ export const tenantProcedure = t.procedure.use(async ({ ctx, next }) => {
   if (!ctx.session) throw new TRPCError({ code: "UNAUTHORIZED" });
   const scope = await resolveTenantScope(ctx.db, ctx.session);
   if (!scope) throw new TRPCError({ code: "FORBIDDEN" });
-  return next({ ctx: { db: ctx.db, scope } });
+  return next({ ctx: { db: ctx.db, replies: ctx.replies, scope } });
 });
