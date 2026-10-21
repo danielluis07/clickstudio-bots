@@ -1,7 +1,9 @@
 "use client";
 
+import { unstable_rethrow } from "next/navigation";
 import {
   createContext,
+  startTransition,
   useCallback,
   useContext,
   useState,
@@ -59,22 +61,26 @@ export const ConfirmProvider = ({
     setIsPending(false);
   }, []);
 
-  const handleConfirm = useCallback(async () => {
+  const handleConfirm = useCallback(() => {
     if (!options) return;
 
     setIsPending(true);
 
-    try {
-      await options.action();
-    } catch (error) {
-      // Closing on rejection is not a swallowed error: ADR-0013's global tier
-      // toasts every failed mutation. The log is for the actions that are not
-      // tRPC mutations and so have no toast behind them.
-      console.error(error);
-    } finally {
-      setOptions(null);
-      setIsPending(false);
-    }
+    startTransition(async () => {
+      try {
+        await options.action();
+      } catch (error) {
+        // Let Next.js handle Server Action redirects through the transition.
+        unstable_rethrow(error);
+        // Closing on rejection is not a swallowed error: ADR-0013's global tier
+        // toasts every failed mutation. The log is for the actions that are not
+        // tRPC mutations and so have no toast behind them.
+        console.error(error);
+      } finally {
+        setOptions(null);
+        setIsPending(false);
+      }
+    });
   }, [options]);
 
   return (

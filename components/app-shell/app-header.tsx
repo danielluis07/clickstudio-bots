@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { signOutAction } from "@/server/actions/session";
+import { SignOutButton } from "@/components/app-shell/sign-out-button";
 
 export function AppHeader({ homeHref }: { homeHref: string }) {
   return (
@@ -9,9 +8,7 @@ export function AppHeader({ homeHref }: { homeHref: string }) {
         <Link href={homeHref} className="text-lg font-semibold tracking-tight">
           ClickStudio <span className="font-normal">Bots</span>
         </Link>
-        <form action={signOutAction}>
-          <Button type="submit" variant="outline">Sair</Button>
-        </form>
+        <SignOutButton />
       </div>
     </header>
   );

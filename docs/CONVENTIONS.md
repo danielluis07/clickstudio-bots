@@ -10,6 +10,8 @@ Keep files focused on composition and wiring — never leave markup or functions
 
 `components/` contains only `.tsx` UI files. Put domain-specific hooks and their browser helpers in `modules/<area>/hooks/`, never beside components. Import them through the module's separate, browser-safe hooks entry point (`@/modules/<area>/hooks`).
 
+See [UI component guidelines](UI-COMPONENTS.md) for UI behavior, including confirmation requirements and examples.
+
 ## Layout
 
 | Folder | Holds | May import |
