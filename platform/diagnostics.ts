@@ -15,11 +15,6 @@ export type Diagnostic = {
   jobId?: string;
 };
 
-export interface Diagnostics {
-  log(entry: Diagnostic): void;
-  alert(entry: Diagnostic): Promise<void>;
-}
-
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Rebuild from an allowlist rather than attempting to find every PII field.

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { answerSubscriptionChallenge, type WebhookInbox } from "@/modules/webhook-inbox";
-import { classifyError, type Diagnostics } from "@/platform/diagnostics";
+import { answerSubscriptionChallenge, type InboxDiagnostics, type WebhookInbox } from "@/modules/webhook-inbox";
+import { classifyError } from "@/platform/diagnostics";
 
 type JobVerifier = {
   verify(request: { signature: string | null; body: string; url: string }): Promise<boolean>;
@@ -52,7 +52,7 @@ const parseJson = (body: string): unknown => {
 
 export const createInboxJobRoute = (
   config: { inbox: WebhookInbox; verifier: JobVerifier; url: string } | null,
-  diagnostics?: Diagnostics,
+  diagnostics?: Pick<InboxDiagnostics, "log">,
 ) => ({
   async POST(request: Request) {
     if (!config) return empty(503);

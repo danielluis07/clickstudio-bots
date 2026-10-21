@@ -4,9 +4,9 @@ import { formText, type FormState } from "@/server/actions/form-state";
 
 type AdminGuard = () => Promise<{ user: { id: string } }>;
 
-export const inboxFailureOffset = (page: unknown) => {
+export const inboxFailurePage = (page: unknown) => {
   const parsed = z.coerce.number().int().min(1).max(20_000).safeParse(page);
-  return parsed.success ? (parsed.data - 1) * 50 : 0;
+  return parsed.success ? parsed.data : 1;
 };
 
 export const createReplayInboxAction = ({ inbox, requireAdmin }: {

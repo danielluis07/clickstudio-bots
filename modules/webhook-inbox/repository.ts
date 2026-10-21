@@ -26,14 +26,15 @@ export const createInboxRepository = (db: Database) => ({
     return found ?? null;
   },
 
-  async listFailures(offset: number) {
+  async listFailures(page: number) {
+    const pageSize = 50;
     const events = await db.select({
       id: inboxEvent.id, status: inboxEvent.status, errorClass: inboxEvent.errorClass,
       receivedAt: inboxEvent.receivedAt, failedAt: inboxEvent.failedAt,
     }).from(inboxEvent)
       .where(and(inArray(inboxEvent.status, ["pending", "failed"]), isNotNull(inboxEvent.errorClass)))
-      .orderBy(asc(inboxEvent.receivedAt), asc(inboxEvent.id)).limit(51).offset(offset);
-    return { events: events.slice(0, 50), hasMore: events.length > 50 };
+      .orderBy(asc(inboxEvent.receivedAt), asc(inboxEvent.id)).limit(pageSize + 1).offset((page - 1) * pageSize);
+    return { events: events.slice(0, pageSize), hasMore: events.length > pageSize };
   },
 
   async recordFailure(ids: string[], errorClass: ErrorClass, failedAt: Date) {

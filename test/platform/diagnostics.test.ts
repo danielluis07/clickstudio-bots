@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createTransport } from "@sentry/node";
 import { classifyError, scrubDiagnostic } from "@/platform/diagnostics";
 import { createDiagnostics, scrubSentryEvent } from "@/platform/sentry";
 
@@ -61,4 +62,22 @@ test("Sentry refuses a non-EU DSN and diagnostics still log when Sentry is uncon
   const logs: unknown[] = [];
   await createDiagnostics({ writeLog: (entry) => logs.push(entry) }).alert({ kind: "inbox_dead_letter", inboxEventId });
   expect(logs).toEqual([{ kind: "inbox_dead_letter", inboxEventId }]);
+});
+
+test("a rejected Sentry delivery is retryable instead of being acknowledged when the buffer drains", async () => {
+  for (const rejectedStatus of [429, 503]) {
+    let statusCode = rejectedStatus;
+    let requests = 0;
+    const diagnostics = createDiagnostics({
+      dsn: "https://publickey@o123.ingest.de.sentry.io/456", writeLog() {},
+      transport: (options) => createTransport(options, async () => {
+        requests += 1;
+        return { statusCode, headers: { "retry-after": "0", "x-sentry-rate-limits": null } };
+      }),
+    });
+    await expect(diagnostics.alert({ kind: "inbox_dead_letter", inboxEventId })).rejects.toThrow("Diagnostic delivery failed");
+    statusCode = 200;
+    await diagnostics.alert({ kind: "inbox_dead_letter", inboxEventId });
+    expect(requests).toBe(2);
+  }
 });

@@ -6,7 +6,8 @@ import type { JobQueue } from "@/modules/webhook-inbox/job-queue";
 import { createInboxRepository } from "@/modules/webhook-inbox/repository";
 import { isValidDeliverySignature } from "@/modules/webhook-inbox/signature";
 import { isPlatformAdmin } from "@/modules/identity";
-import { classifyError, type Diagnostics } from "@/platform/diagnostics";
+import { classifyError } from "@/platform/diagnostics";
+import type { InboxDiagnostics } from "@/modules/webhook-inbox/diagnostics";
 import type { Clock } from "@/platform/clock";
 import type { Notifier } from "@/platform/notifier";
 
@@ -18,7 +19,7 @@ export const createWebhookInbox = ({ db, clock, queue, notifier, appSecret, diag
   queue: JobQueue;
   notifier: Notifier;
   appSecret: string;
-  diagnostics?: Diagnostics;
+  diagnostics?: InboxDiagnostics;
 }) => {
   const repository = createInboxRepository(db);
 
@@ -107,10 +108,10 @@ export const createWebhookInbox = ({ db, clock, queue, notifier, appSecret, diag
       await repository.markAlerted(inboxEventId, clock.now());
     },
 
-    async listFailures(actorId: string, offset = 0) {
+    async listFailures(actorId: string, page = 1) {
       if (!await isPlatformAdmin(db, actorId)) return { ok: false as const, error: "forbidden" as const };
-      const page = await repository.listFailures(Number.isSafeInteger(offset) && offset >= 0 ? offset : 0);
-      return { ok: true as const, ...page };
+      const failures = await repository.listFailures(Number.isSafeInteger(page) && page >= 1 ? page : 1);
+      return { ok: true as const, ...failures };
     },
 
     async replay(actorId: string, inboxEventId: string) {

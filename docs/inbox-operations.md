@@ -58,7 +58,8 @@ An event whose endpoint was unreachable has class `JobDeliveryError`.
 
 The callback marks an unsettled event failed and sends a scrubbed Sentry error.
 Successful alert delivery is recorded separately so a failed/interrupted alert
-can be retried by QStash. Duplicate callbacks after acknowledgment do nothing;
+can be retried by QStash. Buffer draining is not treated as delivery: only a
+successful HTTP ingestion response acknowledges the alert. Duplicate callbacks after acknowledgment do nothing;
 concurrent callbacks use a stable Sentry event ID. A callback arriving after
 successful processing cannot reopen the event. Automatic jobs do not process
 dead-lettered events; an administrator can replay them.
@@ -67,6 +68,10 @@ Jobs already published before this deployment do not acquire a callback
 retroactively. Previously recorded processing errors are not backfilled.
 Inspect QStash's existing dead-letter queue during rollout; an administrator can
 recover a known retained pending event through the same replay action.
+
+The later Contact-deletion feature must invalidate outstanding failed/pending
+events for that Contact, including failures after committed writes, and test
+replay after deletion. Terminal processed/ignored events already remain no-ops.
 
 ## Daily tasks
 

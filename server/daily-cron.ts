@@ -1,12 +1,13 @@
 import { timingSafeEqual } from "node:crypto";
-import { classifyError, type Diagnostics } from "@/platform/diagnostics";
+import type { InboxDiagnostics } from "@/modules/webhook-inbox";
+import { classifyError } from "@/platform/diagnostics";
 
 type DailyTask = { name: string; run(): Promise<unknown> };
 
 export const createDailyCronRoute = ({ secret, tasks, diagnostics }: {
   secret: string | null;
   tasks: readonly DailyTask[];
-  diagnostics?: Diagnostics;
+  diagnostics?: Pick<InboxDiagnostics, "log">;
 }) => ({
   async GET(request: Request) {
     const headers = { "cache-control": "no-store" };

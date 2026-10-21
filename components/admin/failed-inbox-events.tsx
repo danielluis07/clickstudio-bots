@@ -3,12 +3,12 @@ import { FailedInboxEventRow } from "@/components/admin/failed-inbox-event-row";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Table, TableBody, TableCaption, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { inboxFailureOffset } from "@/server/inbox-administration";
+import { inboxFailurePage } from "@/server/inbox-administration";
 import { webhookInbox } from "@/server/services";
 
 export async function FailedInboxEvents({ actorId, page }: { actorId: string; page: unknown }) {
-  const offset = inboxFailureOffset(page);
-  const failures = webhookInbox && await webhookInbox.listFailures(actorId, offset);
+  const pageNumber = inboxFailurePage(page);
+  const failures = webhookInbox && await webhookInbox.listFailures(actorId, pageNumber);
 
   return (
     <div className="flex flex-col gap-6">
@@ -22,7 +22,7 @@ export async function FailedInboxEvents({ actorId, page }: { actorId: string; pa
       {failures?.ok ? (
         failures.events.length > 0 ? (
           <Table>
-            <TableCaption>Eventos com erro de processamento ou envio para a fila, até 50 por página.</TableCaption>
+            <TableCaption>Eventos com erro de processamento ou envio para a fila.</TableCaption>
             <TableHeader>
               <TableRow>
                 <TableHead>ID do evento</TableHead>
@@ -52,9 +52,9 @@ export async function FailedInboxEvents({ actorId, page }: { actorId: string; pa
         </Empty>
       )}
       <nav aria-label="Páginas de eventos com falha" className="flex flex-wrap gap-2">
-        {offset > 0 && <Button variant="outline" render={<Link href={`/admin/eventos?pagina=${offset / 50}`} />}>Anterior</Button>}
-        <Button variant="outline" render={<a href={`/admin/eventos?pagina=${offset / 50 + 1}`} />}>Atualizar</Button>
-        {failures?.ok && failures.hasMore && <Button variant="outline" render={<Link href={`/admin/eventos?pagina=${offset / 50 + 2}`} />}>Próxima</Button>}
+        {pageNumber > 1 && <Button variant="outline" render={<Link href={`/admin/eventos?pagina=${pageNumber - 1}`} />}>Anterior</Button>}
+        <Button variant="outline" render={<a href={`/admin/eventos?pagina=${pageNumber}`} />}>Atualizar</Button>
+        {failures?.ok && failures.hasMore && <Button variant="outline" render={<Link href={`/admin/eventos?pagina=${pageNumber + 1}`} />}>Próxima</Button>}
       </nav>
     </div>
   );

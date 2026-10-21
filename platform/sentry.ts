@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { NodeClient, defaultStackParser, makeNodeTransport, type ErrorEvent, type NodeOptions } from "@sentry/node";
-import { isEuSentryDsn, scrubDiagnostic, type Diagnostic, type Diagnostics } from "@/platform/diagnostics";
+import { isEuSentryDsn, scrubDiagnostic, type Diagnostic } from "@/platform/diagnostics";
 
 export const scrubSentryEvent = (event: ErrorEvent): ErrorEvent => {
   const clean = scrubDiagnostic(event.tags);
@@ -17,8 +18,9 @@ export const createDiagnostics = ({ dsn, writeLog = (entry) => console.error(JSO
   dsn?: string;
   writeLog?: (entry: Diagnostic) => void;
   transport?: NodeOptions["transport"];
-} = {}): Diagnostics => {
+} = {}) => {
   if (dsn && !isEuSentryDsn(dsn)) throw new Error("Sentry requires an EU project DSN");
+  const deliveries = new Map<string, Set<() => void>>();
   // An isolated client with no integrations: no automatic request, console,
   // database, session, tracing or unhandled-error capture can ship content.
   const client = dsn ? new NodeClient({
@@ -30,7 +32,21 @@ export const createDiagnostics = ({ dsn, writeLog = (entry) => console.error(JSO
       databaseQueryData: false, queues: false, stackFrameVariables: false, frameContextLines: 0,
     },
     tracesSampleRate: 0, sendClientReports: false,
-    transport: transport ?? makeNodeTransport, stackParser: defaultStackParser,
+    transport(options) {
+      const delegate = (transport ?? makeNodeTransport)(options);
+      return {
+        async send(envelope) {
+          const response = await delegate.send(envelope);
+          const eventId = envelope[0].event_id;
+          if (typeof eventId === "string" && response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
+            for (const confirm of deliveries.get(eventId) ?? []) confirm();
+          }
+          return response;
+        },
+        flush: (timeout) => delegate.flush(timeout),
+      };
+    },
+    stackParser: defaultStackParser,
     beforeSend(event, hint) {
       hint.attachments = [];
       return scrubSentryEvent(event);
@@ -39,18 +55,27 @@ export const createDiagnostics = ({ dsn, writeLog = (entry) => console.error(JSO
   client?.init();
 
   return {
-    log: (entry) => writeLog(scrubDiagnostic(entry)),
-    async alert(entry) {
+    log: (entry: Diagnostic) => writeLog(scrubDiagnostic(entry)),
+    async alert(entry: Diagnostic) {
       const clean = scrubDiagnostic(entry);
       writeLog(clean);
       if (!client) return;
-      client.captureEvent({
-        level: "error", tags: { ...clean },
-        // Concurrent/retried callbacks use one Sentry event identity.
-        ...(clean.kind === "inbox_dead_letter" && clean.inboxEventId ? { event_id: clean.inboxEventId.replaceAll("-", "") } : {}),
-      });
-      // Flush inside the invocation so a serverless freeze cannot lose it.
-      if (!await client.flush(2000)) throw new Error("Diagnostic delivery timed out");
+      // Concurrent/retried callbacks use one Sentry event identity.
+      const eventId = (clean.kind === "inbox_dead_letter" && clean.inboxEventId ? clean.inboxEventId : randomUUID()).replaceAll("-", "");
+      let delivered = false;
+      const confirm = () => { delivered = true; };
+      const listeners = deliveries.get(eventId) ?? new Set<() => void>();
+      listeners.add(confirm);
+      deliveries.set(eventId, listeners);
+      try {
+        client.captureEvent({ event_id: eventId, level: "error", tags: { ...clean } });
+        // Draining the buffer alone does not prove Sentry accepted the event.
+        if (!await client.flush(2000)) throw new Error("Diagnostic delivery timed out");
+        if (!delivered) throw new Error("Diagnostic delivery failed");
+      } finally {
+        listeners.delete(confirm);
+        if (listeners.size === 0) deliveries.delete(eventId);
+      }
     },
   };
 };
