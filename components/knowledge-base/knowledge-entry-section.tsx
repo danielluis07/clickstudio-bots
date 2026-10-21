@@ -1,11 +1,12 @@
 import { EditableKnowledgeEntry } from "@/components/knowledge-base/editable-knowledge-entry";
 import { KnowledgeEntryForm } from "@/components/knowledge-base/knowledge-entry-form";
 import { KnowledgeEntryView } from "@/components/knowledge-base/knowledge-entry-view";
-import { knowledgeEntryLabels, type KnowledgeEntryKind } from "@/modules/knowledge-base/hooks";
+import type { KnowledgeEntryKind, KnowledgeEntrySummary } from "@/modules/knowledge-base";
+import { knowledgeEntryLabels } from "@/modules/knowledge-base/hooks";
 
 type KnowledgeEntrySectionProps = {
   kind: KnowledgeEntryKind;
-  entries: { id: string; title: string; body: string; updatedAt: Date; updatedBy: string | null; size: number }[];
+  entries: KnowledgeEntrySummary[];
   used: number;
   cap: number;
   titleMaxLength: number;

@@ -1,4 +1,4 @@
-export type KnowledgeEntryKind = "faq" | "section";
+import type { KnowledgeEntryKind } from "@/modules/knowledge-base/kinds";
 
 // What the editor calls each kind of entry and its two fields.
 export const knowledgeEntryLabels: Record<KnowledgeEntryKind, {

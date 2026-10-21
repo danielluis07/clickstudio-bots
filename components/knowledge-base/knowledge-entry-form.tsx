@@ -8,7 +8,8 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCount } from "@/lib/format";
-import { knowledgeEntryLabels, useKnowledgeEntryForm, type KnowledgeEntryKind } from "@/modules/knowledge-base/hooks";
+import type { KnowledgeEntryKind } from "@/modules/knowledge-base";
+import { knowledgeEntryLabels, useKnowledgeEntryForm } from "@/modules/knowledge-base/hooks";
 import { saveKnowledgeEntryAction } from "@/server/actions/knowledge-base";
 
 type KnowledgeEntryFormProps = {

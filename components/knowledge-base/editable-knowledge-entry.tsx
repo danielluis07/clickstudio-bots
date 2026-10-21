@@ -5,11 +5,11 @@ import { DeleteKnowledgeEntryButton } from "@/components/knowledge-base/delete-k
 import { KnowledgeEntryForm } from "@/components/knowledge-base/knowledge-entry-form";
 import { KnowledgeEntryView } from "@/components/knowledge-base/knowledge-entry-view";
 import { Button } from "@/components/ui/button";
-import type { KnowledgeEntryKind } from "@/modules/knowledge-base/hooks";
+import type { KnowledgeEntryKind, KnowledgeEntrySummary } from "@/modules/knowledge-base";
 
 type EditableKnowledgeEntryProps = {
   kind: KnowledgeEntryKind;
-  entry: { id: string; title: string; body: string; updatedAt: Date; updatedBy: string | null; size: number };
+  entry: KnowledgeEntrySummary;
   used: number;
   cap: number;
   titleMaxLength: number;

@@ -3,6 +3,7 @@ import type { Database } from "@/db/database";
 import { knowledgeBaseEntry, member, organization, user } from "@/db/schema";
 import { z } from "zod";
 import { characterCount, entrySize, knowledgeBaseCharacterCap, knowledgeBaseSize } from "@/modules/knowledge-base/allowance";
+import { knowledgeEntryKinds } from "@/modules/knowledge-base/kinds";
 import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 
@@ -21,9 +22,13 @@ const entryTextFields = z.object({
   body: entryTextSchema(knowledgeBaseCharacterCap),
 });
 
-const newEntrySchema = entryTextFields.extend({ kind: z.enum(["faq", "section"]) });
+const newEntrySchema = entryTextFields.extend({ kind: z.enum(knowledgeEntryKinds) });
 
 export type NewKnowledgeBaseEntry = z.input<typeof newEntrySchema>;
+
+// One entry as the editor lists it. `updatedBy` is null once that Member was
+// removed.
+export type KnowledgeEntrySummary = Awaited<ReturnType<ReturnType<typeof createKnowledgeBaseEditor>["getKnowledgeBase"]>>["entries"][number];
 
 type EntryText = z.input<typeof entryTextFields>;
 
@@ -35,10 +40,11 @@ const notFound = { ok: false as const, error: "not_found" as const };
 const isOwner = (scope: TenantScope) => scope.role === "owner";
 
 export const createKnowledgeBaseEditor = ({ db, clock }: { db: Database; clock: Clock }) => {
-  // Runs `save` only when the Knowledge base stays within the cap with `text`
-  // in place of the entry `replacing`. Locking the Tenant row serialises
-  // saves, so two at once cannot both fit under the cap.
-  const withinCap = <T>(scope: TenantScope, text: EntryText, replacing: string | null, save: (tx: Database) => Promise<T>) =>
+  // Runs `save` only when the entry `replacing` is the Tenant's (otherwise
+  // not_found) and the Knowledge base stays within the cap with `text` in its
+  // place. Locking the Tenant row serialises saves, so two at once cannot
+  // both fit under the cap.
+  const saveWithinCap =<T>(scope: TenantScope, text: EntryText, replacing: string | null, save: (tx: Database) => Promise<T>) =>
     db.transaction(async (tx) => {
       await tx.select({ id: organization.id }).from(organization)
         .where(eq(organization.id, scope.tenantId)).for("update");
@@ -68,8 +74,7 @@ export const createKnowledgeBaseEditor = ({ db, clock }: { db: Database; clock: 
         .where(eq(knowledgeBaseEntry.tenantId, scope.tenantId))
         .orderBy(asc(knowledgeBaseEntry.createdAt), asc(knowledgeBaseEntry.id));
       return {
-        // `updatedBy` is null once that Member was removed.
-        entries: entries.map((entry) => ({ ...entry, size: entrySize(entry) })),
+        entries:entries.map((entry) => ({ ...entry, size: entrySize(entry) })),
         used: knowledgeBaseSize(entries),
         cap: knowledgeBaseCharacterCap,
       };
@@ -80,7 +85,7 @@ export const createKnowledgeBaseEditor = ({ db, clock }: { db: Database; clock: 
       const parsed = newEntrySchema.safeParse(input);
       if (!parsed.success) return invalid;
       const now = clock.now();
-      const result = await withinCap(scope, parsed.data, null, async (tx) => {
+      const result = await saveWithinCap(scope, parsed.data, null, async (tx) => {
         const [created] = await tx.insert(knowledgeBaseEntry).values({
           ...parsed.data,
           tenantId: scope.tenantId,
@@ -97,7 +102,7 @@ export const createKnowledgeBaseEditor = ({ db, clock }: { db: Database; clock: 
       if (!isOwner(scope)) return forbidden;
       const parsed = entryTextFields.safeParse(input);
       if (!parsed.success) return invalid;
-      const result = await withinCap(scope, parsed.data, entryId, (tx) => tx.update(knowledgeBaseEntry)
+      const result = await saveWithinCap(scope, parsed.data, entryId, (tx) => tx.update(knowledgeBaseEntry)
         .set({ ...parsed.data, updatedByMemberId: scope.memberId, updatedAt: clock.now() })
         .where(and(eq(knowledgeBaseEntry.id, entryId), eq(knowledgeBaseEntry.tenantId, scope.tenantId))));
       return result.ok ? { ok: true as const } : result;

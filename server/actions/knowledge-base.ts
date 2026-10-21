@@ -1,7 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { entryTitleMaxLength, knowledgeBaseCharacterCap } from "@/modules/knowledge-base";
+import { entryTitleMaxLength, knowledgeBaseCharacterCap, type KnowledgeEntryKind } from "@/modules/knowledge-base";
 import { formatCount } from "@/lib/format";
 import { formText, type FormState } from "@/server/actions/form-state";
 import { requireTenantScope } from "@/server/auth/guards";
@@ -42,7 +42,8 @@ export async function saveKnowledgeEntryAction(
     ? await knowledgeBaseEditor.editEntry(scope, entryId, text)
     : await knowledgeBaseEditor.addEntry(scope, {
       ...text,
-      kind: formText(formData, "kind") as "faq" | "section",
+      // The module refuses any other kind.
+      kind: formText(formData, "kind") as KnowledgeEntryKind,
     });
   if (result.ok) refresh();
   return saveMessage(result);
