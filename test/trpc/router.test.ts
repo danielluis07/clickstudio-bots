@@ -67,6 +67,16 @@ beforeAll(async () => {
 });
 
 describe("tRPC router", () => {
+  test("the sidebar reads only the authorized Tenant, including the first-membership fallback", async () => {
+    expect(await callerFor(ownerA).tenancy.current()).toEqual({ id: "tenant-a", name: "Tenant A" });
+    expect(await callerFor({ ...ownerA, activeTenantId: null }).tenancy.current())
+      .toEqual({ id: "tenant-a", name: "Tenant A" });
+    expect(await codeOf(callerFor({ ...ownerA, activeTenantId: "tenant-b" }).tenancy.current()))
+      .toBe("FORBIDDEN");
+    expect(await codeOf(callByPath(callerFor(ownerA), "tenancy.current", { tenantId: "tenant-b" })))
+      .toBe("BAD_REQUEST");
+  });
+
   test("realtime tokens grant only subscribe access to the Member's Tenant channel", async () => {
     const { channel, tokenRequest } = await callerFor(ownerA).realtime.token();
 
