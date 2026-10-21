@@ -8,12 +8,14 @@ import { createTestClock } from "@/test/support/clock";
 import { createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue, type TestJobQueue } from "@/test/support/job-queue";
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
+import { createTestNotifier, type TestNotifier } from "@/test/support/notifier";
 import { messageEchoChange, metaAppSecret, metaDelivery, referencingChange, signMetaDelivery, statusChange, textMessageChange } from "@/test/support/meta-webhook";
 
 let db: Database;
 let tenantA: TenantScope;
 let tenantB: TenantScope;
 let queue: TestJobQueue;
+let notifier: TestNotifier;
 let inbox: ReturnType<typeof createWebhookInbox>;
 const clock = createTestClock(new Date("2026-10-20T12:00:00Z"));
 
@@ -65,10 +67,50 @@ beforeEach(async () => {
   await db.delete(contact);
   await db.delete(inboxEvent);
   queue = createTestJobQueue();
-  inbox = createWebhookInbox({ db, clock, queue, appSecret: metaAppSecret });
+  notifier = createTestNotifier();
+  inbox = createWebhookInbox({ db, clock, queue, notifier, appSecret: metaAppSecret });
 });
 
 describe("Webhook inbox", () => {
+  test("a committed inbound message publishes only its Conversation id to its Tenant", async () => {
+    await receive(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.PING", body: "Conteúdo privado" })));
+    expect(notifier.pings).toEqual([]);
+    await runJobs();
+
+    const [found] = await conversationsOf(tenantA);
+    expect(notifier.pings).toEqual([{ tenantId: "tenant-a", ping: { conversationId: found.id } }]);
+    expect(found.messages[0].text).toBe("Conteúdo privado");
+  });
+
+  test("a failed ping is retried without duplicating the committed message", async () => {
+    await receive(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.RETRY" })));
+    const [job] = queue.take();
+    notifier.failNext();
+    await expect(inbox.process(job.inboxEventId)).rejects.toThrow("Notifier unavailable");
+    expect((await conversationsOf(tenantA))[0].messages).toHaveLength(1);
+
+    expect(await inbox.process(job.inboxEventId)).toEqual({ ok: true, status: "processed" });
+    const [found] = await conversationsOf(tenantA);
+    expect(found.messages).toHaveLength(1);
+    expect(notifier.pings).toEqual([{ tenantId: "tenant-a", ping: { conversationId: found.id } }]);
+  });
+
+  test("app replies and their delivery statuses notify only their Conversation's Tenant", async () => {
+    await receive(metaDelivery(messageEchoChange({ phoneNumberId: "301", wamid: "wamid.APP-PING" })));
+    await runJobs();
+    const [found] = await conversationsOf(tenantB);
+    expect(notifier.pings).toEqual([{ tenantId: "tenant-b", ping: { conversationId: found.id } }]);
+
+    notifier.pings.length = 0;
+    await receive(metaDelivery(statusChange({ phoneNumberId: "301", wamid: "wamid.APP-PING", status: "read" })));
+    const [job] = queue.take();
+    notifier.failNext();
+    await expect(inbox.process(job.inboxEventId)).rejects.toThrow("Notifier unavailable");
+    await inbox.process(job.inboxEventId);
+    expect(notifier.pings).toEqual([{ tenantId: "tenant-b", ping: { conversationId: found.id } }]);
+    expect((await conversationsOf(tenantB))[0].messages[0].status).toBe("read");
+  });
+
   test("a signed text message becomes one Contact, one Conversation and one message", async () => {
     const delivery = metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1", body: "Olá!" }));
 
@@ -208,6 +250,23 @@ describe("Coexistence echoes", () => {
 });
 
 describe("Edits and revokes", () => {
+  test("edits and revokes invalidate the existing Conversation without carrying their text", async () => {
+    await receive(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.ORIGINAL" })));
+    await runJobs();
+    const [found] = await conversationsOf(tenantA);
+    notifier.pings.length = 0;
+
+    await receive(metaDelivery(
+      referencingChange({ phoneNumberId: "300", wamid: "wamid.EDIT", originalWamid: "wamid.ORIGINAL", type: "edit", body: "Texto editado privado" }),
+      referencingChange({ phoneNumberId: "300", wamid: "wamid.REVOKE", originalWamid: "wamid.ORIGINAL", type: "revoke" }),
+    ));
+    await runJobs();
+    expect(notifier.pings).toEqual([
+      { tenantId: "tenant-a", ping: { conversationId: found.id } },
+      { tenantId: "tenant-a", ping: { conversationId: found.id } },
+    ]);
+  });
+
   // A Contact message and a team reply from the app, both edited later.
   const exchange = async () => {
     await receive(metaDelivery(
@@ -301,7 +360,7 @@ describe("Edits and revokes", () => {
     await receive(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1", timestamp: "1792497600" })));
     await runJobs();
     const [{ id: conversationId }] = await conversationsOf(tenantA);
-    const replies = createReplyService({ db, clock, getSender: createTestWhatsAppSender });
+    const replies = createReplyService({ db, clock, notifier, getSender: createTestWhatsAppSender });
     await replies.sendReply(tenantA, { conversationId, text: "Abrimos sim!" });
     const lastMessageAt = async () => (await createConversationRepository(db, tenantA).listConversations()).conversations[0].lastMessageAt;
     const before = await lastMessageAt();
@@ -328,7 +387,7 @@ describe("Delivery statuses", () => {
     await receive(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1" })));
     await runJobs();
     const [{ id: conversationId }] = await conversationsOf(tenantA);
-    const replies = createReplyService({ db, clock, getSender: createTestWhatsAppSender });
+    const replies = createReplyService({ db, clock, notifier, getSender: createTestWhatsAppSender });
     expect(await replies.sendReply(tenantA, { conversationId, text: "Abrimos sim!" })).toEqual({ ok: true });
   };
 

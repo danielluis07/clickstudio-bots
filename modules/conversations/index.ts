@@ -1,5 +1,6 @@
 // Contacts, their Conversations with a Tenant on one Channel, and the
 // messages in them.
+export { renameContact } from "@/modules/conversations/contacts";
 export { recordMessageChange, type MessageChange } from "@/modules/conversations/changes";
 export { recordMessageEcho, type EchoClassification, type MessageEcho } from "@/modules/conversations/echoes";
 export { recordInboundTextMessage, type InboundTextMessage } from "@/modules/conversations/inbound";

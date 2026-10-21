@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { createConversationRepository } from "@/modules/conversations";
+import { createConversationRepository, renameContact } from "@/modules/conversations";
 import { createTRPCRouter, tenantProcedure } from "@/trpc/init";
 
 const orNotFound = <T>(value: T | null): T => {
@@ -52,5 +52,5 @@ export const contactsRouter = createTRPCRouter({
   rename: tenantProcedure
     .input(z.object({ contactId: z.string(), name: z.string().max(100) }))
     .mutation(async ({ ctx, input }) =>
-      orNotFound(await createConversationRepository(ctx.db, ctx.scope).renameContact(input.contactId, input.name))),
+      orNotFound(await renameContact({ db: ctx.db, scope: ctx.scope, notifier: ctx.notifier, ...input }))),
 });

@@ -1,6 +1,7 @@
 import type { Database } from "@/db/database";
 import { messageChange } from "@/db/schema";
 import type { ChannelRoute } from "@/modules/channels";
+import { findMessageConversation } from "@/modules/conversations/message-conversation";
 
 // An edit or revoke of an earlier message. A Contact changes their inbound
 // messages; a Member in the WhatsApp Business app changes outbound ones.
@@ -14,8 +15,8 @@ export type MessageChange = {
 // Keeps the change under the Channel's Tenant. It only alters how the original
 // is displayed, even before the original arrives, and is never activity in the
 // Conversation. Safe to repeat.
-export const recordMessageChange = (db: Database, route: ChannelRoute, change: MessageChange) =>
-  db.insert(messageChange).values({
+export const recordMessageChange = async (db: Database, route: ChannelRoute, change: MessageChange) => {
+  await db.insert(messageChange).values({
     tenantId: route.tenantId,
     wamid: change.wamid,
     originalWamid: change.originalWamid,
@@ -24,3 +25,5 @@ export const recordMessageChange = (db: Database, route: ChannelRoute, change: M
     text: change.kind === "edit" ? change.text : null,
     changedAt: change.changedAt,
   }).onConflictDoNothing({ target: [messageChange.tenantId, messageChange.kind, messageChange.wamid] });
+  return findMessageConversation(db, route, change.originalWamid, change.direction);
+};

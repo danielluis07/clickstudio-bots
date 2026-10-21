@@ -6,29 +6,31 @@ import type { JobQueue } from "@/modules/webhook-inbox/job-queue";
 import { createInboxRepository } from "@/modules/webhook-inbox/repository";
 import { isValidDeliverySignature } from "@/modules/webhook-inbox/signature";
 import type { Clock } from "@/platform/clock";
+import type { Notifier } from "@/platform/notifier";
 
 // The inbox-first delivery contract of ADR 0002: store each signed event once,
 // enqueue it, and only then acknowledge the delivery.
-export const createWebhookInbox = ({ db, clock, queue, appSecret }: {
+export const createWebhookInbox = ({ db, clock, queue, notifier, appSecret }: {
   db: Database;
   clock: Clock;
   queue: JobQueue;
+  notifier: Notifier;
   appSecret: string;
 }) => {
   const repository = createInboxRepository(db);
 
-  // Records what the event carries under the route's Tenant; false when it
+  // Records what the event carries under the route's Tenant; null when it
   // carries nothing the platform handles yet.
   const recordEvent = async (route: ChannelRoute, payload: unknown) => {
     const inbound = readInboundTextMessage(payload);
-    if (inbound) return recordInboundTextMessage(db, route, inbound).then(() => true);
+    if (inbound) return { conversationId: await recordInboundTextMessage(db, route, inbound) };
     const statusUpdate = readMessageStatus(payload);
-    if (statusUpdate) return recordMessageStatus(db, route, statusUpdate).then(() => true);
+    if (statusUpdate) return { conversationId: await recordMessageStatus(db, route, statusUpdate) };
     const echo = readMessageEcho(payload);
-    if (echo) return recordMessageEcho(db, route, echo).then(() => true);
+    if (echo) return recordMessageEcho(db, route, echo);
     const change = readMessageChange(payload);
-    if (change) return recordMessageChange(db, route, change).then(() => true);
-    return false;
+    if (change) return { conversationId: await recordMessageChange(db, route, change) };
+    return null;
   };
 
   return {
@@ -71,6 +73,9 @@ export const createWebhookInbox = ({ db, clock, queue, appSecret }: {
         });
         return { ok: true as const, status: "ignored" as const };
       }
+      // Writes have committed. A publish failure leaves the job pending so
+      // QStash can retry the idempotent write and the ping together.
+      if (recorded.conversationId) await notifier.publish(route!.tenantId, { conversationId: recorded.conversationId });
       await repository.settle(inboxEventId, clock.now(), { status: "processed" });
       return { ok: true as const, status: "processed" as const };
     },
