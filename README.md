@@ -10,18 +10,25 @@ bun install
 
 Create `.env` with:
 
-- `DATABASE_URL`: Neon **pooled** connection string. The app keeps one global `pg` pool and registers it with `attachDatabasePool`.
+- `DATABASE_URL`: Neon **pooled** connection string of the **dev branch**. Production's URL lives only in Vercel's environment variables, never in `.env`. The app keeps one global `pg` pool and registers it with `attachDatabasePool`.
   Use `sslmode=verify-full` in both pooled and direct connection strings to preserve certificate and hostname verification and avoid the `pg` warning about changing SSL mode semantics.
 - `BETTER_AUTH_SECRET`
 - `APP_URL`: e.g. `http://localhost:3000`
 - `RESEND_API_KEY`: Resend API key used for invitation emails.
 - `EMAIL_FROM`: verified Resend sender, e.g. `ClickStudio Bots <convites@example.com>`.
 
-Apply migrations, then start the dev server. Neon recommends the **direct** (unpooled) connection string for migrations, so override `DATABASE_URL` for that command:
+Apply migrations, optionally seed the demo Tenant, then start the dev server:
 
 ```bash
-DATABASE_URL="<direct connection string>" bun run db:migrate
+bun run db:migrate
+bun run db:seed
 bun run dev
+```
+
+Neon recommends the **direct** (unpooled) connection string for migrations. To migrate production, pass its direct string for that one command rather than storing it:
+
+```bash
+DATABASE_URL="<production direct connection string>" bun run db:migrate
 ```
 
 See [ADR 0003](docs/adr/0003-node-postgres-global-pool-on-neon.md) for why the app connects this way.
@@ -39,6 +46,7 @@ To enable owner-managed WhatsApp Channels, follow [WhatsApp Channel setup](docs/
 | `bun run db:generate` | Generate a migration in `drizzle/` from `db/schema`             |
 | `bun run db:migrate`  | Apply pending migrations to `DATABASE_URL`                      |
 | `bun run admin:create` | Create a platform administrator (see below)                    |
+| `bun run db:seed`     | Recreate the demo Tenant on the dev database (see below)        |
 
 ## Platform administrators and Tenants
 
@@ -58,9 +66,13 @@ Member-facing code reaches Tenant-owned data only through `createTenantRepositor
 
 Schema lives in `db/schema`. After changing it, run `bun run db:generate` and commit the new folder under `drizzle/`. Never edit an applied migration; generate a new one.
 
-CI fails if `db/schema` and `drizzle/` disagree. The PGlite test harness (`test/support/database.ts`) applies the same `drizzle/` migrations, so tests run against the schema that production gets.
+CI fails if `db/schema` and `drizzle/` disagree. It also fails when a migration makes a column on an existing table `NOT NULL` without first giving existing rows a value (`test/db/migrations.test.ts`). drizzle-kit generates exactly that for a new required column, so edit the generated SQL to add the column as nullable, `UPDATE` it, then `SET NOT NULL`. The PGlite test harness (`test/support/database.ts`) applies the same `drizzle/` migrations, so tests run against the schema that production gets.
 
 A database created earlier with `drizzle-kit push` already has the auth tables, so the initial migration fails on it. Use a fresh database (e.g. a new Neon branch) and run `bun run db:migrate`.
+
+## Demo Tenant
+
+`bun run db:seed` resets a demo Tenant on the dev database, for trying a change in the running app; re-run it to reopen its service window. It refuses to run unless `APP_URL` is local. It recreates the Tenant "Clínica Teste" with an owner, `dono.teste@example.com`, whose password is `SEED_PASSWORD` or `senha-teste-123`. Its Conversations cover an open and a closed service window, dashboard replies in each delivery status, and a reply by a removed Member. Its Channel has a placeholder credential, so dashboard sends from it are refused: nothing reaches Meta.
 
 ## Code layout
 
