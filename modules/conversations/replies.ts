@@ -5,6 +5,7 @@ import { createConversationRepository } from "@/modules/conversations/repository
 import type { WhatsAppSender } from "@/modules/conversations/whatsapp-sender";
 import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
+import { notifyInbox, type Notifier } from "@/platform/notifier";
 
 // WhatsApp's limit for a text message body.
 const replySchema = z.object({
@@ -16,9 +17,10 @@ export type DashboardReply = z.input<typeof replySchema>;
 
 // Members reply to Contacts from the dashboard, only while WhatsApp's service
 // window is open. Outside it they continue in the WhatsApp Business app.
-export const createReplyService = ({ db, clock, getSender }: {
+export const createReplyService = ({ db, clock, notifier, getSender }: {
   db: Database;
   clock: Clock;
+  notifier: Notifier;
   getSender: () => WhatsAppSender;
 }) => ({
   async sendReply(scope: TenantScope, input: DashboardReply) {
@@ -38,6 +40,7 @@ export const createReplyService = ({ db, clock, getSender }: {
     if (!channel || !sender) return { ok: false as const, error: "channel_unavailable" as const };
 
     const { id } = await repository.insertPendingReply(conversationId, { text, sentAt: now });
+    await notifyInbox(notifier, scope.tenantId, { conversationId });
     const sent = await Promise.resolve()
       .then(() => sender.sendText({
         tenantId: channel.tenantId,
@@ -49,6 +52,7 @@ export const createReplyService = ({ db, clock, getSender }: {
       }))
       .catch(() => null);
     await repository.recordReplySent(id, sent);
+    await notifyInbox(notifier, scope.tenantId, { conversationId });
     return sent ? { ok: true as const } : { ok: false as const, error: "send_failed" as const };
   },
 });

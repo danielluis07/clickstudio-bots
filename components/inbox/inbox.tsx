@@ -5,8 +5,10 @@ import { ConversationSearch } from "@/components/inbox/conversation-search";
 import { ConversationView } from "@/components/inbox/conversation-view";
 import { InboxNotice } from "@/components/inbox/inbox-notice";
 import { useSearchParam } from "@/hooks/use-search-param";
+import { useInboxRealtime } from "@/modules/conversations/hooks";
 
 export function Inbox() {
+  useInboxRealtime();
   const [conversationId, openConversation] = useSearchParam("conversa");
   const [search, setSearch] = useSearchParam("busca", { history: "replace" });
 

@@ -13,6 +13,7 @@ export const env = createEnv({
     RESEND_API_KEY: z.string().min(1),
     // Verified Resend sender, e.g. "ClickStudio Bots <convites@example.com>".
     EMAIL_FROM: z.string().min(1),
+    ABLY_API_KEY: z.string().min(1).optional(),
     META_APP_ID: z.string().regex(/^\d+$/).optional(),
     META_APP_SECRET: z.string().min(1).optional(),
     META_WHATSAPP_SIGNUP_CONFIG_ID: z.string().regex(/^\d+$/).optional(),
@@ -34,6 +35,7 @@ export const env = createEnv({
     APP_URL: process.env.APP_URL,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     EMAIL_FROM: process.env.EMAIL_FROM,
+    ABLY_API_KEY: process.env.ABLY_API_KEY,
     META_APP_ID: process.env.META_APP_ID,
     META_APP_SECRET: process.env.META_APP_SECRET,
     META_WHATSAPP_SIGNUP_CONFIG_ID: process.env.META_WHATSAPP_SIGNUP_CONFIG_ID,

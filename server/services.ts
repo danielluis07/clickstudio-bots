@@ -9,6 +9,12 @@ import { createWhatsAppGateway } from "@/server/whatsapp";
 import { createWebhookInbox } from "@/modules/webhook-inbox";
 import { createQStashJobQueue, createQStashJobVerifier, qstashJobUrl } from "@/platform/qstash";
 import { createInboxJobRoute, createWhatsAppWebhookRoute } from "@/server/webhook-routes";
+import { createAblyRealtime } from "@/platform/ably";
+import type { Notifier } from "@/platform/notifier";
+
+export const realtime = env.ABLY_API_KEY ? createAblyRealtime({ apiKey: env.ABLY_API_KEY }) : null;
+// Messaging continues when realtime has not been configured locally.
+export const notifier: Notifier = realtime ?? { publish: async () => {} };
 
 export const mailer = createResendMailer({
   apiKey: env.RESEND_API_KEY,
@@ -35,6 +41,7 @@ export const channelService = createChannelService({
 export const replyService = createReplyService({
   db,
   clock: systemClock,
+  notifier,
   getSender: createWhatsAppGateway,
 });
 
@@ -42,6 +49,7 @@ const webhookInbox = env.META_APP_SECRET && env.QSTASH_TOKEN
   ? createWebhookInbox({
     db,
     clock: systemClock,
+    notifier,
     appSecret: env.META_APP_SECRET,
     queue: createQStashJobQueue({ token: env.QSTASH_TOKEN, baseUrl: env.QSTASH_URL, appUrl: env.APP_URL }),
   })

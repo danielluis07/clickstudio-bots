@@ -8,6 +8,7 @@ import { createTestClock } from "@/test/support/clock";
 import { createTestDatabase } from "@/test/support/database";
 import { createTestMailer } from "@/test/support/mailer";
 import { createTestWhatsAppSender, type TestWhatsAppSender } from "@/test/support/whatsapp-sender";
+import { createTestNotifier, type TestNotifier } from "@/test/support/notifier";
 
 let db: Database;
 let owner: TenantScope;
@@ -16,6 +17,7 @@ let otherOwner: TenantScope;
 let channelA: ChannelRoute;
 let channelB: ChannelRoute;
 let sender: TestWhatsAppSender;
+let notifier: TestNotifier;
 let replies: ReturnType<typeof createReplyService>;
 let sequence = 0;
 const clock = createTestClock();
@@ -63,10 +65,34 @@ beforeEach(async () => {
   await db.delete(conversation);
   await db.delete(contact);
   sender = createTestWhatsAppSender();
-  replies = createReplyService({ db, clock, getSender: () => sender });
+  notifier = createTestNotifier();
+  replies = createReplyService({ db, clock, notifier, getSender: () => sender });
 });
 
 describe("Dashboard replies", () => {
+  test("other Members are notified of a committed reply and its failed send outcome", async () => {
+    const conversationId = await receive(channelA, "2026-10-21T09:00:00Z");
+    clock.set(new Date("2026-10-21T10:00:00Z"));
+    sender.failNext();
+
+    expect(await replies.sendReply(owner, { conversationId, text: "Resposta privada" })).toEqual({ ok: false, error: "send_failed" });
+    expect(notifier.pings).toEqual([
+      { tenantId: "tenant-a", ping: { conversationId } },
+      { tenantId: "tenant-a", ping: { conversationId } },
+    ]);
+    expect((await messagesOf(owner, conversationId)).at(-1)?.status).toBe("failed");
+  });
+
+  test("a notification failure does not turn a successful WhatsApp send into a failed reply", async () => {
+    const conversationId = await receive(channelA, "2026-10-21T09:00:00Z");
+    clock.set(new Date("2026-10-21T10:00:00Z"));
+    notifier.failNext();
+
+    expect(await replies.sendReply(owner, { conversationId, text: "Resposta enviada" })).toEqual({ ok: true });
+    expect(sender.sent).toHaveLength(1);
+    expect((await messagesOf(owner, conversationId)).at(-1)?.wamid).toBe("wamid.OUT1");
+  });
+
   test("a reply inside the service window is sent to the Contact and stored with its wamid and author", async () => {
     const conversationId = await receive(channelA, "2026-10-21T09:00:00Z");
     clock.set(new Date("2026-10-21T10:00:00Z"));

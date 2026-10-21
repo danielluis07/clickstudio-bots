@@ -57,4 +57,5 @@ export const recordInboundTextMessage = (db: Database, route: ChannelRoute, inbo
       text: inbound.text,
       sentAt: inbound.sentAt,
     }).onConflictDoNothing({ target: [message.tenantId, message.wamid] });
+    return conversationId;
   });

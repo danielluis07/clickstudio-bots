@@ -7,6 +7,7 @@ import { createWebhookInbox } from "@/modules/webhook-inbox";
 import { createQStashJobVerifier } from "@/platform/qstash";
 import { createInboxJobRoute, createWhatsAppWebhookRoute } from "@/server/webhook-routes";
 import { createTestClock } from "@/test/support/clock";
+import { createTestNotifier } from "@/test/support/notifier";
 import { createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue, type TestJobQueue } from "@/test/support/job-queue";
 import { metaAppSecret, metaDelivery, signMetaDelivery, textMessageChange } from "@/test/support/meta-webhook";
@@ -53,7 +54,7 @@ beforeAll(async () => {
     credential: { keyVersion: "v1", iv: "", ciphertext: "", tag: "" }, subscriptionFields: [],
   });
   queue = createTestJobQueue();
-  const inbox = createWebhookInbox({ db, clock: createTestClock(), queue, appSecret: metaAppSecret });
+  const inbox = createWebhookInbox({ db, clock: createTestClock(), queue, notifier: createTestNotifier(), appSecret: metaAppSecret });
   webhook = createWhatsAppWebhookRoute({ inbox, verifyToken: "verify-me" });
   jobs = createInboxJobRoute({ inbox, verifier: createQStashJobVerifier(qstashSigningKeys), url: jobUrl });
 });

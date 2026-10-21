@@ -3,6 +3,8 @@ import superjson from "superjson";
 import type { Database } from "@/db/database";
 import type { ReplyService } from "@/modules/conversations";
 import { resolveTenantScope } from "@/modules/tenancy";
+import type { AblyRealtime } from "@/platform/ably";
+import type { Notifier } from "@/platform/notifier";
 
 // Built per request by `@/trpc/context`. Tests pass their own database and
 // session, so this file must not import the live pool or Better Auth.
@@ -13,6 +15,8 @@ export type TRPCContext = {
   session: { userId: string; activeTenantId: string | null } | null;
   // Sends through WhatsApp; tests pass one built on a fake sender.
   replies: ReplyService;
+  realtime: AblyRealtime | null;
+  notifier: Notifier;
 };
 
 const t = initTRPC.context<TRPCContext>().create({
@@ -33,5 +37,5 @@ export const tenantProcedure = t.procedure.use(async ({ ctx, next }) => {
   if (!ctx.session) throw new TRPCError({ code: "UNAUTHORIZED" });
   const scope = await resolveTenantScope(ctx.db, ctx.session);
   if (!scope) throw new TRPCError({ code: "FORBIDDEN" });
-  return next({ ctx: { db: ctx.db, replies: ctx.replies, scope } });
+  return next({ ctx: { ...ctx, scope } });
 });

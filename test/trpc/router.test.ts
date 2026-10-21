@@ -9,15 +9,20 @@ import { appRouter } from "@/trpc/routers/_app";
 import { createTestClock } from "@/test/support/clock";
 import { createTestDatabase } from "@/test/support/database";
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
+import { createAblyRealtime } from "@/platform/ably";
+import { createTestNotifier } from "@/test/support/notifier";
 
 let db: Database;
 let conversationOfB: string;
 let contactOfB: string;
+const notifier = createTestNotifier();
 
 const callerFor = (session: TRPCContext["session"]) => appRouter.createCaller({
   db,
   session,
-  replies: createReplyService({ db, clock: createTestClock(), getSender: createTestWhatsAppSender }),
+  realtime: createAblyRealtime({ apiKey: "test.key:private-test-secret" }),
+  notifier,
+  replies: createReplyService({ db, clock: createTestClock(), notifier: createTestNotifier(), getSender: createTestWhatsAppSender }),
 });
 const ownerA = { userId: "owner-a", activeTenantId: "tenant-a" };
 
@@ -62,6 +67,25 @@ beforeAll(async () => {
 });
 
 describe("tRPC router", () => {
+  test("realtime tokens grant only subscribe access to the Member's Tenant channel", async () => {
+    const { channel, tokenRequest } = await callerFor(ownerA).realtime.token();
+
+    expect(channel).toBe("tenant:tenant-a:inbox");
+    expect(JSON.parse(tokenRequest.capability!)).toEqual({ "tenant:tenant-a:inbox": ["subscribe"] });
+    expect(tokenRequest.clientId).toBeString();
+    expect(tokenRequest.ttl).toBe(5 * 60 * 1000);
+    expect(tokenRequest.mac).toBeString();
+    expect(JSON.stringify(tokenRequest)).not.toContain("private-test-secret");
+  });
+
+  test("realtime refuses another Tenant and caller-supplied capabilities", async () => {
+    const claimingB = callerFor({ userId: "owner-a", activeTenantId: "tenant-b" });
+    expect(await codeOf(claimingB.realtime.token())).toBe("FORBIDDEN");
+    for (const input of [{ tenantId: "tenant-b" }, { channel: "tenant:tenant-b:inbox" }, { capability: { "*": ["publish"] } }]) {
+      expect(await codeOf(callByPath(callerFor(ownerA), "realtime.token", input))).toBe("BAD_REQUEST");
+    }
+  });
+
   test("every procedure refuses signed-out callers and users without a Tenant", async () => {
     const paths = Object.keys(appRouter._def.procedures);
     expect(paths.length).toBeGreaterThan(0);
@@ -90,9 +114,11 @@ describe("tRPC router", () => {
 
   test("a Member reads and renames their own Tenant's Contacts", async () => {
     const caller = callerFor({ userId: "owner-b", activeTenantId: "tenant-b" });
+    notifier.pings.length = 0;
 
     expect((await caller.conversations.messages({ conversationId: conversationOfB })).messages.map(({ text }) => text)).toEqual(["Oi"]);
     expect((await caller.contacts.rename({ contactId: contactOfB, name: "Ana Souza" })).name).toBe("Ana Souza");
     expect((await caller.conversations.get({ conversationId: conversationOfB })).contact.name).toBe("Ana Souza");
+    expect(notifier.pings).toEqual([{ tenantId: "tenant-b", ping: { contactId: contactOfB } }]);
   });
 });

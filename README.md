@@ -35,6 +35,8 @@ See [ADR 0003](docs/adr/0003-node-postgres-global-pool-on-neon.md) for why the a
 
 To enable owner-managed WhatsApp Channels, follow [WhatsApp Channel setup](docs/whatsapp-setup.md) for the Meta v4 configuration, encrypted-token keys and live validation steps.
 
+To enable live inbox updates, set the server-only `ABLY_API_KEY` as described in [Realtime inbox setup](docs/realtime-inbox.md).
+
 ## Scripts
 
 | Script                | What it does                                                    |
