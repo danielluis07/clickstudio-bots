@@ -123,22 +123,27 @@ test("published gate boundaries are inclusive, and p95 uses nearest rank instead
 test("all 81 synthetic cases run with isolated Tenant facts, cold/warm prefixes and maximum-size Knowledge bases", async () => {
   const corpus = createEvaluationCorpus("test-run");
   const model = createTestModel();
-  corpus.cases.forEach(() => model.script({ text: "Resposta sintética para testar o relatório." }));
+  for (const item of corpus.cases) {
+    model.script({ text: "Resposta sintética para testar o relatório." });
+    if (item.toolRefusalProbe) model.script({ text: "Resposta sintética após recusa de ferramenta." });
+  }
   const run = await runEvaluation({ ...corpus, model, pricing });
   expect(run.cases).toHaveLength(81);
   expect(scoreEvaluation(run).tenants.map(({ cases }) => cases)).toEqual([27, 27, 27]);
+  expect(scoreEvaluation(run).recoveryCoverage).toEqual({ scheduled: 3, completed: 3 });
+  const firstRequests = model.requests.filter((request) => request.messages.at(-1)?.role !== "tool");
   for (const tenant of corpus.tenants) {
     const cases = corpus.cases.filter(({ tenantId }) => tenantId === tenant.id);
     const indices = cases.map((item) => corpus.cases.indexOf(item));
     for (const index of indices) {
-      expect(model.requests[index].instructions).toContain(tenant.behaviour.businessName);
+      expect(firstRequests[index].instructions).toContain(tenant.behaviour.businessName);
       for (const other of corpus.tenants.filter(({ id }) => id !== tenant.id)) {
-        expect(model.requests[index].knowledgeBase).not.toContain(other.knowledgeBase.faqs[0].answer);
+        expect(firstRequests[index].knowledgeBase).not.toContain(other.knowledgeBase.faqs[0].answer);
       }
     }
     const coldIndex = corpus.cases.findIndex(({ id }) => id === `${tenant.id}-cold-prefix`);
-    expect(model.requests[coldIndex].knowledgeBase).toBe(model.requests[coldIndex + 1].knowledgeBase);
-    expect(model.requests[coldIndex].knowledgeBase).toContain(`test-run-${tenant.id}`);
+    expect(firstRequests[coldIndex].knowledgeBase).toBe(firstRequests[coldIndex + 1].knowledgeBase);
+    expect(firstRequests[coldIndex].knowledgeBase).toContain(`test-run-${tenant.id}`);
     const maximum = corpus.cases.find(({ id }) => id === `${tenant.id}-maximum-kb`)!.knowledgeBase!;
     const characters = [...maximum.faqs.flatMap(({ question, answer }) => [question, answer]), ...maximum.sections.flatMap(({ title, body }) => [title, body])].join("").length;
     expect(characters).toBe(30_000);
@@ -173,4 +178,24 @@ test("partial human review stays pending, a known invented commitment fails, and
   expect(() => scoreEvaluation(run, [review, review])).toThrow("duplicate review");
   expect(() => scoreEvaluation(run, [{ ...review, caseId: "different-run-case" }])).toThrow("Unknown");
   expect(() => scoreEvaluation(run, [{ ...review, tone: 6 }])).toThrow("Tone");
+});
+
+test("a marked refusal probe measures two real candidate calls without attributing the injected call to the provider", async () => {
+  const model = createTestModel();
+  model.script(
+    { text: "O corte custa R$ 80.", usage: { inputTokens: 100 } },
+    { text: "O corte custa R$ 80.", usage: { inputTokens: 200 } },
+  );
+  const times = [0, 5_000];
+  const run = await runEvaluation({ tenants: [tenant], cases: [{ ...answer, toolRefusalProbe: true }], model, pricing, nowMs: () => times.shift()! });
+  const result = run.cases[0];
+  expect(result.attempts).toHaveLength(2);
+  expect(result.attempts.map(({ response }) => response?.toolCalls)).toEqual([[], []]);
+  expect(result.injectedRefusal).toMatchObject({ name: "handoff", input: { reason: "synthetic_invalid_reason" } });
+  expect(result.usage).toMatchObject({ inputTokens: 300, toolRoundTrips: 1 });
+  expect(result.cost).toBeCloseTo(0.0003);
+  expect(result.latencyMs).toBe(5_000);
+  expect(model.requests[1].messages.at(-1)?.role).toBe("tool");
+  expect(scoreEvaluation(run).recoveryCoverage).toEqual({ scheduled: 1, completed: 1 });
+  expect(scoreEvaluation(run).gates.outOfCatalogCalls.value).toBe(0);
 });

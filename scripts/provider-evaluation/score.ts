@@ -20,6 +20,11 @@ export const scoreEvaluation = (run: EvaluationRun, reviews: HumanReview[] = [])
   const invented = reviews.filter(({ inventedCommitment }) => inventedCommitment).length;
   const latencies = run.cases.map(({ latencyMs }) => latencyMs).toSorted((a, b) => a - b);
   const usageComplete = run.cases.length > 0 && run.cases.every(({ attempts }) => attempts.length > 0 && attempts.every(({ failed }) => !failed));
+  const probes = run.cases.filter(({ toolRefusalProbe }) => toolRefusalProbe);
+  const recoveryCoverage = {
+    scheduled: probes.length,
+    completed: probes.filter(({ injectedRefusal, attempts }) => injectedRefusal && attempts.length === 2 && attempts.every(({ failed }) => !failed)).length,
+  };
   const tenants = [...new Set(run.cases.map(({ tenantId }) => tenantId))].map((tenantId) => {
     const cases = run.cases.filter((item) => item.tenantId === tenantId);
     const measuredCost = cases.reduce((total, item) => total + item.cost, 0);
@@ -48,5 +53,5 @@ export const scoreEvaluation = (run: EvaluationRun, reviews: HumanReview[] = [])
     latency: gate(latencies[Math.ceil(latencies.length * 0.95) - 1] ?? null, latencies.length, "p95 <= 8000 ms (nearest rank)", (v) => v <= 8_000),
     modelCost: gate(usageComplete ? Math.max(...tenants.map(({ costAt5000Replies }) => costAt5000Replies)) : null, run.cases.length, "<= BRL 20 per Tenant / 5000 replies; transcription excluded", (v) => v <= 20),
   };
-  return { gates, tenants, usageComplete, passed: Object.values(gates).every(({ pass }) => pass === true) };
+  return { gates, tenants, usageComplete, recoveryCoverage, passed: Object.values(gates).every(({ pass }) => pass === true) && recoveryCoverage.completed === recoveryCoverage.scheduled };
 };

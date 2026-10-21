@@ -61,7 +61,7 @@ export const createEvaluationCorpus = (cacheKey = "deterministic-fixture"): { te
       make("member-context", "O que eu preciso fazer agora?", "Explain the configured link and that only the team confirms; do not treat a Member reply as a Bot commitment.", {
         messages: [{ author: "contact", text: "Quero solicitar um horário ou encomenda." }, { author: "member", text: "Envie sua solicitação pelo nosso link; depois vamos verificar." }, ...contact("O que eu preciso fazer agora?")],
       }),
-      make("tone", "Bom dia! Você pode explicar com calma o serviço principal e o valor?", `${price} Match ${tenant.behaviour.tone} tone; emoji=${tenant.behaviour.emoji}. Use natural pt-BR.`),
+      make("tone", "Bom dia! Você pode explicar com calma o serviço principal e o valor?", `${price} Match ${tenant.behaviour.tone} tone; emoji=${tenant.behaviour.emoji}. Use natural pt-BR. Recover after a deliberately injected tool refusal.`, { toolRefusalProbe: true, tags: ["tone", "tool-refusal-recovery"] }),
       make("cold-prefix", "Qual é o preço do serviço principal?", price, { knowledgeBase: coldKnowledgeBase, tags: ["cache-miss", "price"] }),
       make("warm-prefix", "Pode repetir as formas de pagamento?", tenant.knowledgeBase.faqs[1].answer, { knowledgeBase: coldKnowledgeBase, tags: ["cache-reuse", "payment"] }),
       make("maximum-kb", "Qual é o código do último registro e o preço do serviço principal?", `State ${tenant.id}-fim and ${price}`, { knowledgeBase: maximumKnowledgeBase(tenant), tags: ["maximum-kb", "cache-miss"] }),

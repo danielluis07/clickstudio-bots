@@ -17,6 +17,19 @@ and a cold/warm pair with the same prefix. Every live run gives the cold pair a
 new synthetic revision id so its first prefix is new. Cache use still depends on
 provider eligibility and must be checked in the measured cache-token buckets.
 
+The tone case for each Tenant is also a **controlled tool-refusal recovery
+probe**. It calls the real candidate once and retains its response unchanged for
+raw-call scoring. Only the response delivered to the core is replaced with a
+clearly recorded synthetic invalid `handoff` reason. The unchanged production
+core refuses that call and requests its normal retry from the real candidate.
+Both actual requests count toward latency, tokens and cost. The synthetic call
+is stored as `injectedRefusal` and never attributed to the provider's schema or
+scope score. This deliberate fault injection establishes recovery coverage even
+when the candidate never emits an invalid call naturally. The first response's
+text is not delivered; human review scores the final reply. Report probe results
+separately from naturally occurring tool refusals; the 3 probe cases intentionally
+stress the measured cost mix. An incomplete probe prevents a passing text result.
+
 The harness calls `createBotCore` and the production `Model` contract. Its
 repository is in-memory and contains only the synthetic Tenant for that case.
 The isolated synthetic Channel proof never reaches a live repository. No

@@ -1,4 +1,4 @@
-import type { BehaviourSettings, ContextMessage, HandoffReason, KnowledgeBase, ModelResponse, TurnOutcome, TurnUsage } from "@/modules/bot";
+import type { BehaviourSettings, ContextMessage, HandoffReason, KnowledgeBase, ModelResponse, ModelToolCall, TurnOutcome, TurnUsage } from "@/modules/bot";
 
 export type EvaluationTenant = { id: string; behaviour: BehaviourSettings; knowledgeBase: KnowledgeBase };
 export type EvaluationCase = {
@@ -7,6 +7,7 @@ export type EvaluationCase = {
   tags: string[];
   messages: Pick<ContextMessage, "author" | "text">[];
   knowledgeBase?: KnowledgeBase;
+  toolRefusalProbe?: boolean;
   expected: { handoff: HandoffReason | null; answerable: boolean; rubric: string };
 };
 
@@ -33,6 +34,8 @@ export type EvaluationResult = {
   expected: EvaluationCase["expected"];
   outcome: TurnOutcome;
   attempts: EvaluationAttempt[];
+  toolRefusalProbe: boolean;
+  injectedRefusal: ModelToolCall | null;
   latencyMs: number;
   usage: TurnUsage;
   cost: number;

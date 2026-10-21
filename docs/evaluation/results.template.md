@@ -36,6 +36,7 @@ Copy this template into the ignored run directory. Blank means pending, never pa
 | Intended cold cases / observed zero cache-read cases | | | |
 | Warm-prefix cases / observed cache reads | | | |
 | Tool calls / schema-valid calls / tool round trips | | | |
+| Controlled refusal probes completed / scheduled; natural refusals | | | |
 | Complete-reply p50 / p95 / max ms | | | |
 | Measured model cost BRL | | | |
 | Model cost projected to 5,000 replies BRL | | | |
