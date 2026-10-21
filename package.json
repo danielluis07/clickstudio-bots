@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "bun --bun next typegen && tsc --noEmit",
     "test": "bun test --timeout 20000",
+    "evaluate:provider": "bun scripts/evaluate-provider.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",

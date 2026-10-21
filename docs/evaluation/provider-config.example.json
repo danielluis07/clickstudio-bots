@@ -1,0 +1,14 @@
+{
+  "provider": "anthropic",
+  "modelId": "REPLACE_WITH_CANDIDATE_MODEL_ID",
+  "hostingRegion": "REPLACE_WITH_ACTUAL_RUN_REGION",
+  "pricing": {
+    "currency": "BRL",
+    "inputPerMillion": null,
+    "outputPerMillion": null,
+    "cacheReadPerMillion": null,
+    "cacheWritePerMillion": null,
+    "source": "REPLACE_WITH_OFFICIAL_PRICE_URL_AND_USD_BRL_RATE_IF_CONVERTED",
+    "checkedAt": "2026-10-21"
+  }
+}

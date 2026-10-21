@@ -45,6 +45,7 @@ To enable live inbox updates, set the server-only `ABLY_API_KEY` as described in
 | `bun run lint`        | ESLint                                                          |
 | `bun run typecheck`   | Generate Next.js route types, then `tsc --noEmit`               |
 | `bun run test`        | Bun test runner (PGlite suites included)                        |
+| `bun run evaluate:provider --help` | Manual provider evaluation and offline human scoring ([guide](docs/evaluation/README.md)) |
 | `bun run db:generate` | Generate a migration in `drizzle/` from `db/schema`             |
 | `bun run db:migrate`  | Apply pending migrations to `DATABASE_URL`                      |
 | `bun run admin:create` | Create a platform administrator (see below)                    |
@@ -85,3 +86,5 @@ Layout and import rules are in [docs/CONVENTIONS.md](docs/CONVENTIONS.md#layout)
 Tests are `*.test.ts` files under `test/`, organised like the code they exercise (`test/modules/tenancy/…`, `test/server/…`), and run by `bun test`. `test/architecture.test.ts` enforces the import rules. Repository tests build their database with `createTestDatabase()` from `@/test/support/database`: an in-memory PGlite with all migrations applied. Code that depends on time takes a `Clock` (`@/platform/clock`); tests pass `createTestClock()` from `@/test/support/clock` and move it with `set` or `advance`.
 
 CI (`.github/workflows/ci.yml`) runs lint, typecheck, the migration drift check and the tests on every push and pull request.
+
+Paid provider evaluation runs separately with the [81-case synthetic pt-BR corpus](docs/evaluation/README.md). Routine tests use a fake Model; the manual runner refuses CI.
