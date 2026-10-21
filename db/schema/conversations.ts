@@ -42,8 +42,9 @@ export const message = pgTable("message", {
   // refused it.
   wamid: text("wamid"),
   direction: text("direction", { enum: ["inbound", "outbound"] }).notNull(),
-  // Who wrote it: the Contact, or a Member replying from the dashboard.
-  origin: text("origin", { enum: ["contact", "dashboard"] }).notNull(),
+  // Who wrote it: the Contact, a Member replying from the dashboard, or a
+  // Member replying from the WhatsApp Business app, seen through its echo.
+  origin: text("origin", { enum: ["contact", "dashboard", "app"] }).notNull(),
   // The Member who wrote a dashboard reply. Null for other origins, and once
   // that Member is removed.
   authorMemberId: text("author_member_id").references(() => member.id, { onDelete: "set null" }),
@@ -56,4 +57,27 @@ export const message = pgTable("message", {
 }, (t) => [
   uniqueIndex("message_tenant_id_wamid_unique").on(t.tenantId, t.wamid),
   index("message_conversation_id_sent_at_idx").on(t.conversationId, t.sentAt),
+]);
+
+// An edit or revoke of a message, by the Contact or by a Member in the
+// WhatsApp Business app. Kept apart from the message and matched to it by the
+// original's wamid when read, so it applies whichever of the two arrives first.
+export const messageChange = pgTable("message_change", {
+  id: id(),
+  tenantId: text("tenant_id").notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  // The change event's own wamid.
+  wamid: text("wamid").notNull(),
+  originalWamid: text("original_wamid").notNull(),
+  // The direction of the changed message: the Contact changes only their own
+  // messages, and the Tenant only its own.
+  direction: text("direction", { enum: ["inbound", "outbound"] }).notNull(),
+  kind: text("kind", { enum: ["edit", "revoke"] }).notNull(),
+  // An edit's new text; null for a revoke.
+  text: text("text"),
+  changedAt: timestamp("changed_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("message_change_tenant_id_kind_wamid_unique").on(t.tenantId, t.kind, t.wamid),
+  index("message_change_tenant_id_original_wamid_idx").on(t.tenantId, t.originalWamid),
 ]);

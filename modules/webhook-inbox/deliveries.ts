@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import type { InboundTextMessage, MessageStatusUpdate } from "@/modules/conversations";
+import type { InboundTextMessage, MessageChange, MessageEcho, MessageStatusUpdate } from "@/modules/conversations";
 
 export type InboxEventInput = {
   dedupeKey: string;
@@ -82,6 +82,11 @@ export const splitDelivery = (delivery: unknown): InboxEventInput[] => {
   return [...new Map(events.map((event) => [event.dedupeKey, event])).values()];
 };
 
+// Meta's Unix timestamp in seconds.
+const timestampSchema = z.string().regex(/^\d{1,12}$/).transform((seconds) => new Date(Number(seconds) * 1000));
+
+const textSchema = z.object({ body: z.string() });
+
 const textMessageEventSchema = z.object({
   field: z.literal("messages"),
   value: z.object({
@@ -89,9 +94,9 @@ const textMessageEventSchema = z.object({
     messages: z.tuple([z.object({
       from: z.string().regex(/^\d{1,20}$/),
       id: z.string().min(1),
-      timestamp: z.string().regex(/^\d{1,12}$/),
+      timestamp: timestampSchema,
       type: z.literal("text"),
-      text: z.object({ body: z.string() }),
+      text: textSchema,
     })]),
   }),
 });
@@ -107,7 +112,7 @@ export const readInboundTextMessage = (payload: unknown): InboundTextMessage | n
     from: inbound.from,
     profileName: sender?.profile?.name ?? null,
     text: inbound.text.body,
-    sentAt: new Date(Number(inbound.timestamp) * 1000),
+    sentAt: inbound.timestamp,
   };
 };
 
@@ -127,4 +132,66 @@ export const readMessageStatus = (payload: unknown): MessageStatusUpdate | null 
   if (!parsed.success) return null;
   const [{ id, status }] = parsed.data.value.statuses;
   return { wamid: id, status };
+};
+
+const messageEchoEventSchema = z.object({
+  field: z.literal("smb_message_echoes"),
+  value: z.object({
+    message_echoes: z.tuple([z.object({
+      // Meta's reference shows the recipient both with and without "+".
+      to: z.string().regex(/^\+?\d{1,20}$/).transform((phone) => phone.replace("+", "")),
+      id: z.string().min(1),
+      timestamp: timestampSchema,
+      type: z.literal("text"),
+      text: textSchema,
+    })]),
+  }),
+});
+
+// The text a Member sent from the WhatsApp Business app that an inbox event
+// echoes, if any.
+export const readMessageEcho = (payload: unknown): MessageEcho | null => {
+  const parsed = messageEchoEventSchema.safeParse(payload);
+  if (!parsed.success) return null;
+  const [echo] = parsed.data.value.message_echoes;
+  return { wamid: echo.id, to: echo.to, text: echo.text.body, sentAt: echo.timestamp };
+};
+
+const changeEnvelope = { id: z.string().min(1), timestamp: timestampSchema };
+
+const changeSchema = z.discriminatedUnion("type", [
+  z.object({
+    ...changeEnvelope,
+    type: z.literal("edit"),
+    // Edits to media captions are not shown yet.
+    edit: z.object({
+      original_message_id: z.string().min(1),
+      message: z.object({ type: z.literal("text"), text: textSchema }),
+    }),
+  }),
+  z.object({
+    ...changeEnvelope,
+    type: z.literal("revoke"),
+    revoke: z.object({ original_message_id: z.string().min(1) }),
+  }),
+]);
+
+// The Contact changes their inbound messages; the app, the Tenant's outbound ones.
+const messageChangeEventSchema = z.union([
+  z.object({ field: z.literal("messages"), value: z.object({ messages: z.tuple([changeSchema]) }) })
+    .transform(({ value }) => ({ direction: "inbound" as const, change: value.messages[0] })),
+  z.object({ field: z.literal("smb_message_echoes"), value: z.object({ message_echoes: z.tuple([changeSchema]) }) })
+    .transform(({ value }) => ({ direction: "outbound" as const, change: value.message_echoes[0] })),
+]);
+
+// The Contact's edit or revoke of their message, or an app edit or revoke of
+// the Tenant's, that an inbox event carries, if any.
+export const readMessageChange = (payload: unknown): MessageChange | null => {
+  const parsed = messageChangeEventSchema.safeParse(payload);
+  if (!parsed.success) return null;
+  const { direction, change } = parsed.data;
+  const event = { wamid: change.id, direction, changedAt: change.timestamp };
+  return change.type === "edit"
+    ? { ...event, originalWamid: change.edit.original_message_id, kind: "edit", text: change.edit.message.text.body }
+    : { ...event, originalWamid: change.revoke.original_message_id, kind: "revoke" };
 };

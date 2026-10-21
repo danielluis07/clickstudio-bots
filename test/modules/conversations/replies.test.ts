@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { channel, contact, conversation, member, message, organization, user } from "@/db/schema";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
-import { createConversationRepository, createReplyService, recordInboundTextMessage } from "@/modules/conversations";
+import { createConversationRepository, createReplyService, recordInboundTextMessage, recordMessageEcho } from "@/modules/conversations";
 import { createMemberManagement, resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { createTestClock } from "@/test/support/clock";
 import { createTestDatabase } from "@/test/support/database";
@@ -87,6 +87,8 @@ describe("Dashboard replies", () => {
       type: "text",
       text: "Abrimos às 9h!",
       sentAt: new Date("2026-10-21T10:00:00Z"),
+      editedAt: null,
+      revokedAt: null,
     });
     // The reply is the Conversation's latest activity.
     expect((await createConversationRepository(db, owner).listConversations()).conversations[0].lastMessageAt)
@@ -131,6 +133,44 @@ describe("Dashboard replies", () => {
     expect(await replies.sendReply(owner, { conversationId: conversationOfA, text: "a".repeat(4097) })).toEqual({ ok: false, error: "invalid" });
     expect(sender.sent).toEqual([]);
     expect((await messagesOf(otherOwner, conversationOfB)).map(({ text }) => text)).toEqual(["Oi"]);
+  });
+
+  test("echoes are classified as the team's app replies, or as echoes of the platform's own sends", async () => {
+    const conversationId = await receive(channelA, "2026-10-21T09:00:00Z");
+    clock.set(new Date("2026-10-21T09:30:00Z"));
+    await replies.sendReply(owner, { conversationId, text: "Pelo painel" });
+    const echo = (wamid: string, text: string) =>
+      recordMessageEcho(db, channelA, { wamid, to: "5511988887777", text, sentAt: new Date("2026-10-21T09:31:00Z") });
+
+    expect(await echo("wamid.OUT1", "Pelo painel")).toEqual({ echo: "own_echo", conversationId });
+    expect(await echo("wamid.APP1", "Pelo app")).toEqual({ echo: "app_reply", conversationId });
+    // A repeated echo keeps its classification.
+    expect(await echo("wamid.APP1", "Pelo app")).toEqual({ echo: "app_reply", conversationId });
+    expect(await echo("wamid.OUT1", "Pelo painel")).toEqual({ echo: "own_echo", conversationId });
+
+    expect((await messagesOf(owner, conversationId)).map(({ origin, text }) => ({ origin, text }))).toEqual([
+      { origin: "contact", text: "Oi" },
+      { origin: "dashboard", text: "Pelo painel" },
+      { origin: "app", text: "Pelo app" },
+    ]);
+  });
+
+  test("the echo of a dashboard reply arriving before Meta's answer leaves one reply", async () => {
+    const conversationId = await receive(channelA, "2026-10-21T09:00:00Z");
+    clock.set(new Date("2026-10-21T09:30:00Z"));
+    sender.beforeAnswering((wamid) =>
+      recordMessageEcho(db, channelA, { wamid, to: "5511988887777", text: "Pelo painel", sentAt: new Date("2026-10-21T09:30:01Z") }));
+
+    expect(await replies.sendReply(attendant, { conversationId, text: "Pelo painel" })).toEqual({ ok: true });
+
+    // The echo showed the reply was sent, and that is kept.
+    expect((await messagesOf(owner, conversationId)).map(({ wamid, origin, authorName, status }) => ({ wamid, origin, authorName, status }))).toEqual([
+      { wamid: expect.any(String), origin: "contact", authorName: null, status: null },
+      { wamid: "wamid.OUT1", origin: "dashboard", authorName: "Ari Atendente", status: "sent" },
+    ]);
+    // Once the wamid is stored, the same echo is the platform's own.
+    expect(await recordMessageEcho(db, channelA, { wamid: "wamid.OUT1", to: "5511988887777", text: "Pelo painel", sentAt: new Date("2026-10-21T09:30:01Z") }))
+      .toEqual({ echo: "own_echo", conversationId });
   });
 
   test("replies by a removed Member keep their text but lose their author", async () => {

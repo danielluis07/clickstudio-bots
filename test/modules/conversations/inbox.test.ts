@@ -130,8 +130,8 @@ describe("Conversation view", () => {
     });
     expect(await inbox.listMessages(id)).toEqual({
       messages: [
-        { id: expect.any(String), wamid: expect.any(String), direction: "inbound", origin: "contact", authorName: null, status: null, type: "text", text: "Primeira", sentAt: new Date("2026-10-20T09:00:00Z") },
-        { id: expect.any(String), wamid: expect.any(String), direction: "inbound", origin: "contact", authorName: null, status: null, type: "text", text: "Segunda", sentAt: new Date("2026-10-20T09:05:00Z") },
+        { id: expect.any(String), wamid: expect.any(String), direction: "inbound", origin: "contact", authorName: null, status: null, type: "text", text: "Primeira", sentAt: new Date("2026-10-20T09:00:00Z"), editedAt: null, revokedAt: null },
+        { id: expect.any(String), wamid: expect.any(String), direction: "inbound", origin: "contact", authorName: null, status: null, type: "text", text: "Segunda", sentAt: new Date("2026-10-20T09:05:00Z"), editedAt: null, revokedAt: null },
       ],
       nextCursor: null,
     });
