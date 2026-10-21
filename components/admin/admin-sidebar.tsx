@@ -1,5 +1,6 @@
-import { ShieldCheckIcon, UserRoundIcon } from "lucide-react";
+import { ShieldCheckIcon } from "lucide-react";
 import { AdminNavigation } from "@/components/admin/admin-navigation";
+import { SidebarUser } from "@/components/app-shell/sidebar-user";
 import { SignOutButton } from "@/components/app-shell/sign-out-button";
 import {
   Sidebar,
@@ -10,12 +11,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-type AdminSidebarProps = {
-  adminName: string;
-  adminEmail: string;
-};
-
-export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
+export function AdminSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -35,17 +31,7 @@ export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
         <AdminNavigation />
       </SidebarContent>
       <SidebarFooter>
-        <div
-          className="flex min-w-0 items-center gap-2 overflow-hidden p-2"
-          title={`${adminName} (${adminEmail})`}>
-          <UserRoundIcon className="size-4 shrink-0" aria-hidden="true" />
-          <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
-            <span className="truncate text-sm font-medium">{adminName}</span>
-            <span className="truncate text-xs text-muted-foreground">
-              {adminEmail}
-            </span>
-          </div>
-        </div>
+        <SidebarUser />
         <SidebarMenu>
           <SidebarMenuItem>
             <SignOutButton inSidebar />
