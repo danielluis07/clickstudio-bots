@@ -4,6 +4,7 @@ import { env } from "@/platform/env";
 import { createMemberManagement, createTenantOnboarding } from "@/modules/tenancy";
 import { createResendMailer } from "@/platform/resend-mailer";
 import { createChannelService } from "@/modules/channels";
+import { createReplyService } from "@/modules/conversations";
 import { createWhatsAppGateway } from "@/server/whatsapp";
 import { createWebhookInbox } from "@/modules/webhook-inbox";
 import { createQStashJobQueue, createQStashJobVerifier, qstashJobUrl } from "@/platform/qstash";
@@ -29,6 +30,12 @@ export const channelService = createChannelService({
   db,
   clock: systemClock,
   getWhatsApp: createWhatsAppGateway,
+});
+
+export const replyService = createReplyService({
+  db,
+  clock: systemClock,
+  getSender: createWhatsAppGateway,
 });
 
 const webhookInbox = env.META_APP_SECRET && env.QSTASH_TOKEN

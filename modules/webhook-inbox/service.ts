@@ -1,7 +1,7 @@
 import type { Database } from "@/db/database";
 import { resolveChannelPhoneNumber } from "@/modules/channels";
-import { recordInboundTextMessage } from "@/modules/conversations";
-import { readInboundTextMessage, splitDelivery } from "@/modules/webhook-inbox/deliveries";
+import { recordInboundTextMessage, recordMessageStatus } from "@/modules/conversations";
+import { readInboundTextMessage, readMessageStatus, splitDelivery } from "@/modules/webhook-inbox/deliveries";
 import type { JobQueue } from "@/modules/webhook-inbox/job-queue";
 import { createInboxRepository } from "@/modules/webhook-inbox/repository";
 import { isValidDeliverySignature } from "@/modules/webhook-inbox/signature";
@@ -50,14 +50,16 @@ export const createWebhookInbox = ({ db, clock, queue, appSecret }: {
       if (event.status !== "pending") return { ok: true as const, status: event.status };
       const route = event.phoneNumberId ? await resolveChannelPhoneNumber(db, event.phoneNumberId) : null;
       const inbound = route && readInboundTextMessage(event.payload);
-      if (!route || !inbound) {
+      const statusUpdate = route && !inbound ? readMessageStatus(event.payload) : null;
+      if (!route || (!inbound && !statusUpdate)) {
         await repository.settle(inboxEventId, clock.now(), {
           status: "ignored",
           ignoredReason: route ? "unsupported_event" : "unknown_channel",
         });
         return { ok: true as const, status: "ignored" as const };
       }
-      await recordInboundTextMessage(db, route, inbound);
+      if (inbound) await recordInboundTextMessage(db, route, inbound);
+      if (statusUpdate) await recordMessageStatus(db, route, statusUpdate);
       await repository.settle(inboxEventId, clock.now(), { status: "processed" });
       return { ok: true as const, status: "processed" as const };
     },

@@ -30,6 +30,24 @@ export const conversationsRouter = createTRPCRouter({
       orNotFound(await createConversationRepository(ctx.db, ctx.scope).listMessages(input.conversationId, input))),
 });
 
+// Each refusal of the reply service as the browser sees it.
+const replyErrors = {
+  invalid: "BAD_REQUEST",
+  not_found: "NOT_FOUND",
+  window_closed: "PRECONDITION_FAILED",
+  channel_unavailable: "PRECONDITION_FAILED",
+  send_failed: "BAD_GATEWAY",
+} as const;
+
+export const repliesRouter = createTRPCRouter({
+  send: tenantProcedure
+    .input(z.object({ conversationId: z.string(), text: z.string().max(4096) }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.replies.sendReply(ctx.scope, input);
+      if (!result.ok) throw new TRPCError({ code: replyErrors[result.error], message: result.error });
+    }),
+});
+
 export const contactsRouter = createTRPCRouter({
   rename: tenantProcedure
     .input(z.object({ contactId: z.string(), name: z.string().max(100) }))

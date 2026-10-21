@@ -40,3 +40,4 @@ tRPC's App Router guide does not cover Cache Components, and two failures are re
 - Two data paths exist, and the rule above decides between them. A form inside a live screen, such as the Contact name, uses a tRPC mutation so that the screen's cache updates optimistically.
 - `/api/trpc` is outside the proxy matcher. It answers 401 itself rather than redirecting, which suits an API.
 - A new live screen needs a router in `trpc/routers/`, added to `appRouter`. The refusal test then covers its procedures automatically.
+- Updated on 2026-10-21 (#45): the context also carries `replies`, the reply service that `server/services.ts` builds with the real WhatsApp adapter. A procedure that reaches a vendor port uses a service from the context instead of building one, so tests pass a service built on a fake `WhatsAppSender`.

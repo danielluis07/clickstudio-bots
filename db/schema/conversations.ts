@@ -1,7 +1,7 @@
 import { index, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { id, timestamps } from "@/db/columns";
 import { channel } from "@/db/schema/channels";
-import { organization } from "@/db/schema/tenancy";
+import { member, organization } from "@/db/schema/tenancy";
 
 export const contact = pgTable("contact", {
   id: id(),
@@ -38,8 +38,17 @@ export const message = pgTable("message", {
     .references(() => organization.id, { onDelete: "cascade" }),
   conversationId: text("conversation_id").notNull()
     .references(() => conversation.id, { onDelete: "cascade" }),
-  wamid: text("wamid").notNull(),
-  direction: text("direction", { enum: ["inbound"] }).notNull(),
+  // Null only while a dashboard reply awaits Meta's answer, or after Meta
+  // refused it.
+  wamid: text("wamid"),
+  direction: text("direction", { enum: ["inbound", "outbound"] }).notNull(),
+  // Who wrote it: the Contact, or a Member replying from the dashboard.
+  origin: text("origin", { enum: ["contact", "dashboard"] }).notNull(),
+  // The Member who wrote a dashboard reply. Null for other origins, and once
+  // that Member is removed.
+  authorMemberId: text("author_member_id").references(() => member.id, { onDelete: "set null" }),
+  // Delivery of an outbound message; null for inbound ones. Only moves forward.
+  status: text("status", { enum: ["pending", "sent", "delivered", "read", "failed"] }),
   type: text("type", { enum: ["text"] }).notNull(),
   text: text("text"),
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull(),

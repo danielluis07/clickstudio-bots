@@ -1,12 +1,13 @@
 import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { channel, contact, conversation, inboxEvent, member, message, organization, user } from "@/db/schema";
-import { createConversationRepository } from "@/modules/conversations";
+import { createConversationRepository, createReplyService } from "@/modules/conversations";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { createWebhookInbox } from "@/modules/webhook-inbox";
 import { createTestClock } from "@/test/support/clock";
 import { createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue, type TestJobQueue } from "@/test/support/job-queue";
+import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
 import { metaAppSecret, metaDelivery, referencingChange, signMetaDelivery, statusChange, textMessageChange } from "@/test/support/meta-webhook";
 
 let db: Database;
@@ -78,7 +79,10 @@ describe("Webhook inbox", () => {
       channelId: "channel-a",
       contactPhone: "5511988887777",
       contactProfileName: "Maria Teste",
-      messages: [{ id: expect.any(String), wamid: "wamid.A1", direction: "inbound", type: "text", text: "Olá!", sentAt: new Date("2026-10-20T12:00:00Z") }],
+      messages: [{
+        id: expect.any(String), wamid: "wamid.A1", direction: "inbound", origin: "contact", authorName: null, status: null,
+        type: "text", text: "Olá!", sentAt: new Date("2026-10-20T12:00:00Z"),
+      }],
     }]);
     expect(await conversationsOf(tenantB)).toEqual([]);
   });
@@ -186,5 +190,72 @@ describe("Webhook inbox", () => {
     const conversations = await conversationsOf(tenantA);
     expect(conversations).toHaveLength(1);
     expect(conversations[0].messages).toHaveLength(1);
+  });
+});
+
+describe("Delivery statuses", () => {
+  // A Contact message, then a Member's dashboard reply to it, which Meta
+  // accepts as wamid.OUT1.
+  const replyToContact = async () => {
+    await receive(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1" })));
+    await runJobs();
+    const [{ id: conversationId }] = await conversationsOf(tenantA);
+    const replies = createReplyService({ db, clock, getSender: createTestWhatsAppSender });
+    expect(await replies.sendReply(tenantA, { conversationId, text: "Abrimos sim!" })).toEqual({ ok: true });
+  };
+
+  const statusesOf = async (scope: TenantScope) =>
+    (await conversationsOf(scope)).flatMap(({ messages }) => messages.map(({ wamid, status }) => ({ wamid, status })));
+
+  const deliver = async (...changes: ReturnType<typeof statusChange>[]) => {
+    for (const change of changes) {
+      await receive(metaDelivery(change));
+      await runJobs();
+    }
+  };
+
+  test("sent, delivered and read update the reply without creating messages", async () => {
+    await replyToContact();
+    expect(await statusesOf(tenantA)).toEqual([{ wamid: "wamid.A1", status: null }, { wamid: "wamid.OUT1", status: "pending" }]);
+
+    for (const status of ["sent", "delivered", "read"] as const) {
+      await deliver(statusChange({ phoneNumberId: "300", wamid: "wamid.OUT1", status }));
+      expect(await statusesOf(tenantA)).toEqual([{ wamid: "wamid.A1", status: null }, { wamid: "wamid.OUT1", status }]);
+    }
+  });
+
+  test("a status arriving after a later one does not move the reply back", async () => {
+    await replyToContact();
+
+    await deliver(
+      statusChange({ phoneNumberId: "300", wamid: "wamid.OUT1", status: "read", timestamp: "1792497800" }),
+      statusChange({ phoneNumberId: "300", wamid: "wamid.OUT1", status: "sent", timestamp: "1792497600" }),
+      statusChange({ phoneNumberId: "300", wamid: "wamid.OUT1", status: "delivered", timestamp: "1792497700" }),
+    );
+
+    expect((await statusesOf(tenantA)).at(-1)).toEqual({ wamid: "wamid.OUT1", status: "read" });
+  });
+
+  test("a failed status marks the reply as failed", async () => {
+    await replyToContact();
+
+    await deliver(
+      statusChange({ phoneNumberId: "300", wamid: "wamid.OUT1", status: "sent" }),
+      statusChange({ phoneNumberId: "300", wamid: "wamid.OUT1", status: "failed", timestamp: "1792497800" }),
+    );
+
+    expect((await statusesOf(tenantA)).at(-1)).toEqual({ wamid: "wamid.OUT1", status: "failed" });
+  });
+
+  test("a status for another Channel's message, or for an unknown one, changes nothing", async () => {
+    await replyToContact();
+
+    await deliver(
+      statusChange({ phoneNumberId: "301", wamid: "wamid.OUT1", status: "read" }),
+      statusChange({ phoneNumberId: "300", wamid: "wamid.UNKNOWN", status: "read" }),
+    );
+
+    expect(await statusesOf(tenantA)).toEqual([{ wamid: "wamid.A1", status: null }, { wamid: "wamid.OUT1", status: "pending" }]);
+    expect(await conversationsOf(tenantB)).toEqual([]);
   });
 });

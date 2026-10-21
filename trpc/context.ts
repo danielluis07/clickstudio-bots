@@ -1,12 +1,14 @@
 import "server-only";
 import { db } from "@/db";
 import { auth } from "@/server/auth/auth";
+import { replyService } from "@/server/services";
 import type { TRPCContext } from "@/trpc/init";
 
 type Session = Awaited<ReturnType<typeof auth.api.getSession>>;
 
 export const contextForSession = (session: Session): TRPCContext => ({
   db,
+  replies: replyService,
   session: session
     ? { userId: session.user.id, activeTenantId: session.session.activeOrganizationId ?? null }
     : null,

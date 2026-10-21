@@ -1,7 +1,7 @@
 import { and, desc, eq, ilike, like, or, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Database } from "@/db/database";
-import { contact, conversation, message } from "@/db/schema";
+import { contact, conversation, member, message, user } from "@/db/schema";
 import type { TenantScope } from "@/modules/tenancy";
 
 // Matches the Contact name a Member gave, the WhatsApp profile name, or the
@@ -29,6 +29,10 @@ const contactFields = {
   name: contact.name,
 };
 
+// WhatsApp lets a business reply freely for 24 hours after the Contact's
+// latest message.
+const serviceWindowHours = 24;
+
 // Rows after the cursor in (time, id) descending order. Timestamps come from
 // JS dates, so millisecond precision loses nothing.
 const before = (time: AnyPgColumn, id: AnyPgColumn, cursor: { at: Date; id: string } | null) =>
@@ -49,6 +53,11 @@ export const createConversationRepository = (db: Database, scope: TenantScope) =
       id: conversation.id,
       channelId: conversation.channelId,
       contact: contactFields,
+      // Null until the Contact has written; the window never opens otherwise.
+      serviceWindowClosesAt: sql`(
+        select max(${message.sentAt}) + make_interval(hours => ${serviceWindowHours}) from ${message}
+        where ${message.conversationId} = ${conversation.id} and ${message.direction} = 'inbound'
+      )`.mapWith(message.sentAt),
     }).from(conversation)
       .innerJoin(contact, eq(contact.id, conversation.contactId))
       .where(and(eq(conversation.id, conversationId), eq(conversation.tenantId, scope.tenantId)));
@@ -92,10 +101,16 @@ export const createConversationRepository = (db: Database, scope: TenantScope) =
         id: message.id,
         wamid: message.wamid,
         direction: message.direction,
+        origin: message.origin,
+        // Null for the Contact's messages and once the author is removed.
+        authorName: user.name,
+        status: message.status,
         type: message.type,
         text: message.text,
         sentAt: message.sentAt,
       }).from(message)
+        .leftJoin(member, eq(member.id, message.authorMemberId))
+        .leftJoin(user, eq(user.id, member.userId))
         .where(and(
           eq(message.conversationId, conversationId),
           eq(message.tenantId, scope.tenantId),
@@ -105,6 +120,36 @@ export const createConversationRepository = (db: Database, scope: TenantScope) =
         .limit(limit + 1);
       const { page, nextCursor } = toPage(rows, limit, (row): MessageCursor => ({ sentAt: row.sentAt, id: row.id }));
       return { messages: page.reverse(), nextCursor };
+    },
+
+    // Stores the scope's Member's reply before it is sent, so a send that
+    // fails or never answers still shows in the Conversation.
+    async insertPendingReply(conversationId: string, { text, sentAt }: { text: string; sentAt: Date }) {
+      return db.transaction(async (tx) => {
+        const [inserted] = await tx.insert(message).values({
+          tenantId: scope.tenantId,
+          conversationId,
+          direction: "outbound",
+          origin: "dashboard",
+          authorMemberId: scope.memberId,
+          status: "pending",
+          type: "text",
+          text,
+          sentAt,
+        }).returning({ id: message.id });
+        await tx.update(conversation)
+          .set({ lastMessageAt: sql`greatest(${conversation.lastMessageAt}, ${sentAt.toISOString()}::timestamptz)` })
+          .where(and(eq(conversation.id, conversationId), eq(conversation.tenantId, scope.tenantId)));
+        return inserted;
+      });
+    },
+
+    // Meta's wamid lets delivery statuses find the reply; without one the
+    // send failed.
+    async recordReplySent(messageId: string, sent: { wamid: string } | null) {
+      await db.update(message)
+        .set(sent ? { wamid: sent.wamid } : { status: "failed" })
+        .where(and(eq(message.id, messageId), eq(message.tenantId, scope.tenantId)));
     },
 
     // A blank name clears it, so the WhatsApp profile name shows again. Null
