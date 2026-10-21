@@ -16,7 +16,7 @@ Every protected `page.tsx` calls one on its first line, and every Server Action 
   - The proxy runs on every matched request, including prefetches and RSC navigations, so each one would pay for a database round trip.
   - Next.js recommends against using the proxy for full session management or authorization.
   - The pages would still need their own checks: Server Actions and data access must authorize themselves either way.
-- **Check in shared layouts** (`app/admin/layout.tsx`, `app/painel/layout.tsx`): rejected. Layouts do not re-render on client navigation, and they do not stop child segments from rendering or reaching the RSC payload.
+- **Check in shared layouts** (`app/(protected)/admin/layout.tsx`, `app/(protected)/painel/layout.tsx`): rejected. Layouts do not re-render on client navigation, and they do not stop child segments from rendering or reaching the RSC payload. The dashboard shell reads the session under Suspense to display the Tenant and Member; that read does not replace a page's guard.
 
 ## Consequences
 

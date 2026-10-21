@@ -19,7 +19,7 @@ export async function TenantOverview({ scope }: { scope: TenantScope }) {
   ]);
 
   return (
-    <div className="flex flex-col gap-10">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
       <h1 className="text-3xl font-semibold tracking-tight wrap-break-word">{profile?.name}</h1>
       <WhatsAppChannel scope={scope} />
       <MemberList members={members} canRemove={isOwner} />
