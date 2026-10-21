@@ -1,0 +1,57 @@
+import { ShieldCheckIcon, UserRoundIcon } from "lucide-react";
+import { AdminNavigation } from "@/components/admin/admin-navigation";
+import { SignOutButton } from "@/components/app-shell/sign-out-button";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
+
+type AdminSidebarProps = {
+  adminName: string;
+  adminEmail: string;
+};
+
+export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
+  return (
+    <Sidebar collapsible="icon">
+      <SidebarHeader>
+        <div
+          className="flex h-12 min-w-0 items-center gap-2 overflow-hidden px-2"
+          title="Administração">
+          <ShieldCheckIcon className="size-4 shrink-0" aria-hidden="true" />
+          <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
+            <span className="truncate font-semibold">Administração</span>
+            <span className="truncate text-xs text-muted-foreground">
+              ClickStudio Bots
+            </span>
+          </div>
+        </div>
+      </SidebarHeader>
+      <SidebarContent>
+        <AdminNavigation />
+      </SidebarContent>
+      <SidebarFooter>
+        <div
+          className="flex min-w-0 items-center gap-2 overflow-hidden p-2"
+          title={`${adminName} (${adminEmail})`}>
+          <UserRoundIcon className="size-4 shrink-0" aria-hidden="true" />
+          <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
+            <span className="truncate text-sm font-medium">{adminName}</span>
+            <span className="truncate text-xs text-muted-foreground">
+              {adminEmail}
+            </span>
+          </div>
+        </div>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SignOutButton inSidebar />
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}
