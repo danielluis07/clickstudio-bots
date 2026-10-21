@@ -84,9 +84,9 @@ await echo("wamid.SEED.APP1", "Pode vir às 10h, te espero!", new Date());
 await receive("wamid.SEED.IN3", "5511988887777", "Ana Souza", "Mensagem enviada por engano", new Date());
 // The Contact edits a message and deletes another; a Member edits the app reply.
 const changedAt = new Date();
-await recordMessageChange(db, route, { wamid: "wamid.SEED.EDIT1", originalWamid: "wamid.SEED.IN1", direction: "inbound", changedAt, kind: "edit", text: "Olá! Vocês abrem no sábado e no domingo?" });
-await recordMessageChange(db, route, { wamid: "wamid.SEED.EDIT2", originalWamid: "wamid.SEED.APP1", direction: "outbound", changedAt, kind: "edit", text: "Pode vir às 10h30, te espero!" });
-await recordMessageChange(db, route, { wamid: "wamid.SEED.REVOKE1", originalWamid: "wamid.SEED.IN3", direction: "inbound", changedAt, kind: "revoke" });
+await recordMessageChange(db, route, { phone: "5511988887777", wamid: "wamid.SEED.EDIT1", originalWamid: "wamid.SEED.IN1", direction: "inbound", changedAt, kind: "edit", text: "Olá! Vocês abrem no sábado e no domingo?" });
+await recordMessageChange(db, route, { phone: "5511988887777", wamid: "wamid.SEED.EDIT2", originalWamid: "wamid.SEED.APP1", direction: "outbound", changedAt, kind: "edit", text: "Pode vir às 10h30, te espero!" });
+await recordMessageChange(db, route, { phone: "5511988887777", wamid: "wamid.SEED.REVOKE1", originalWamid: "wamid.SEED.IN3", direction: "inbound", changedAt, kind: "revoke" });
 
 await createMemberManagement({ db, clock: systemClock, appUrl: env.APP_URL, mailer: { send: async () => {} } })
   .removeMember(ownerScope, attendantScope.memberId);

@@ -101,6 +101,7 @@ const textSchema = z.object({ body: z.string() });
 const notInGroup = { group_id: z.never().optional() };
 
 const waIdSchema = z.string().regex(/^\d{1,20}$/);
+const recipientIdSchema = z.string().regex(/^\+?\d{1,20}$/).transform((phone) => phone.replace("+", ""));
 
 const textMessageEventSchema = z.object({
   field: z.literal("messages"),
@@ -155,7 +156,7 @@ const messageEchoEventSchema = z.object({
   value: z.object({
     message_echoes: z.tuple([z.object({
       // Meta's reference shows the recipient both with and without "+".
-      to: z.string().regex(/^\+?\d{1,20}$/).transform((phone) => phone.replace("+", "")),
+      to: recipientIdSchema,
       id: z.string().min(1),
       timestamp: timestampSchema,
       type: z.literal("text"),
@@ -195,10 +196,12 @@ const changeSchema = z.discriminatedUnion("type", [
 
 // The Contact changes their inbound messages; the app, the Tenant's outbound ones.
 const messageChangeEventSchema = z.union([
-  z.object({ field: z.literal("messages"), value: z.object({ messages: z.tuple([changeSchema]) }) })
-    .transform(({ value }) => ({ direction: "inbound" as const, change: value.messages[0] })),
-  z.object({ field: z.literal("smb_message_echoes"), value: z.object({ message_echoes: z.tuple([changeSchema]) }) })
-    .transform(({ value }) => ({ direction: "outbound" as const, change: value.message_echoes[0] })),
+  z.object({ field: z.literal("messages"), value: z.object({ messages: z.tuple([changeSchema.and(z.object({ from: waIdSchema }))]) }) })
+    .transform(({ value }) => ({ direction: "inbound" as const, phone: value.messages[0].from, change: value.messages[0] })),
+  z.object({ field: z.literal("smb_message_echoes"), value: z.object({
+    message_echoes: z.tuple([changeSchema.and(z.object({ to: recipientIdSchema }))]),
+  }) })
+    .transform(({ value }) => ({ direction: "outbound" as const, phone: value.message_echoes[0].to, change: value.message_echoes[0] })),
 ]);
 
 // The Contact's edit or revoke of their message, or an app edit or revoke of
@@ -206,8 +209,8 @@ const messageChangeEventSchema = z.union([
 export const readMessageChange = (payload: unknown): MessageChange | null => {
   const parsed = messageChangeEventSchema.safeParse(payload);
   if (!parsed.success) return null;
-  const { direction, change } = parsed.data;
-  const event = { wamid: change.id, direction, changedAt: change.timestamp };
+  const { direction, phone, change } = parsed.data;
+  const event = { wamid: change.id, direction, phone, changedAt: change.timestamp };
   return change.type === "edit"
     ? { ...event, originalWamid: change.edit.original_message_id, kind: "edit", text: change.edit.message.text.body }
     : { ...event, originalWamid: change.revoke.original_message_id, kind: "revoke" };

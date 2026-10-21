@@ -22,6 +22,7 @@ export const createInboxRepository = (db: Database) => ({
       status: inboxEvent.status,
       phoneNumberId: inboxEvent.phoneNumberId,
       payload: inboxEvent.payload,
+      receivedAt: inboxEvent.receivedAt,
     }).from(inboxEvent).where(eq(inboxEvent.id, id)).limit(1);
     return found ?? null;
   },

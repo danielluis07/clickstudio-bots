@@ -18,6 +18,7 @@ export default async function ConversationsPage({ searchParams }: PageProps<"/pa
       search={searchParamText(busca)}
       conversationId={searchParamText(conversa)}
       historyNotImported={channel?.historyNotImported ?? false}
+      canDeleteContacts={scope.role === "owner"}
     />
   );
 }

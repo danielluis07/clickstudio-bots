@@ -7,7 +7,11 @@ import { ReplyComposer } from "@/components/inbox/reply-composer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { contactDisplayName, formatContactPhone, useConversation } from "@/modules/conversations/hooks";
 
-export function ConversationView({ conversationId }: { conversationId: string }) {
+export function ConversationView({ conversationId, canDeleteContacts, onDeleted }: {
+  conversationId: string;
+  canDeleteContacts: boolean;
+  onDeleted: () => void;
+}) {
   const { data: conversation, isPending, isError } = useConversation(conversationId);
 
   if (isPending) return <Skeleton className="m-4 h-24" aria-busy="true" aria-label="Carregando conversa" />;
@@ -23,7 +27,7 @@ export function ConversationView({ conversationId }: { conversationId: string })
         <MessageList conversationId={conversationId} />
         <ReplyComposer conversationId={conversationId} serviceWindowClosesAt={conversation.serviceWindowClosesAt} />
       </section>
-      <ContactPanel contact={conversation.contact} />
+      <ContactPanel contact={conversation.contact} canDeleteContacts={canDeleteContacts} onDeleted={onDeleted} />
     </div>
   );
 }

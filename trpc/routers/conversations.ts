@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { createConversationRepository, renameContact } from "@/modules/conversations";
+import { createConversationRepository, deleteContact, renameContact } from "@/modules/conversations";
+import { systemClock } from "@/platform/clock";
 import { createTRPCRouter, tenantProcedure } from "@/trpc/init";
 
 const orNotFound = <T>(value: T | null): T => {
@@ -49,6 +50,13 @@ export const repliesRouter = createTRPCRouter({
 });
 
 export const contactsRouter = createTRPCRouter({
+  delete: tenantProcedure
+    .input(z.object({ contactId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await deleteContact({ db: ctx.db, scope: ctx.scope, notifier: ctx.notifier, clock: systemClock, ...input });
+      if (!result.ok) throw new TRPCError({ code: result.error === "forbidden" ? "FORBIDDEN" : "NOT_FOUND" });
+    }),
+
   rename: tenantProcedure
     .input(z.object({ contactId: z.string(), name: z.string().max(100) }))
     .mutation(async ({ ctx, input }) =>

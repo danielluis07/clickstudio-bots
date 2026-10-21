@@ -4,10 +4,11 @@ import { HydrateClient, prefetch, prefetchInfinite, trpc } from "@/trpc/server";
 
 // Loads what the URL asks for before the first render; the browser cache then
 // keeps it fresh. Rendered only after the page's guard.
-export async function PrefetchedInbox({ search, conversationId, historyNotImported }: {
+export async function PrefetchedInbox({ search, conversationId, historyNotImported, canDeleteContacts }: {
   search: string;
   conversationId: string;
   historyNotImported: boolean;
+  canDeleteContacts: boolean;
 }) {
   await Promise.all([
     prefetchInfinite(trpc.conversations.list.infiniteQueryOptions({ search }, { getNextPageParam: nextPageCursor })),
@@ -21,7 +22,7 @@ export async function PrefetchedInbox({ search, conversationId, historyNotImport
 
   return (
     <HydrateClient>
-      <Inbox historyNotImported={historyNotImported} />
+      <Inbox historyNotImported={historyNotImported} canDeleteContacts={canDeleteContacts} />
     </HydrateClient>
   );
 }

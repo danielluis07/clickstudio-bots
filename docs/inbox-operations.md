@@ -78,10 +78,46 @@ retroactively. Previously recorded processing errors are not backfilled.
 Inspect QStash's existing dead-letter queue during rollout; an administrator can
 recover a known retained pending event through the same replay action.
 
-The later Contact-deletion feature must invalidate outstanding failed/pending
-events for that Contact, including failures after committed writes, and test
-replay after deletion. That includes retained `history` events, whose replay
-files the Contact's imported Conversation again (#49). Terminal processed/ignored events already remain no-ops.
+## Delete a Contact
+
+A Tenant owner can choose **Excluir contato** in the Contact panel (#66).
+The confirmation warns that the Contact and its Conversations, transcripts and
+captured data are permanently removed, and reminds the owner to delete the
+Conversation in the WhatsApp Business app too. The mutation checks the current
+Tenant membership and owner role on the server. Other Members have no delete
+control and cannot invoke the operation directly.
+
+Run `bun run db:migrate` before deploying this feature. Deletion atomically
+removes the Contact, all its Conversations/messages, and message edits/revokes,
+including changes whose original message has not arrived. Transcripts and
+captured fields do not have persisted tables yet; when introduced, they must
+participate in the same Contact/Conversation erasure.
+
+The migration backfills existing edit/revoke address hashes from their original
+messages or retained signed inbox events, checking Tenant and event identity.
+It refuses to complete if a legacy change has neither source: resolve its
+address attribution through the privacy handling process before rerunning.
+Do not bypass the required hash constraint, which prevents unattributed text
+from escaping later Contact erasure.
+
+A replay barrier stores only the Tenant ID, a SHA-256 hash of the Tenant ID and
+Contact phone, and the deletion time. This is pseudonymous erasure metadata,
+not an anonymization guarantee. It is retained until the Tenant is deleted and
+contains no names, raw phones or message content. Contact writes and deletion
+share a short transaction lock per address; external calls never hold this lock.
+
+Pending/failed inbox events received on or before deletion settle without
+restoring Contact data. Messages/echoes, imported history, edits/revokes and app
+contact names dated on or before deletion are also suppressed when delivered
+later. Mixed history chunks retain only messages after deletion. A genuinely
+new message creates a fresh Contact and Conversation; the barrier remains so
+later imports cannot restore the deleted content into that new Conversation.
+WhatsApp timestamps have only second precision. A message sent in the same
+second as deletion is ambiguous, even if received later, and is suppressed to
+avoid restoring old content. A fresh message timestamped in a subsequent second
+can create the new Contact.
+Terminal processed/ignored events remain no-ops. Raw inbox events keep their
+existing retention policy below; deletion does not extend it.
 
 ## Daily tasks
 

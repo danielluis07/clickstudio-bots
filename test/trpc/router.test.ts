@@ -47,6 +47,7 @@ beforeAll(async () => {
     { id: "owner-a", name: "Owner A", email: "a@example.com" },
     { id: "owner-b", name: "Owner B", email: "b@example.com" },
     { id: "outsider", name: "Outsider", email: "o@example.com" },
+    { id: "attendant", name: "Attendant", email: "attendant@example.com" },
   ]);
   await db.insert(organization).values([
     { id: "tenant-a", name: "Tenant A", slug: "a" },
@@ -55,6 +56,7 @@ beforeAll(async () => {
   await db.insert(member).values([
     { organizationId: "tenant-a", userId: "owner-a", role: "owner" },
     { organizationId: "tenant-b", userId: "owner-b", role: "owner" },
+    { organizationId: "tenant-b", userId: "attendant", role: "member" },
   ]);
   await db.insert(channel).values({
     id: "channel-b", tenantId: "tenant-b", wabaId: "201", phoneNumberId: "301", displayPhoneNumber: "+55 11 99999-0001",
@@ -132,5 +134,16 @@ describe("tRPC router", () => {
     expect((await caller.contacts.rename({ contactId: contactOfB, name: "Ana Souza" })).name).toBe("Ana Souza");
     expect((await caller.conversations.get({ conversationId: conversationOfB })).contact.name).toBe("Ana Souza");
     expect(notifier.pings).toEqual([{ tenantId: "tenant-b", ping: { contactId: contactOfB } }]);
+  });
+
+  test("Contact deletion refuses non-owners and foreign Contacts, and authorizes the owner", async () => {
+    const input = { contactId: contactOfB };
+    expect(await codeOf(callerFor({ userId: "attendant", activeTenantId: "tenant-b" }).contacts.delete(input))).toBe("FORBIDDEN");
+    expect(await codeOf(callerFor(ownerA).contacts.delete(input))).toBe("NOT_FOUND");
+    const ownerB = callerFor({ userId: "owner-b", activeTenantId: "tenant-b" });
+    expect(await codeOf(ownerB.conversations.get({ conversationId: conversationOfB }))).toBe("OK");
+    expect(await codeOf(ownerB.contacts.delete(input))).toBe("OK");
+    expect(await codeOf(ownerB.conversations.get({ conversationId: conversationOfB }))).toBe("NOT_FOUND");
+    expect(await codeOf(ownerB.conversations.messages({ conversationId: conversationOfB }))).toBe("NOT_FOUND");
   });
 });
