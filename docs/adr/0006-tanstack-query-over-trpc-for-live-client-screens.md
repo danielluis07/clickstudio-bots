@@ -16,7 +16,7 @@ The inbox is the first screen that needs a client-side cache, and the issues aft
 - Routers in `trpc/routers/` are thin adapters over `@/modules/<area>`, the role Server Actions play. Behaviour is tested at the module interface.
 - `app/api/trpc/[trpc]/route.ts` delegates to `trpc/handler.ts`. Unexpected errors are logged with the procedure path only and reach the browser without their message, since database errors can echo Contact data.
 - Pages still call their guard on the first line (ADR 0004), then prefetch through `trpc/server.tsx`. That caller runs procedures in-process with the same cached session, and `<HydrateClient>` hands the result to the browser cache.
-- The provider is mounted in `app/painel/layout.tsx`, not the root layout, so public pages do not ship TanStack Query.
+- The provider is mounted in `app/(protected)/painel/layout.tsx`, not the root layout, so public pages do not ship TanStack Query. The `(protected)` group's shared layout supplies `TooltipProvider` to both `/painel` and `/admin`, keeping it out of public pages.
 - Module hooks (`@/modules/<area>/hooks`) call `useTRPC` from `@/trpc/client`. That keeps a domain's queries, cache keys and optimistic updates together. `trpc/client.tsx` imports the router only as a type, so the browser bundle holds no server code (checked by the architecture test).
 
 ## Next.js 16 with Cache Components
