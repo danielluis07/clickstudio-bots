@@ -1,7 +1,7 @@
 import type { Database } from "@/db/database";
-import { resolveChannelPhoneNumber } from "@/modules/channels";
-import { recordInboundTextMessage, recordMessageStatus } from "@/modules/conversations";
-import { readInboundTextMessage, readMessageStatus, splitDelivery } from "@/modules/webhook-inbox/deliveries";
+import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
+import { recordInboundTextMessage, recordMessageChange, recordMessageEcho, recordMessageStatus } from "@/modules/conversations";
+import { readInboundTextMessage, readMessageChange, readMessageEcho, readMessageStatus, splitDelivery } from "@/modules/webhook-inbox/deliveries";
 import type { JobQueue } from "@/modules/webhook-inbox/job-queue";
 import { createInboxRepository } from "@/modules/webhook-inbox/repository";
 import { isValidDeliverySignature } from "@/modules/webhook-inbox/signature";
@@ -16,6 +16,20 @@ export const createWebhookInbox = ({ db, clock, queue, appSecret }: {
   appSecret: string;
 }) => {
   const repository = createInboxRepository(db);
+
+  // Records what the event carries under the route's Tenant; false when it
+  // carries nothing the platform handles yet.
+  const recordEvent = async (route: ChannelRoute, payload: unknown) => {
+    const inbound = readInboundTextMessage(payload);
+    if (inbound) return recordInboundTextMessage(db, route, inbound).then(() => true);
+    const statusUpdate = readMessageStatus(payload);
+    if (statusUpdate) return recordMessageStatus(db, route, statusUpdate).then(() => true);
+    const echo = readMessageEcho(payload);
+    if (echo) return recordMessageEcho(db, route, echo).then(() => true);
+    const change = readMessageChange(payload);
+    if (change) return recordMessageChange(db, route, change).then(() => true);
+    return false;
+  };
 
   return {
     async receive({ body, signature }: { body: string; signature: string | null }) {
@@ -49,17 +63,14 @@ export const createWebhookInbox = ({ db, clock, queue, appSecret }: {
       if (!event) return { ok: false as const, error: "not_found" as const };
       if (event.status !== "pending") return { ok: true as const, status: event.status };
       const route = event.phoneNumberId ? await resolveChannelPhoneNumber(db, event.phoneNumberId) : null;
-      const inbound = route && readInboundTextMessage(event.payload);
-      const statusUpdate = route && !inbound ? readMessageStatus(event.payload) : null;
-      if (!route || (!inbound && !statusUpdate)) {
+      const recorded = route && await recordEvent(route, event.payload);
+      if (!recorded) {
         await repository.settle(inboxEventId, clock.now(), {
           status: "ignored",
           ignoredReason: route ? "unsupported_event" : "unknown_channel",
         });
         return { ok: true as const, status: "ignored" as const };
       }
-      if (inbound) await recordInboundTextMessage(db, route, inbound);
-      if (statusUpdate) await recordMessageStatus(db, route, statusUpdate);
       await repository.settle(inboxEventId, clock.now(), { status: "processed" });
       return { ok: true as const, status: "processed" as const };
     },

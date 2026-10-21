@@ -1,5 +1,5 @@
 export { contactDisplayName, formatContactPhone } from "@/modules/conversations/hooks/contact-display";
-export { messageAuthorLabel, messageStatusLabels } from "@/modules/conversations/hooks/message-display";
+export { messageAuthorLabel, messageEditedLabel, messagePlaceholder, messageStatusLabels } from "@/modules/conversations/hooks/message-display";
 export { nextPageCursor } from "@/modules/conversations/hooks/paging";
 export {
   useConversation,

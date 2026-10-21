@@ -1,7 +1,8 @@
-import { and, desc, eq, ilike, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, like, or, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Database } from "@/db/database";
-import { contact, conversation, member, message, user } from "@/db/schema";
+import { contact, conversation, member, message, messageChange, user } from "@/db/schema";
+import { recordSentWamid } from "@/modules/conversations/echoes";
 import type { TenantScope } from "@/modules/tenancy";
 
 // Matches the Contact name a Member gave, the WhatsApp profile name, or the
@@ -32,6 +33,20 @@ const contactFields = {
 // WhatsApp lets a business reply freely for 24 hours after the Contact's
 // latest message.
 const serviceWindowHours = 24;
+
+// The message's changes of one kind, matched by its wamid and direction.
+const changesOf = (kind: (typeof messageChange.kind.enumValues)[number]) => sql`from ${messageChange}
+  where ${messageChange.tenantId} = ${message.tenantId} and ${messageChange.originalWamid} = ${message.wamid}
+    and ${messageChange.direction} = ${message.direction} and ${messageChange.kind} = ${kind}`;
+
+const latestEditText = sql`(select ${messageChange.text} ${changesOf("edit")}
+  order by ${messageChange.changedAt} desc, ${messageChange.wamid} desc limit 1)`;
+
+// A subquery's timestamp, null when no change matches.
+const nullableTime = (query: SQL) => query.mapWith(message.sentAt) as SQL<Date | null>;
+
+const editedAt = nullableTime(sql`(select max(${messageChange.changedAt}) ${changesOf("edit")})`);
+const revokedAt = nullableTime(sql`(select min(${messageChange.changedAt}) ${changesOf("revoke")})`);
 
 // Rows after the cursor in (time, id) descending order. Timestamps come from
 // JS dates, so millisecond precision loses nothing.
@@ -106,8 +121,11 @@ export const createConversationRepository = (db: Database, scope: TenantScope) =
         authorName: user.name,
         status: message.status,
         type: message.type,
-        text: message.text,
+        // As last edited; a revoked message shows no text.
+        text: sql<string | null>`case when ${revokedAt} is null then coalesce(${latestEditText}, ${message.text}) end`,
         sentAt: message.sentAt,
+        editedAt,
+        revokedAt,
       }).from(message)
         .leftJoin(member, eq(member.id, message.authorMemberId))
         .leftJoin(user, eq(user.id, member.userId))
@@ -147,8 +165,9 @@ export const createConversationRepository = (db: Database, scope: TenantScope) =
     // Meta's wamid lets delivery statuses find the reply; without one the
     // send failed.
     async recordReplySent(messageId: string, sent: { wamid: string } | null) {
+      if (sent) return recordSentWamid(db, scope.tenantId, messageId, sent.wamid);
       await db.update(message)
-        .set(sent ? { wamid: sent.wamid } : { status: "failed" })
+        .set({ status: "failed" })
         .where(and(eq(message.id, messageId), eq(message.tenantId, scope.tenantId)));
     },
 
