@@ -1,4 +1,5 @@
-import { Building2Icon, LogOutIcon, UserRoundIcon } from "lucide-react";
+import { Building2Icon, UserRoundIcon } from "lucide-react";
+import { SignOutButton } from "@/components/app-shell/sign-out-button";
 import { DashboardNavigation } from "@/components/dashboard/dashboard-navigation";
 import {
   Sidebar,
@@ -6,11 +7,9 @@ import {
   SidebarFooter,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
-import { signOutAction } from "@/server/actions/session";
 
 type DashboardSidebarProps = {
   tenantName: string;
@@ -43,16 +42,11 @@ export function DashboardSidebar({ tenantName, memberName, memberEmail }: Dashbo
             <span className="truncate text-xs text-muted-foreground">{memberEmail}</span>
           </div>
         </div>
-        <form action={signOutAction}>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton type="submit" tooltip="Sair" aria-label="Sair">
-                <LogOutIcon aria-hidden="true" />
-                <span>Sair</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </form>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SignOutButton inSidebar />
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   );
