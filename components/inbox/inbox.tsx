@@ -8,7 +8,7 @@ import { InboxNotice } from "@/components/inbox/inbox-notice";
 import { useSearchParam } from "@/hooks/use-search-param";
 import { useInboxRealtime } from "@/modules/conversations/hooks";
 
-export function Inbox({ historyNotImported }: { historyNotImported: boolean }) {
+export function Inbox({ historyNotImported, canDeleteContacts }: { historyNotImported: boolean; canDeleteContacts: boolean }) {
   useInboxRealtime();
   const [conversationId, openConversation] = useSearchParam("conversa");
   const [search, setSearch] = useSearchParam("busca", { history: "replace" });
@@ -23,7 +23,7 @@ export function Inbox({ historyNotImported }: { historyNotImported: boolean }) {
           <ConversationList search={search} selectedId={conversationId} onSelect={openConversation} />
         </div>
         {conversationId
-          ? <ConversationView key={conversationId} conversationId={conversationId} />
+          ? <ConversationView key={conversationId} conversationId={conversationId} canDeleteContacts={canDeleteContacts} onDeleted={() => openConversation("")} />
           : <InboxNotice>Selecione uma conversa para ver as mensagens.</InboxNotice>}
       </div>
     </div>

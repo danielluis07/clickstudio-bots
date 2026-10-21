@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
 import { contact, conversation, message } from "@/db/schema";
 import type { ChannelRoute } from "@/modules/channels";
+import { lockContact, predatesDeletion } from "@/modules/conversations/contact-deletion";
 
 export type InboundTextMessage = {
   wamid: string;
@@ -9,16 +10,20 @@ export type InboundTextMessage = {
   profileName: string | null;
   text: string;
   sentAt: Date;
+  receivedAt?: Date;
 };
 
 // The Contact with this phone and their Conversation on the route's Channel,
 // created on first contact. A message sent at `sentAt` is the latest activity
 // unless a later one is already filed.
-export const fileConversation = async (tx: Transaction, route: ChannelRoute, { phone, profileName, sentAt }: {
+export const fileConversation = async (tx: Transaction, route: ChannelRoute, { phone, profileName, sentAt, receivedAt }: {
   phone: string;
   profileName: string | null;
   sentAt: Date;
+  receivedAt?: Date;
 }) => {
+  const deletedAt = await lockContact(tx, route.tenantId, phone);
+  if (predatesDeletion(deletedAt, sentAt, receivedAt)) return null;
   const [{ contactId }] = await tx.insert(contact)
     .values({ tenantId: route.tenantId, phone, profileName })
     .onConflictDoUpdate({
@@ -46,7 +51,9 @@ export const recordInboundTextMessage = (db: Database, route: ChannelRoute, inbo
       phone: inbound.from,
       profileName: inbound.profileName,
       sentAt: inbound.sentAt,
+      receivedAt: inbound.receivedAt,
     });
+    if (!conversationId) return null;
     await tx.insert(message).values({
       tenantId: route.tenantId,
       conversationId,

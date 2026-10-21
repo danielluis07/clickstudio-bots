@@ -29,27 +29,27 @@ export const createWebhookInbox = ({ db, clock, queue, notifier, appSecret, diag
 
   // Records what the event carries under the route's Tenant; null when it
   // carries nothing the platform handles yet.
-  const recordEvent = async (route: ChannelRoute, payload: unknown): Promise<{
+  const recordEvent = async (route: ChannelRoute, payload: unknown, receivedAt: Date): Promise<{
     conversationId?: string | null;
     contactId?: string | null;
   } | null> => {
     const inbound = readInboundTextMessage(payload);
-    if (inbound) return { conversationId: await recordInboundTextMessage(db, route, inbound) };
+    if (inbound) return { conversationId: await recordInboundTextMessage(db, route, { ...inbound, receivedAt }) };
     const statusUpdate = readMessageStatus(payload);
     if (statusUpdate) return { conversationId: await recordMessageStatus(db, route, statusUpdate) };
     const echo = readMessageEcho(payload);
-    if (echo) return recordMessageEcho(db, route, echo);
+    if (echo) return await recordMessageEcho(db, route, { ...echo, receivedAt }) ?? { conversationId: null };
     const change = readMessageChange(payload);
-    if (change) return { conversationId: await recordMessageChange(db, route, change) };
+    if (change) return { conversationId: await recordMessageChange(db, route, { ...change, receivedAt }) };
     // Imported history is never a reason for a Bot turn or a Handoff.
     const history = readHistory(payload);
     if (history?.declined) {
       await recordHistoryDeclined(db, route);
       return {};
     }
-    if (history) return { conversationId: await recordImportedHistory(db, route, history.history) };
+    if (history) return { conversationId: await recordImportedHistory(db, route, { ...history.history, receivedAt }) };
     const appContact = readAppContact(payload);
-    if (appContact) return { contactId: await recordAppContact(db, route, appContact) };
+    if (appContact) return { contactId: await recordAppContact(db, route, { ...appContact, receivedAt }) };
     return null;
   };
 
@@ -67,7 +67,7 @@ export const createWebhookInbox = ({ db, clock, queue, notifier, appSecret, diag
     try {
       const route = event.phoneNumberId ? await resolveChannelPhoneNumber(db, event.phoneNumberId) : null;
       tenantId = route?.tenantId;
-      const recorded = route && await recordEvent(route, event.payload);
+      const recorded = route && await recordEvent(route, event.payload, event.receivedAt);
       if (!recorded) {
         await repository.settle(inboxEventId, clock.now(), {
           status: "ignored", ignoredReason: route ? "unsupported_event" : "unknown_channel",

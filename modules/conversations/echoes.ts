@@ -12,6 +12,7 @@ export type MessageEcho = {
   to: string;
   text: string;
   sentAt: Date;
+  receivedAt?: Date;
 };
 
 // What an echo was: a Member's reply from the app, or the echo of a message
@@ -50,7 +51,7 @@ const classify = (stored: { origin: string; conversationId: string }): EchoClass
 // from the app. An echo of an own send changes nothing. Safe to repeat: a
 // repeated echo is classified as it was the first time.
 export const recordMessageEcho = (db: Database, route: ChannelRoute, echo: MessageEcho) =>
-  db.transaction(async (tx): Promise<EchoClassification> => {
+  db.transaction(async (tx): Promise<EchoClassification | null> => {
     const findStored = async () => {
       const [stored] = await tx.select({ origin: message.origin, conversationId: message.conversationId })
         .from(message)
@@ -61,7 +62,10 @@ export const recordMessageEcho = (db: Database, route: ChannelRoute, echo: Messa
     const stored = await findStored();
     if (stored) return classify(stored);
 
-    const conversationId = await fileConversation(tx, route, { phone: echo.to, profileName: null, sentAt: echo.sentAt });
+    const conversationId = await fileConversation(tx, route, {
+      phone: echo.to, profileName: null, sentAt: echo.sentAt, receivedAt: echo.receivedAt,
+    });
+    if (!conversationId) return null;
     const [inserted] = await tx.insert(message).values({
       tenantId: route.tenantId,
       conversationId,

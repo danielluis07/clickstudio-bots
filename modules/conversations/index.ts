@@ -1,6 +1,6 @@
 // Contacts, their Conversations with a Tenant on one Channel, and the
 // messages in them.
-export { recordAppContact, renameContact, type AppContact } from "@/modules/conversations/contacts";
+export { deleteContact, recordAppContact, renameContact, type AppContact } from "@/modules/conversations/contacts";
 export { recordMessageChange, type MessageChange } from "@/modules/conversations/changes";
 export { recordMessageEcho, type EchoClassification, type MessageEcho } from "@/modules/conversations/echoes";
 export { recordImportedHistory, type ImportedHistory } from "@/modules/conversations/history";

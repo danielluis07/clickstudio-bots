@@ -3,6 +3,15 @@ import { id, timestamps } from "@/db/columns";
 import { channel } from "@/db/schema/channels";
 import { member, organization } from "@/db/schema/tenancy";
 
+// Minimal replay barrier, independent of the deleted Contact's id. Keep no
+// name, phone, message text or captured data. The cutoff survives a fresh
+// Contact so late historical events cannot restore earlier content.
+export const contactDeletion = pgTable("contact_deletion", {
+  tenantId: text("tenant_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
+  addressHash: text("address_hash").notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }).notNull(),
+}, (t) => [uniqueIndex("contact_deletion_tenant_id_address_hash_unique").on(t.tenantId, t.addressHash)]);
+
 export const contact = pgTable("contact", {
   id: id(),
   tenantId: text("tenant_id").notNull()
@@ -76,6 +85,8 @@ export const messageChange = pgTable("message_change", {
   // The change event's own wamid.
   wamid: text("wamid").notNull(),
   originalWamid: text("original_wamid").notNull(),
+  // Locates an edit for erasure even if its original message has not arrived.
+  contactAddressHash: text("contact_address_hash").notNull(),
   // The direction of the changed message: the Contact changes only their own
   // messages, and the Tenant only its own.
   direction: text("direction", { enum: ["inbound", "outbound"] }).notNull(),
@@ -87,4 +98,5 @@ export const messageChange = pgTable("message_change", {
 }, (t) => [
   uniqueIndex("message_change_tenant_id_kind_wamid_unique").on(t.tenantId, t.kind, t.wamid),
   index("message_change_tenant_id_original_wamid_idx").on(t.tenantId, t.originalWamid),
+  index("message_change_tenant_id_contact_address_hash_idx").on(t.tenantId, t.contactAddressHash),
 ]);
