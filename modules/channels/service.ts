@@ -13,13 +13,36 @@ const signupSchema = z.object({
 });
 
 export type ChannelSignup = z.input<typeof signupSchema>;
-export type ChannelSummary = NonNullable<Awaited<ReturnType<ReturnType<typeof createChannelRepository>["getChannel"]>>>;
+// Meta accepts the contacts and history requests within 24 hours of onboarding.
+const syncWindowMs = 24 * 60 * 60 * 1000;
+
+const appSyncs = [
+  // Meta's order: contacts first, then history.
+  { sync: "contactsSync", syncType: "smb_app_state_sync" },
+  { sync: "historySync", syncType: "history" },
+] as const;
 
 export const createChannelService = ({ db, clock, getWhatsApp }: {
   db: Database;
   clock: Clock;
   getWhatsApp: () => WhatsAppGateway;
 }) => {
+  // Channels onboarded before this can no longer ask Meta for a sync.
+  const syncWindowOpenedAfter = () => new Date(clock.now().getTime() - syncWindowMs);
+
+  // Asks once for the app's contacts and history. A refused request is final:
+  // Meta allows no second attempt without onboarding again.
+  const requestAppSyncs = async (scope: TenantScope, stored: NonNullable<Awaited<ReturnType<ReturnType<typeof createChannelRepository>["getCredential"]>>>) => {
+    const repository = createChannelRepository(db, scope);
+    const onboardedAfter = syncWindowOpenedAfter();
+    for (const { sync, syncType } of appSyncs) {
+      if (!await repository.claimSync(sync, onboardedAfter)) continue;
+      const result = await Promise.resolve().then(() => getWhatsApp().requestAppSync({ ...stored, syncType }))
+        .catch(() => ({ ok: false }));
+      if (!result.ok) await repository.recordSyncFailure(sync);
+    }
+  };
+
   const subscribe = async (scope: TenantScope) => {
     const repository = createChannelRepository(db, scope);
     const stored = await repository.getCredential();
@@ -31,13 +54,25 @@ export const createChannelService = ({ db, clock, getWhatsApp }: {
       subscriptionAttemptedAt: clock.now(),
       subscriptionError: result.ok ? null : result.error,
     });
+    // History arrives as webhooks, so it is requested only once they flow.
+    if (result.ok) await requestAppSyncs(scope, stored);
     return { ok: true as const };
   };
 
+  const getChannel = async (scope: TenantScope) => {
+    const found = await createChannelRepository(db, scope).getChannel();
+    if (!found) return null;
+    const { historySync, createdAt, ...summary } = found;
+    const windowClosed = createdAt <= syncWindowOpenedAfter();
+    return {
+      ...summary,
+      // Shown as "Histórico não importado": refused, declined or never requested in time.
+      historyNotImported: historySync === "failed" || historySync === "declined" || (historySync === "pending" && windowClosed),
+    };
+  };
+
   return {
-    getChannel(scope: TenantScope) {
-      return createChannelRepository(db, scope).getChannel();
-    },
+    getChannel,
     resolvePhoneNumber(phoneNumberId: string) {
       return resolveChannelPhoneNumber(db, phoneNumberId);
     },
@@ -53,7 +88,7 @@ export const createChannelService = ({ db, clock, getWhatsApp }: {
       if (!exchanged) return { ok: false as const, error: "signup_failed" as const };
       // Unique constraints decide races without holding a transaction over Meta.
       const inserted = await repository.insert({
-        ...exchanged, wabaId: parsed.data.wabaId, subscriptionFields: [...whatsAppWebhookFields],
+        ...exchanged, wabaId: parsed.data.wabaId, subscriptionFields: [...whatsAppWebhookFields], createdAt: clock.now(),
       });
       if (!inserted) return { ok: false as const, error: "channel_conflict" as const };
       await subscribe(scope);
@@ -65,3 +100,5 @@ export const createChannelService = ({ db, clock, getWhatsApp }: {
     },
   };
 };
+
+export type ChannelSummary = NonNullable<Awaited<ReturnType<ReturnType<typeof createChannelService>["getChannel"]>>>;

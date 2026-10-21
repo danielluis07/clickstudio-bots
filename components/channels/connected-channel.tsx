@@ -1,3 +1,4 @@
+import { HistoryNotImportedNotice } from "@/components/channels/history-not-imported-notice";
 import { RetrySubscriptionButton } from "@/components/channels/retry-subscription-button";
 import type { ChannelSummary } from "@/modules/channels";
 
@@ -6,6 +7,7 @@ export function ConnectedChannel({ channel, isOwner }: { channel: ChannelSummary
     <div className="flex flex-col gap-3">
       <p className="font-medium">WhatsApp Business: {channel.displayPhoneNumber}</p>
       <p>{channel.botEnabled ? "Bot ligado" : "Bot desligado"}</p>
+      {channel.historyNotImported && <HistoryNotImportedNotice />}
       {channel.subscriptionStatus === "subscribed" ? (
         <p className="text-sm text-muted-foreground">Canal conectado e recebimento de eventos confirmado.</p>
       ) : (

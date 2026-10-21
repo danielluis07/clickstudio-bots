@@ -15,13 +15,19 @@ const clock = createTestClock(new Date("2026-10-20T12:00:00Z"));
 
 const harness = (phoneNumberId = "300") => {
   const requests: string[] = [];
+  const syncRequests: unknown[] = [];
   let failSubscription = false;
+  let failSync = false;
   const adapter = createWhatsAppAdapter({
     appId: "100", appSecret: "app-secret", graphVersion: "v26.0",
     activeKeyVersion: "v1", encryptionKeys: { v1: Buffer.alloc(32, 7).toString("base64") },
-    async fetch(url) {
+    async fetch(url, init) {
       requests.push(String(url));
       if (String(url).endsWith("oauth/access_token")) return Response.json({ access_token: "secret-token" });
+      if (String(url).endsWith("/smb_app_data")) {
+        syncRequests.push({ url: String(url), headers: init?.headers, body: JSON.parse(String(init?.body)) });
+        return failSync ? new Response(null, { status: 400 }) : Response.json({ messaging_product: "whatsapp", request_id: "request-1" });
+      }
       if (String(url).includes("phone_numbers")) return Response.json({ data: [{ id: phoneNumberId, display_phone_number: "+55 11 99999-0000", is_on_biz_app: true, platform_type: "CLOUD_API" }] });
       if (String(url).endsWith("/subscriptions")) return Response.json({ data: [{ object: "whatsapp_business_account", active: true, fields: whatsAppWebhookFields.map((name) => ({ name })) }] });
       return Response.json({ success: !failSubscription });
@@ -30,7 +36,9 @@ const harness = (phoneNumberId = "300") => {
   return {
     service: createChannelService({ db, clock, getWhatsApp: () => adapter }),
     requests,
+    syncRequests,
     setFailure(value: boolean) { failSubscription = value; },
+    setSyncFailure(value: boolean) { failSync = value; },
   };
 };
 
@@ -60,7 +68,16 @@ beforeAll(async () => {
   otherOwner = await resolve("other");
 });
 
-beforeEach(async () => { await db.delete(channel); });
+beforeEach(async () => {
+  await db.delete(channel);
+  clock.set(new Date("2026-10-20T12:00:00Z"));
+});
+
+const syncRequest = (syncType: string) => ({
+  url: "https://graph.facebook.com/v26.0/300/smb_app_data",
+  headers: { Authorization: "Bearer secret-token", "Content-Type": "application/json" },
+  body: { messaging_product: "whatsapp", sync_type: syncType },
+});
 
 describe("Channels", () => {
   test("only the owner connects a Channel, with its Bot off and a safe summary", async () => {
@@ -115,5 +132,62 @@ describe("Channels", () => {
     const unavailable = createChannelService({ db, clock, getWhatsApp() { throw new Error("secret-token"); } });
     expect(await unavailable.connect(owner, { code: "signup-code", wabaId: "200" })).toEqual({ ok: false, error: "signup_failed" });
     expect(await service.getChannel(owner)).toBeNull();
+  });
+
+  test("requests contacts sync then history once, as soon as the subscription is confirmed", async () => {
+    const { service, syncRequests } = harness();
+    expect(await service.connect(owner, { code: "signup-code", wabaId: "200" })).toEqual({ ok: true });
+    expect(syncRequests).toEqual([syncRequest("smb_app_state_sync"), syncRequest("history")]);
+    expect(await service.getChannel(owner)).toMatchObject({ historyNotImported: false });
+
+    expect(await service.retrySubscription(owner)).toEqual({ ok: true });
+    expect(syncRequests).toHaveLength(2);
+  });
+
+  test("a subscription confirmed on retry within 24 hours of onboarding still requests history", async () => {
+    const { service, syncRequests, setFailure } = harness();
+    setFailure(true);
+    await service.connect(owner, { code: "signup-code", wabaId: "200" });
+    expect(syncRequests).toEqual([]);
+    expect(await service.getChannel(owner)).toMatchObject({ historyNotImported: false });
+
+    setFailure(false);
+    clock.advance(23 * 60 * 60 * 1000);
+    await service.retrySubscription(owner);
+    expect(syncRequests).toEqual([syncRequest("smb_app_state_sync"), syncRequest("history")]);
+  });
+
+  test("history is not imported once 24 hours pass without a confirmed subscription", async () => {
+    const { service, syncRequests, setFailure } = harness();
+    setFailure(true);
+    await service.connect(owner, { code: "signup-code", wabaId: "200" });
+
+    clock.advance(24 * 60 * 60 * 1000);
+    expect(await service.getChannel(owner)).toMatchObject({ historyNotImported: true });
+    setFailure(false);
+    await service.retrySubscription(owner);
+    expect(syncRequests).toEqual([]);
+    expect(await service.getChannel(owner)).toMatchObject({ subscriptionStatus: "subscribed", historyNotImported: true });
+  });
+
+  test("a history request Meta refuses is not repeated and shows history not imported", async () => {
+    const { service, syncRequests, setSyncFailure } = harness();
+    setSyncFailure(true);
+    await service.connect(owner, { code: "signup-code", wabaId: "200" });
+    expect(syncRequests).toHaveLength(2);
+    expect(await service.getChannel(owner)).toMatchObject({ subscriptionStatus: "subscribed", historyNotImported: true });
+
+    setSyncFailure(false);
+    await service.retrySubscription(owner);
+    expect(syncRequests).toHaveLength(2);
+  });
+
+  test("concurrent retries request history only once", async () => {
+    const { service, syncRequests, setFailure } = harness();
+    setFailure(true);
+    await service.connect(owner, { code: "signup-code", wabaId: "200" });
+    setFailure(false);
+    await Promise.all([service.retrySubscription(owner), service.retrySubscription(owner)]);
+    expect(syncRequests).toEqual([syncRequest("smb_app_state_sync"), syncRequest("history")]);
   });
 });

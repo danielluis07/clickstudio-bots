@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { id, timestamps } from "@/db/columns";
 import { channel } from "@/db/schema/channels";
 import { member, organization } from "@/db/schema/tenancy";
@@ -14,6 +14,10 @@ export const contact = pgTable("contact", {
   // The name a Member gave the Contact. Shown instead of the profile name and
   // never overwritten by inbound messages.
   name: text("name"),
+  // The name saved for the Contact in the WhatsApp Business app's contacts,
+  // synced through coexistence, and when the app last changed it.
+  appName: text("app_name"),
+  appNameChangedAt: timestamp("app_name_changed_at", { withTimezone: true }),
   ...timestamps(),
 }, (t) => [uniqueIndex("contact_tenant_id_phone_unique").on(t.tenantId, t.phone)]);
 
@@ -53,6 +57,9 @@ export const message = pgTable("message", {
   type: text("type", { enum: ["text"] }).notNull(),
   text: text("text"),
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull(),
+  // Shared from the WhatsApp Business app's history after onboarding. Never a
+  // reason for a Bot turn, a Handoff or a counted Bot reply.
+  imported: boolean("imported").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
   uniqueIndex("message_tenant_id_wamid_unique").on(t.tenantId, t.wamid),

@@ -5,8 +5,9 @@ import { contact, conversation, member, message, messageChange, user } from "@/d
 import { recordSentWamid } from "@/modules/conversations/echoes";
 import type { TenantScope } from "@/modules/tenancy";
 
-// Matches the Contact name a Member gave, the WhatsApp profile name, or the
-// phone digits, so "(21) 98888-7777" finds 5521988887777.
+// Matches the Contact name a Member gave, the name saved in the WhatsApp
+// Business app, the WhatsApp profile name, or the phone digits, so
+// "(21) 98888-7777" finds 5521988887777.
 const matchesSearch = (search: string) => {
   const term = search.trim();
   if (!term) return undefined;
@@ -15,6 +16,7 @@ const matchesSearch = (search: string) => {
   const phoneShaped = digits && /^[\d\s()+.-]+$/.test(term);
   return or(
     ilike(contact.name, pattern),
+    ilike(contact.appName, pattern),
     ilike(contact.profileName, pattern),
     phoneShaped ? like(contact.phone, `%${digits}%`) : undefined,
   );
@@ -27,6 +29,7 @@ const contactFields = {
   id: contact.id,
   phone: contact.phone,
   profileName: contact.profileName,
+  appName: contact.appName,
   name: contact.name,
 };
 
@@ -124,6 +127,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope) =
         // As last edited; a revoked message shows no text.
         text: sql<string | null>`case when ${revokedAt} is null then coalesce(${latestEditText}, ${message.text}) end`,
         sentAt: message.sentAt,
+        imported: message.imported,
         editedAt,
         revokedAt,
       }).from(message)

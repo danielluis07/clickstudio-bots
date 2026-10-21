@@ -62,13 +62,13 @@ describe("Inbox Conversation list", () => {
       {
         id: expect.any(String),
         channelId: "channel-a",
-        contact: { id: expect.any(String), phone: "5511900000001", profileName: "Ana", name: null },
+        contact: { id: expect.any(String), phone: "5511900000001", profileName: "Ana", appName: null, name: null },
         lastMessageAt: new Date("2026-10-20T11:00:00Z"),
       },
       {
         id: expect.any(String),
         channelId: "channel-a",
-        contact: { id: expect.any(String), phone: "5511900000002", profileName: "Bruno", name: null },
+        contact: { id: expect.any(String), phone: "5511900000002", profileName: "Bruno", appName: null, name: null },
         lastMessageAt: new Date("2026-10-20T10:00:00Z"),
       },
     ]);
@@ -125,13 +125,13 @@ describe("Conversation view", () => {
     expect(await inbox.getConversation(id)).toEqual({
       id,
       channelId: "channel-a",
-      contact: { id: expect.any(String), phone: "5511900000001", profileName: "Ana", name: null },
+      contact: { id: expect.any(String), phone: "5511900000001", profileName: "Ana", appName: null, name: null },
       serviceWindowClosesAt: new Date("2026-10-21T09:05:00Z"),
     });
     expect(await inbox.listMessages(id)).toEqual({
       messages: [
-        { id: expect.any(String), wamid: expect.any(String), direction: "inbound", origin: "contact", authorName: null, status: null, type: "text", text: "Primeira", sentAt: new Date("2026-10-20T09:00:00Z"), editedAt: null, revokedAt: null },
-        { id: expect.any(String), wamid: expect.any(String), direction: "inbound", origin: "contact", authorName: null, status: null, type: "text", text: "Segunda", sentAt: new Date("2026-10-20T09:05:00Z"), editedAt: null, revokedAt: null },
+        { id: expect.any(String), wamid: expect.any(String), direction: "inbound", origin: "contact", authorName: null, status: null, type: "text", text: "Primeira", sentAt: new Date("2026-10-20T09:00:00Z"), imported: false, editedAt: null, revokedAt: null },
+        { id: expect.any(String), wamid: expect.any(String), direction: "inbound", origin: "contact", authorName: null, status: null, type: "text", text: "Segunda", sentAt: new Date("2026-10-20T09:05:00Z"), imported: false, editedAt: null, revokedAt: null },
       ],
       nextCursor: null,
     });
@@ -172,12 +172,12 @@ describe("Contact panel", () => {
     const [{ id, contact: { id: contactId } }] = (await inbox.listConversations()).conversations;
 
     expect(await inbox.renameContact(contactId, "  Ana Souza (Loja Centro)  ")).toEqual({
-      id: contactId, phone: "5511900000001", profileName: "Ana", name: "Ana Souza (Loja Centro)",
+      id: contactId, phone: "5511900000001", profileName: "Ana", appName: null, name: "Ana Souza (Loja Centro)",
     });
     await receive(channelA, "5511900000001", "Tudo bem?", "2026-10-20T09:05:00Z", "Ana WhatsApp");
 
     expect((await inbox.getConversation(id))?.contact).toEqual({
-      id: contactId, phone: "5511900000001", profileName: "Ana WhatsApp", name: "Ana Souza (Loja Centro)",
+      id: contactId, phone: "5511900000001", profileName: "Ana WhatsApp", appName: null, name: "Ana Souza (Loja Centro)",
     });
     expect((await inbox.listConversations({ search: "loja centro" })).conversations.map((found) => found.id)).toEqual([id]);
   });

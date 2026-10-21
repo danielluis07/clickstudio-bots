@@ -7,7 +7,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useContactNameForm } from "@/modules/conversations/hooks";
 
 type ContactNameFormProps = {
-  contact: { id: string; name: string | null; profileName: string | null };
+  contact: { id: string; name: string | null; appName: string | null; profileName: string | null };
 };
 
 export function ContactNameForm({ contact }: ContactNameFormProps) {
@@ -22,7 +22,7 @@ export function ContactNameForm({ contact }: ContactNameFormProps) {
             id="contact-name"
             maxLength={100}
             autoComplete="off"
-            placeholder={contact.profileName ?? "Sem nome"}
+            placeholder={contact.appName ?? contact.profileName ?? "Sem nome"}
             value={name}
             onChange={(event) => changeName(event.target.value)}
           />

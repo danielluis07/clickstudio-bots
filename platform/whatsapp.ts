@@ -114,6 +114,23 @@ export const createWhatsAppAdapter = (options: Options) => {
       }
     },
 
+    async requestAppSync(input: WhatsAppCredentialContext & {
+      credential: EncryptedWhatsAppToken;
+      syncType: "smb_app_state_sync" | "history";
+    }) {
+      try {
+        const result = await request(`${input.phoneNumberId}/smb_app_data`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${cipher.decrypt(input.credential, input)}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ messaging_product: "whatsapp", sync_type: input.syncType }),
+        });
+        // Acceptance only; whether the business shares its history arrives later.
+        return { ok: z.object({ request_id: z.string().min(1) }).safeParse(result).success };
+      } catch {
+        return { ok: false };
+      }
+    },
+
     async sendText(input: WhatsAppCredentialContext & { credential: EncryptedWhatsAppToken; to: string; text: string }) {
       try {
         const token = cipher.decrypt(input.credential, input);
