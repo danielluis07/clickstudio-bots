@@ -1,9 +1,9 @@
-import { expect, test } from "bun:test";
+import { expect, onTestFinished, test } from "bun:test";
 import { createWebhookInbox } from "@/modules/webhook-inbox";
 import { createReplayInboxAction } from "@/server/inbox-administration";
 import { idleFormState } from "@/server/actions/form-state";
 import { createTestClock } from "@/test/support/clock";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
 
@@ -14,6 +14,7 @@ test("the replay action authenticates before parsing input or accessing an unava
 
 test("the replay action validates event IDs and returns fixed pt-BR errors without exposing processing details", async () => {
   const db = await createTestDatabase();
+  onTestFinished(() => closeTestDatabase(db));
   const inbox = createWebhookInbox({ db, clock: createTestClock(), queue: createTestJobQueue(), notifier: createTestNotifier(), appSecret: "secret" });
   // A forged transport identity still fails the module's database role check.
   const action = createReplayInboxAction({ inbox, requireAdmin: async () => ({ user: { id: "unknown" } }) });

@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { channel, contact, conversation, inboxEvent, member, message, organization, user } from "@/db/schema";
 import { createConversationRepository } from "@/modules/conversations";
@@ -6,7 +6,7 @@ import { resolveTenantScope } from "@/modules/tenancy";
 import { createWebhookInbox } from "@/modules/webhook-inbox";
 import type { Diagnostic } from "@/platform/diagnostics";
 import { createTestClock } from "@/test/support/clock";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
 import { metaAppSecret, metaDelivery, signMetaDelivery, textMessageChange } from "@/test/support/meta-webhook";
@@ -16,6 +16,8 @@ const clock = createTestClock(new Date("2026-10-21T12:00:00Z"));
 let queue = createTestJobQueue();
 let notifier = createTestNotifier();
 let inbox: ReturnType<typeof createWebhookInbox>;
+
+afterAll(() => closeTestDatabase(db));
 
 beforeAll(async () => {
   db = await createTestDatabase();

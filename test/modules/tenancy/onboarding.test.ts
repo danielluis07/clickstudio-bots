@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { createTenantOnboarding } from "@/modules/tenancy";
 import { createPlatformAdmin } from "@/modules/identity";
 import { createTestClock, type TestClock } from "@/test/support/clock";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestMailer, type TestMailer } from "@/test/support/mailer";
 
 const appUrl = "https://bots.example.com";
@@ -13,6 +13,8 @@ let mailer: TestMailer;
 let clock: TestClock;
 let onboarding: ReturnType<typeof createTenantOnboarding>;
 let adminId: string;
+
+afterEach(() => closeTestDatabase(db));
 
 beforeEach(async () => {
   db = await createTestDatabase();

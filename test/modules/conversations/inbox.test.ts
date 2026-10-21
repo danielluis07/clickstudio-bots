@@ -1,10 +1,10 @@
-import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { channel, contact, conversation, member, message, organization, user } from "@/db/schema";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
 import { createConversationRepository, recordInboundTextMessage } from "@/modules/conversations";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 
 let db: Database;
 let tenantA: TenantScope;
@@ -17,6 +17,8 @@ const receive = (route: ChannelRoute, from: string, text: string, sentAt: string
   recordInboundTextMessage(db, route, { wamid: `wamid.${++sequence}`, from, profileName, text, sentAt: new Date(sentAt) });
 
 const inboxOf = (scope: TenantScope) => createConversationRepository(db, scope);
+
+afterAll(() => closeTestDatabase(db));
 
 beforeAll(async () => {
   db = await createTestDatabase();

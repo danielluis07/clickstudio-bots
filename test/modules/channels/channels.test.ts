@@ -1,11 +1,11 @@
-import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { channel, member, organization, user } from "@/db/schema";
 import { createChannelService } from "@/modules/channels";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { createWhatsAppAdapter, whatsAppWebhookFields } from "@/platform/whatsapp";
 import { createTestClock } from "@/test/support/clock";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 
 let db: Database;
 let owner: TenantScope;
@@ -41,6 +41,8 @@ const harness = (phoneNumberId = "300") => {
     setSyncFailure(value: boolean) { failSync = value; },
   };
 };
+
+afterAll(() => closeTestDatabase(db));
 
 beforeAll(async () => {
   db = await createTestDatabase();

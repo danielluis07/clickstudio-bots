@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { invitation } from "@/db/schema";
 import { createPlatformAdmin } from "@/modules/identity";
@@ -9,7 +9,7 @@ import {
   type TenantScope,
 } from "@/modules/tenancy";
 import { createTestClock } from "@/test/support/clock";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestMailer } from "@/test/support/mailer";
 
 const acceptedAt = new Date("2026-03-10T15:30:00.000Z");
@@ -60,6 +60,8 @@ const addPendingInvitation = async (tenantId: string, inviterId: string) => {
     .returning({ id: invitation.id });
   return created.id;
 };
+
+afterAll(() => closeTestDatabase(db));
 
 beforeAll(async () => {
   db = await createTestDatabase();

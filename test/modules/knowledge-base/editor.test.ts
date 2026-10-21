@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { channel, member, organization, user } from "@/db/schema";
 import { createBotCore } from "@/modules/bot";
@@ -7,7 +7,7 @@ import { createKnowledgeBaseEditor, readKnowledgeBase, type NewKnowledgeBaseEntr
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { createTestBotRepository, createTestUsageMeter } from "@/test/support/bot";
 import { createTestClock, type TestClock } from "@/test/support/clock";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestModel, type TestModel } from "@/test/support/model";
 
 let db: Database;
@@ -26,6 +26,8 @@ const added = async (input: NewKnowledgeBaseEntry, scope = ownerA) => {
   if (!result.ok) throw new Error(`setup failed: ${result.error}`);
   return result.entryId;
 };
+
+afterEach(() => closeTestDatabase(db));
 
 beforeEach(async () => {
   db = await createTestDatabase();

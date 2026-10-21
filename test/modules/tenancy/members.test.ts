@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { createPlatformAdmin, createUserRepository } from "@/modules/identity";
 import {
@@ -10,7 +10,7 @@ import {
   type TenantScope,
 } from "@/modules/tenancy";
 import { createTestClock, type TestClock } from "@/test/support/clock";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestMailer, type TestMailer } from "@/test/support/mailer";
 
 const appUrl = "https://bots.example.com";
@@ -61,6 +61,8 @@ const joinAsMember = async (scope: TenantScope, email: string) => {
   if (!accepted.ok) throw new Error(`setup failed: ${accepted.error}`);
   return scopeOf(accepted.userId, scope.tenantId);
 };
+
+afterEach(() => closeTestDatabase(db));
 
 beforeEach(async () => {
   db = await createTestDatabase();

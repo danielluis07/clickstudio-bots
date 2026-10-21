@@ -18,10 +18,21 @@ const dumpMigratedDataDir = async () => {
   return dump;
 };
 
-// A fresh, fully migrated database, independent of every other one.
+const clients = new WeakMap<Database, PGlite>();
+
+// A fresh, fully migrated database, independent of every other one. Close it
+// with closeTestDatabase when the test or file is done: an open PGlite keeps
+// its memory until the process exits, and the whole run shares one process.
 export const createTestDatabase = async (): Promise<Database> => {
   migratedDataDir ??= dumpMigratedDataDir();
   const client = new PGlite({ loadDataDir: await migratedDataDir });
   await client.waitReady;
-  return drizzle({ client });
+  const db = drizzle({ client });
+  clients.set(db, client);
+  return db;
+};
+
+export const closeTestDatabase = async (db: Database) => {
+  await clients.get(db)?.close();
+  clients.delete(db);
 };

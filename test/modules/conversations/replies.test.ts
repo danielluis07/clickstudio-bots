@@ -1,11 +1,11 @@
-import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { channel, contact, conversation, member, message, organization, user } from "@/db/schema";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
 import { createConversationRepository, createReplyService, recordInboundTextMessage, recordMessageEcho } from "@/modules/conversations";
 import { createMemberManagement, resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { createTestClock } from "@/test/support/clock";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestMailer } from "@/test/support/mailer";
 import { createTestWhatsAppSender, type TestWhatsAppSender } from "@/test/support/whatsapp-sender";
 import { createTestNotifier, type TestNotifier } from "@/test/support/notifier";
@@ -32,6 +32,8 @@ const receive = async (route: ChannelRoute, sentAt: string, from = "551198888777
 
 const messagesOf = async (scope: TenantScope, conversationId: string) =>
   (await createConversationRepository(db, scope).listMessages(conversationId))!.messages;
+
+afterAll(() => closeTestDatabase(db));
 
 beforeAll(async () => {
   db = await createTestDatabase();
