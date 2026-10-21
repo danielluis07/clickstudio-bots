@@ -1,6 +1,6 @@
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
-import { isEuSentryDsn } from "@/platform/diagnostics";
+import { isUsSentryDsn } from "@/platform/diagnostics";
 
 export const env = createEnv({
   /*
@@ -29,7 +29,7 @@ export const env = createEnv({
     QSTASH_TOKEN: z.string().min(1).optional(),
     QSTASH_CURRENT_SIGNING_KEY: z.string().min(1).optional(),
     QSTASH_NEXT_SIGNING_KEY: z.string().min(1).optional(),
-    SENTRY_DSN: z.url().refine(isEuSentryDsn, "Sentry requires an EU project DSN").optional(),
+    SENTRY_DSN: z.url().refine(isUsSentryDsn, "Sentry requires a US project DSN").optional(),
     CRON_SECRET: z.string().min(16).optional(),
   },
   runtimeEnv: {

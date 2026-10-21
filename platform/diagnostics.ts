@@ -31,10 +31,10 @@ export const scrubDiagnostic = (input: unknown): Diagnostic => {
   return clean;
 };
 
-export const isEuSentryDsn = (dsn: string) => {
+export const isUsSentryDsn = (dsn: string) => {
   try {
     const url = new URL(dsn);
-    return url.protocol === "https:" && /^o\d+\.ingest\.de\.sentry\.io$/.test(url.hostname)
+    return url.protocol === "https:" && /^o\d+\.ingest(?:\.us)?\.sentry\.io$/.test(url.hostname)
       && Boolean(url.username) && !url.password && /^\/\d+$/.test(url.pathname) && !url.search && !url.hash;
   } catch {
     return false;

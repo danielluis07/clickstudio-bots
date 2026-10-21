@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NodeClient, defaultStackParser, makeNodeTransport, type ErrorEvent, type NodeOptions } from "@sentry/node";
-import { isEuSentryDsn, scrubDiagnostic, type Diagnostic } from "@/platform/diagnostics";
+import { isUsSentryDsn, scrubDiagnostic, type Diagnostic } from "@/platform/diagnostics";
 
 export const scrubSentryEvent = (event: ErrorEvent): ErrorEvent => {
   const clean = scrubDiagnostic(event.tags);
@@ -19,7 +19,7 @@ export const createDiagnostics = ({ dsn, writeLog = (entry) => console.error(JSO
   writeLog?: (entry: Diagnostic) => void;
   transport?: NodeOptions["transport"];
 } = {}) => {
-  if (dsn && !isEuSentryDsn(dsn)) throw new Error("Sentry requires an EU project DSN");
+  if (dsn && !isUsSentryDsn(dsn)) throw new Error("Sentry requires a US project DSN");
   const deliveries = new Map<string, Set<() => void>>();
   // An isolated client with no integrations: no automatic request, console,
   // database, session, tracing or unhandled-error capture can ship content.

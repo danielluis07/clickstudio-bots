@@ -63,7 +63,7 @@ export function PrivacyPolicy() {
           Neon, Anthropic e Groq. QStash e Ably recebem apenas identificadores para
           tarefas e atualizações. Resend recebe os dados de membros necessários
           aos e-mails do serviço. Sentry recebe diagnósticos com conteúdo pessoal
-          removido, em sua região da União Europeia.
+          removido, em sua região dos Estados Unidos.
         </p>
         <p>
           Consulte os fornecedores, categorias de dados e locais na página de

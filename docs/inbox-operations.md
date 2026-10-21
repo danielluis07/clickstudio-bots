@@ -2,6 +2,9 @@
 
 Issue: [#48](https://github.com/danielluis07/clickstudio-bots/issues/48).
 
+The selected Sentry storage region is **US (Iowa)**. This replaces the original
+EU requirement in #48 following the project owner's region decision.
+
 ## Deployment
 
 Run `bun run db:migrate` before deploying. The migration adds nullable failure
@@ -12,14 +15,20 @@ Configure these server-only variables in addition to the existing
 
 | Variable | Value |
 | --- | --- |
-| `SENTRY_DSN` | Project DSN from a Sentry organization created in the **EU (Germany)** region. The application accepts only HTTPS `o….ingest.de.sentry.io` DSNs. |
+| `SENTRY_DSN` | Project DSN from a Sentry organization created in the **US (Iowa)** region. The application accepts HTTPS `o….ingest.us.sentry.io` and `o….ingest.sentry.io` DSNs. |
 | `CRON_SECRET` | Random secret of at least 16 characters. Vercel sends it as `Authorization: Bearer <secret>`. |
 
-The repository configures the integration; creating the EU Sentry organization,
+The repository configures the integration; creating the US Sentry organization,
 setting its project DSN and an issue alert rule, and setting deployment secrets
 are deployment steps. Without `SENTRY_DSN`, diagnostics go only to the scrubbed
 structured logger. Without `CRON_SECRET`, the daily endpoint returns 503 and
-does not delete anything. Never use a US DSN to enable alerts.
+does not delete anything. Use the DSN supplied by the US project.
+
+Sentry receives alerts only from the background dead-letter callback. Successful
+message processing and dashboard requests make no Sentry network calls. Its
+region affects alert delivery latency, not the successful messaging path. US
+storage avoids a cross-Atlantic route from the planned US East application
+deployment; no production latency benchmark is implied by this choice.
 
 For Sentry SDK v11, PII collection is disabled through `dataCollection`: user
 information, cookies, HTTP headers/bodies, URL query parameters, GraphQL/AI data,
