@@ -80,7 +80,8 @@ recover a known retained pending event through the same replay action.
 
 The later Contact-deletion feature must invalidate outstanding failed/pending
 events for that Contact, including failures after committed writes, and test
-replay after deletion. Terminal processed/ignored events already remain no-ops.
+replay after deletion. That includes retained `history` events, whose replay
+files the Contact's imported Conversation again (#49). Terminal processed/ignored events already remain no-ops.
 
 ## Daily tasks
 

@@ -113,6 +113,7 @@ describe("Dashboard replies", () => {
       type: "text",
       text: "Abrimos às 9h!",
       sentAt: new Date("2026-10-21T10:00:00Z"),
+      imported: false,
       editedAt: null,
       revokedAt: null,
     });

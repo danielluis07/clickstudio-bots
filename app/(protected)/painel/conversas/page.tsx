@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PrefetchedInbox } from "@/components/inbox/prefetched-inbox";
 import { searchParamText } from "@/lib/search-params";
 import { requireTenantScope } from "@/server/auth/guards";
+import { channelService } from "@/server/services";
 
 export const metadata: Metadata = {
   title: "Conversas",
@@ -9,8 +10,14 @@ export const metadata: Metadata = {
 };
 
 export default async function ConversationsPage({ searchParams }: PageProps<"/painel/conversas">) {
-  await requireTenantScope();
-  const { busca, conversa } = await searchParams;
+  const scope = await requireTenantScope();
+  const [{ busca, conversa }, channel] = await Promise.all([searchParams, channelService.getChannel(scope)]);
 
-  return <PrefetchedInbox search={searchParamText(busca)} conversationId={searchParamText(conversa)} />;
+  return (
+    <PrefetchedInbox
+      search={searchParamText(busca)}
+      conversationId={searchParamText(conversa)}
+      historyNotImported={channel?.historyNotImported ?? false}
+    />
+  );
 }

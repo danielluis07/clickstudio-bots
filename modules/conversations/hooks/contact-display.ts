@@ -1,4 +1,4 @@
-type ContactNames = { name: string | null; profileName: string | null; phone: string };
+type ContactNames = { name: string | null; appName: string | null; profileName: string | null; phone: string };
 
 // A Brazilian wa_id is 55, a two-digit area code, then 8 or 9 digits.
 export const formatContactPhone = (phone: string) => {
@@ -6,6 +6,7 @@ export const formatContactPhone = (phone: string) => {
   return brazilian ? `+55 ${brazilian[1]} ${brazilian[2]}-${brazilian[3]}` : `+${phone}`;
 };
 
-// The name a Member gave wins over the WhatsApp profile name.
+// The name a Member gave in the dashboard wins, then the one saved in the
+// WhatsApp Business app, then the Contact's WhatsApp profile name.
 export const contactDisplayName = (contact: ContactNames) =>
-  contact.name ?? contact.profileName ?? formatContactPhone(contact.phone);
+  contact.name ?? contact.appName ?? contact.profileName ?? formatContactPhone(contact.phone);

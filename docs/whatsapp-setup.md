@@ -67,8 +67,8 @@ database deployment changes are performed by the application at build time.
    Then subscribe its `whatsapp_business_account` object to **all** of:
    `messages`, `account_update`, `smb_message_echoes`, `history`,
    `smb_app_state_sync`. Message delivery statuses use `messages`.
-   History imports are separate work (#49); complete them before the live
-   coexistence acceptance run.
+   History and contacts arrive through `history` and `smb_app_state_sync`
+   ([history import](#history-import-and-contacts-sync)).
 5. Set the configuration ID in the environment. The launch supplies
    `featureType: "whatsapp_business_app_onboarding"`, session logging, and
    `response_type: "code"`. It does not select a legacy signup version or declare
@@ -124,8 +124,8 @@ whose phone-number-id the event names. A text message becomes the Contact (uniqu
 per Tenant and phone), their Conversation on that Channel, and the message
 (unique per wamid). Events for an unknown phone-number-id are marked `ignored`
 (`unknown_channel`) and create nothing. So are events not handled yet
-(`unsupported_event`: media, non-text echoes, caption edits, history; see #49,
-#61). Processing is idempotent, so QStash retries and duplicate jobs are
+(`unsupported_event`: media, non-text echoes, caption edits, group messages;
+see #61). Processing is idempotent, so QStash retries and duplicate jobs are
 safe. A job that keeps failing goes to QStash's dead-letter queue; inspecting
 and replaying those uses the [internal recovery view](inbox-operations.md).
 
@@ -152,6 +152,53 @@ edit's text wins. A revoke is final and hides the text ("Mensagem apagada").
 A change applies only to a message in the same Tenant, in its author's
 direction. Changes never move a Conversation's latest activity.
 
+### History import and contacts sync
+
+Issue: [#49](https://github.com/danielluis07/clickstudio-bots/issues/49).
+
+Run `bun run db:migrate` before deploying. The migration adds the Channel's
+`contacts_sync` and `history_sync` states (default `pending`), the Contact's
+`app_name` and `app_name_changed_at`, and the message's `imported` flag
+(default `false`). Existing rows keep their data.
+
+Meta accepts `POST /{phone-number-id}/smb_app_data` once per onboarding, within
+24 hours, for each of `smb_app_state_sync` (contacts) and `history`. As soon as
+the subscription is confirmed, by signup or by an owner's retry, the platform
+requests contacts and then history. Each request is claimed in the database
+first, so concurrent retries ask once. A request Meta refuses is not repeated:
+a second attempt needs offboarding and a new Embedded Signup. Meta's response
+only confirms acceptance; its `request_id` is not stored.
+
+The dashboard shows "Histórico não importado" on the Channel card and above the
+inbox when the history request was refused, the business declined to share
+history (any `history` error, including `2593109`), or 24 hours passed without
+a confirmed subscription. Channels connected before this deployment were never
+asked and show it too.
+
+Each history chunk is split into one inbox event per Contact thread, keyed by a
+hash of the thread and its chunk metadata, so redelivered chunks are stored
+once. Chunks of every phase may arrive in any order. Text messages are filed in
+the Contact's Conversation with `imported = true`: the Contact's own as
+inbound, the business's as app replies with the shared delivery status (a
+`PENDING` one shows none). Media placeholders and other types are skipped. A
+wamid already received live keeps its live record. Imported messages enqueue no
+job, so they never start a Bot turn, a Handoff or a counted Bot reply; they only
+ping the open inbox. They may later serve as context within the replay window.
+
+Each `smb_app_state_sync` contact sets the `app_name` of the Contact with that
+phone, and a removal clears it. Only people who have written to the business
+are Contacts, so the rest of the app's contacts are not stored and no Contact
+is created or duplicated. Meta sends the initial contacts before history, so a
+person first seen in imported history gets an app name only from a later app
+edit. Only a change newer than the applied one counts, so out-of-order events
+end at the latest. The inbox shows the name a Member gave
+in the dashboard first, then the app name, then the WhatsApp profile name; sync
+never overwrites the dashboard name.
+
+Groups are outside the product. Meta leaves them out of history; messages that
+name a `group_id`, live or in history, and history threads not keyed by a
+Contact's wa_id are ignored.
+
 ## Live validation
 
 Use the dedicated Brazilian demo WhatsApp Business number required by #37:
@@ -170,9 +217,10 @@ Use the dedicated Brazilian demo WhatsApp Business number required by #37:
 4. Remove a required app field temporarily on the demo app, connect a fresh demo
    Tenant and verify the saved Channel shows an unconfirmed subscription. Restore
    the field and retry as owner. Confirm the Bot stays off.
-5. After webhook/history work lands, complete the broader #37 real-number gate:
-   inbound/status delivery, app echoes, history/app-state events and app
-   continuity. Explicitly check Windows/WearOS gaps. Do not infer this gate passed
+5. Complete the broader #37 real-number gate: inbound/status delivery, app
+   echoes, history/app-state events and app continuity. Verify both sharing
+   and declining history in the app during signup, that imported Conversations
+   and app contact names appear, and that no Bot activity follows. Explicitly check Windows/WearOS gaps. Do not infer this gate passed
    from automated tests or subscription success.
 
 Automated checks use PGlite and fake Meta HTTP responses through the public

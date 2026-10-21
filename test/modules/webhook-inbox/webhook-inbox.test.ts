@@ -124,7 +124,7 @@ describe("Webhook inbox", () => {
       contactProfileName: "Maria Teste",
       messages: [{
         id: expect.any(String), wamid: "wamid.A1", direction: "inbound", origin: "contact", authorName: null, status: null,
-        type: "text", text: "Olá!", sentAt: new Date("2026-10-20T12:00:00Z"), editedAt: null, revokedAt: null,
+        type: "text", text: "Olá!", sentAt: new Date("2026-10-20T12:00:00Z"), imported: false, editedAt: null, revokedAt: null,
       }],
     }]);
     expect(await conversationsOf(tenantB)).toEqual([]);
@@ -244,7 +244,7 @@ describe("Coexistence echoes", () => {
     const [{ messages }] = await conversationsOf(tenantA);
     expect(messages.at(-1)).toEqual({
       id: expect.any(String), wamid: "wamid.APP1", direction: "outbound", origin: "app", authorName: null, status: "sent",
-      type: "text", text: "Abrimos sim!", sentAt: new Date("2026-10-20T12:03:20Z"), editedAt: null, revokedAt: null,
+      type: "text", text: "Abrimos sim!", sentAt: new Date("2026-10-20T12:03:20Z"), imported: false, editedAt: null, revokedAt: null,
     });
   });
 });

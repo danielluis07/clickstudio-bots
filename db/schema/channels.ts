@@ -16,5 +16,10 @@ export const channel = pgTable("channel", {
   subscriptionFields: jsonb("subscription_fields").$type<string[]>().notNull(),
   subscriptionAttemptedAt: timestamp("subscription_attempted_at", { withTimezone: true }),
   subscriptionError: text("subscription_error"),
+  // Coexistence lets the platform ask once, within 24 hours of onboarding, for
+  // the WhatsApp Business app's contacts and its message history.
+  contactsSync: text("contacts_sync", { enum: ["pending", "requested", "failed"] }).notNull().default("pending"),
+  // `declined` when the business did not share its history (error 2593109).
+  historySync: text("history_sync", { enum: ["pending", "requested", "failed", "declined"] }).notNull().default("pending"),
   ...timestamps(),
 });

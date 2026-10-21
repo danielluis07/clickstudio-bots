@@ -79,3 +79,80 @@ export const messageEchoChange = ({ phoneNumberId, wamid, to = "5511988887777", 
 
 export const metaDelivery =(...changes: { field: string; value: unknown }[]) =>
   JSON.stringify({ object: "whatsapp_business_account", entry: [{ id: "200", changes }] });
+
+type HistoryMessage = {
+  wamid: string;
+  // The Contact's wa_id for their messages, the business number otherwise.
+  from: string;
+  timestamp: string;
+  body?: string;
+  type?: string;
+  status?: "SENT" | "DELIVERED" | "READ" | "PLAYED" | "ERROR" | "PENDING";
+  groupId?: string;
+};
+
+// One chunk of the WhatsApp Business app's history, shared after onboarding.
+export const historyChange = ({ phoneNumberId, phase = 0, chunkOrder = 1, progress = 100, threads }: Metadata & {
+  phase?: 0 | 1 | 2;
+  chunkOrder?: number;
+  progress?: number;
+  threads: { id: string; messages: HistoryMessage[] }[];
+}) => ({
+  field: "history",
+  value: {
+    messaging_product: "whatsapp",
+    metadata: { display_phone_number: "5511999990000", phone_number_id: phoneNumberId },
+    history: [{
+      metadata: { phase, chunk_order: chunkOrder, progress },
+      threads: threads.map(({ id, messages }) => ({
+        id,
+        messages: messages.map(({ wamid, from, timestamp, body = "Mensagem antiga", type = "text", status = "READ", groupId }) => ({
+          from,
+          ...(from === id ? {} : { to: id }),
+          id: wamid,
+          timestamp,
+          type,
+          ...(type === "text" ? { text: { body } } : {}),
+          ...(groupId ? { group_id: groupId } : {}),
+          history_context: { status },
+        })),
+      })),
+    }],
+  },
+});
+
+// The business turned history sharing off in the WhatsApp Business app.
+export const historyDeclinedChange = ({ phoneNumberId, code = 2593109 }: Metadata & { code?: number }) => ({
+  field: "history",
+  value: {
+    messaging_product: "whatsapp",
+    metadata: { display_phone_number: "5511999990000", phone_number_id: phoneNumberId },
+    history: [{
+      errors: [{
+        code,
+        title: "History sync is turned off by the business from the WhatsApp Business App",
+        message: "History sync is turned off by the business from the WhatsApp Business App",
+        error_data: { details: "History sync is turned off by the business from the WhatsApp Business App" },
+      }],
+    }],
+  },
+});
+
+// Contacts saved in the WhatsApp Business app, added, edited or removed.
+export const contactSyncChange = ({ phoneNumberId, contacts }: Metadata & {
+  contacts: { phone: string; fullName?: string; firstName?: string; action?: "add" | "remove"; timestamp?: string }[];
+}) => ({
+  field: "smb_app_state_sync",
+  value: {
+    messaging_product: "whatsapp",
+    metadata: { display_phone_number: "5511999990000", phone_number_id: phoneNumberId },
+    state_sync: contacts.map(({ phone, fullName, firstName, action = "add", timestamp = "1792497600" }) => ({
+      type: "contact",
+      contact: action === "add"
+        ? { full_name: fullName, first_name: firstName ?? fullName?.split(" ")[0], phone_number: phone }
+        : { phone_number: phone },
+      action,
+      metadata: { timestamp },
+    })),
+  },
+});

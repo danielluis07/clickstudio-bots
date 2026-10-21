@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import { channel } from "@/db/schema";
 import type { TenantScope } from "@/modules/tenancy";
@@ -14,7 +14,11 @@ const channelSummary = {
   subscriptionFields: channel.subscriptionFields,
   subscriptionAttemptedAt: channel.subscriptionAttemptedAt,
   subscriptionError: channel.subscriptionError,
+  historySync: channel.historySync,
+  createdAt: channel.createdAt,
 };
+
+type AppSync = "contactsSync" | "historySync";
 
 export const createChannelRepository = (db: Database, scope: TenantScope) => ({
   async getChannel() {
@@ -22,7 +26,8 @@ export const createChannelRepository = (db: Database, scope: TenantScope) => ({
       .where(eq(channel.tenantId, scope.tenantId)).limit(1);
     return found ?? null;
   },
-  async insert(input: Pick<typeof channel.$inferInsert, "wabaId" | "phoneNumberId" | "displayPhoneNumber" | "credential" | "subscriptionFields">) {
+  // `createdAt` is when the Tenant onboarded, which starts Meta's sync window.
+  async insert(input: Pick<typeof channel.$inferInsert, "wabaId" | "phoneNumberId" | "displayPhoneNumber" | "credential" | "subscriptionFields" | "createdAt">) {
     const [created] = await db.insert(channel).values({ ...input, tenantId: scope.tenantId })
       .onConflictDoNothing().returning({ id: channel.id });
     return created ?? null;
@@ -40,6 +45,17 @@ export const createChannelRepository = (db: Database, scope: TenantScope) => ({
     subscriptionError: string | null;
   }) {
     await db.update(channel).set(input).where(eq(channel.tenantId, scope.tenantId));
+  },
+  // Marks the sync requested unless it already was or the Channel onboarded
+  // before `onboardedAfter`, so concurrent callers ask Meta at most once.
+  async claimSync(sync: AppSync, onboardedAfter: Date) {
+    const [claimed] = await db.update(channel).set({ [sync]: "requested" })
+      .where(and(eq(channel.tenantId, scope.tenantId), eq(channel[sync], "pending"), gt(channel.createdAt, onboardedAfter)))
+      .returning({ id: channel.id });
+    return Boolean(claimed);
+  },
+  async recordSyncFailure(sync: AppSync) {
+    await db.update(channel).set({ [sync]: "failed" }).where(eq(channel.tenantId, scope.tenantId));
   },
 });
 
@@ -67,4 +83,11 @@ export const resolveChannelPhoneNumber = async (db: Database, phoneNumberId: str
   const [found] = await db.select({ channelId: channel.id, tenantId: channel.tenantId })
     .from(channel).where(eq(channel.phoneNumberId, phoneNumberId)).limit(1);
   return found ? (found as ChannelRoute) : null;
+};
+
+// The business did not share its WhatsApp Business app history, so the
+// dashboard says it was not imported.
+export const recordHistoryDeclined = async (db: Database, route: ChannelRoute) => {
+  await db.update(channel).set({ historySync: "declined" })
+    .where(and(eq(channel.id, route.channelId), eq(channel.tenantId, route.tenantId)));
 };
