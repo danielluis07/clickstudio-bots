@@ -5,7 +5,7 @@ import { createConversationRepository } from "@/modules/conversations";
 import { resolveTenantScope } from "@/modules/tenancy";
 import { createWebhookInbox } from "@/modules/webhook-inbox";
 import { createQStashJobVerifier } from "@/platform/qstash";
-import { createInboxJobRoute, createWhatsAppWebhookRoute } from "@/server/webhook-routes";
+import { createInboxFailureRoute, createInboxJobRoute, createWhatsAppWebhookRoute } from "@/server/webhook-routes";
 import { createTestClock } from "@/test/support/clock";
 import { createTestNotifier } from "@/test/support/notifier";
 import { createTestDatabase } from "@/test/support/database";
@@ -20,6 +20,7 @@ let db: Database;
 let queue: TestJobQueue;
 let webhook: ReturnType<typeof createWhatsAppWebhookRoute>;
 let jobs: ReturnType<typeof createInboxJobRoute>;
+let inbox: ReturnType<typeof createWebhookInbox>;
 
 const handshake = (params: Record<string, string>) =>
   webhook.GET(new Request(`${webhookUrl}?${new URLSearchParams(params)}`));
@@ -46,7 +47,10 @@ const messagesOfTenantA = async () => {
 
 beforeAll(async () => {
   db = await createTestDatabase();
-  await db.insert(user).values({ id: "owner-a", name: "Owner A", email: "a@example.com" });
+  await db.insert(user).values([
+    { id: "owner-a", name: "Owner A", email: "a@example.com" },
+    { id: "admin", name: "Admin", email: "admin@example.com", role: "admin" },
+  ]);
   await db.insert(organization).values({ id: "tenant-a", name: "Tenant A", slug: "a" });
   await db.insert(member).values({ organizationId: "tenant-a", userId: "owner-a", role: "owner" });
   await db.insert(channel).values({
@@ -54,9 +58,35 @@ beforeAll(async () => {
     credential: { keyVersion: "v1", iv: "", ciphertext: "", tag: "" }, subscriptionFields: [],
   });
   queue = createTestJobQueue();
-  const inbox = createWebhookInbox({ db, clock: createTestClock(), queue, notifier: createTestNotifier(), appSecret: metaAppSecret });
+  inbox = createWebhookInbox({ db, clock: createTestClock(), queue, notifier: createTestNotifier(), appSecret: metaAppSecret });
   webhook = createWhatsAppWebhookRoute({ inbox, verifyToken: "verify-me" });
   jobs = createInboxJobRoute({ inbox, verifier: createQStashJobVerifier(qstashSigningKeys), url: jobUrl });
+});
+
+test("only a signed failure callback for the inbox job can dead-letter its id-only source", async () => {
+  const failureUrl = "https://bots.example.com/api/jobs/inbox-event-failed";
+  const route = createInboxFailureRoute({ inbox, verifier: createQStashJobVerifier(qstashSigningKeys), url: failureUrl, sourceUrl: jobUrl });
+  queue.take();
+  await deliver(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.DEAD-ROUTE" })));
+  const [job] = queue.take();
+  const callback = {
+    status: 500, sourceMessageId: "msg_failed", url: jobUrl,
+    sourceBody: Buffer.from(JSON.stringify({ inboxEventId: job.inboxEventId })).toString("base64"),
+  };
+  const post = (value: unknown, signFor = failureUrl) => {
+    const body = JSON.stringify(value);
+    return route.POST(new Request(failureUrl, { method: "POST", body, headers: {
+      "upstash-signature": signQStashRequest({ url: signFor, body }),
+    } }));
+  };
+  expect((await post(callback, jobUrl)).status).toBe(401);
+  expect((await post({ ...callback, url: "https://elsewhere.example.com/job" })).status).toBe(400);
+  expect((await post({ ...callback, sourceBody: Buffer.from(JSON.stringify({ inboxEventId: job.inboxEventId, tenantId: "tenant-b" })).toString("base64") })).status).toBe(400);
+  expect((await post({ ...callback, sourceBody: "not base64" })).status).toBe(400);
+  expect((await inbox.listFailures("admin"))).toMatchObject({ ok: true, events: [] });
+  expect((await post(callback)).status).toBe(200);
+  expect((await post(callback)).status).toBe(200);
+  expect((await inbox.listFailures("admin"))).toMatchObject({ ok: true, events: [{ id: job.inboxEventId, status: "failed", errorClass: "JobDeliveryError" }] });
 });
 
 describe("WhatsApp webhook route", () => {

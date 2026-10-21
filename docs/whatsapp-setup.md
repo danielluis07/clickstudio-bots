@@ -114,7 +114,7 @@ After storing, the webhook enqueues one QStash job per still-pending event,
 carrying only `{ inboxEventId }`, and returns 200. If enqueueing fails it returns
 500. The stored events stay pending, and Meta's redelivery enqueues them again.
 Meta retries for up to seven days. An event still pending after that is
-recovered by the administrator replay in #48. Redelivery can enqueue a duplicate
+recovered through [administrator replay](inbox-operations.md). Redelivery can enqueue a duplicate
 job for an event that is already queued; processing treats it as a no-op.
 
 QStash calls `POST /api/jobs/process-inbox-event`. The route rejects requests
@@ -127,7 +127,7 @@ per Tenant and phone), their Conversation on that Channel, and the message
 (`unsupported_event`: media, non-text echoes, caption edits, history; see #49,
 #61). Processing is idempotent, so QStash retries and duplicate jobs are
 safe. A job that keeps failing goes to QStash's dead-letter queue; inspecting
-and replaying those is #48.
+and replaying those uses the [internal recovery view](inbox-operations.md).
 
 ### Coexistence echoes, edits and revokes
 

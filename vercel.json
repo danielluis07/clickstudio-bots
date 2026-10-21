@@ -1,3 +1,4 @@
 {
-  "bunVersion": "1.4.x"
+  "bunVersion": "1.4.x",
+  "crons": [{ "path": "/api/cron/daily", "schedule": "0 5 * * *" }]
 }

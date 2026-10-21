@@ -52,7 +52,7 @@ export const subprocessors = [
     name: "Sentry",
     purpose: "Diagnóstico de erros do serviço.",
     categories: "Identificadores e informações técnicas após remoção de corpos de requisição, textos de mensagens e telefones, com coleta padrão de dados pessoais desativada.",
-    location: "União Europeia, região EU prevista para a organização.",
+    location: "Estados Unidos, região US (Iowa) prevista para a organização.",
     source: "https://docs.sentry.io/organization/data-storage-location/",
   },
 ] as const;

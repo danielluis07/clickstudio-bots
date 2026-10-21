@@ -21,6 +21,7 @@ export const createQStashJobQueue = ({ token, baseUrl, appUrl }: {
       const published = await client.batchJSON(jobs.map(({ type, ...ids }) => ({
         url: qstashJobUrl(appUrl, type),
         body: ids,
+        ...(type === "process-inbox-event" ? { failureCallback: qstashJobUrl(appUrl, "inbox-event-failed") } : {}),
       })));
       if (published.length !== jobs.length || published.some((result) => !result?.messageId)) {
         throw new Error("QStash did not accept every job");
