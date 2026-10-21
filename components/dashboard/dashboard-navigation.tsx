@@ -1,4 +1,4 @@
-import { LayoutDashboardIcon, MessagesSquareIcon } from "lucide-react";
+import { BookOpenIcon, LayoutDashboardIcon, MessagesSquareIcon } from "lucide-react";
 import { DashboardNavigationItem } from "@/components/dashboard/dashboard-navigation-item";
 import { SidebarGroup, SidebarMenu } from "@/components/ui/sidebar";
 
@@ -12,6 +12,9 @@ export function DashboardNavigation() {
           </DashboardNavigationItem>
           <DashboardNavigationItem href="/painel/conversas" label="Conversas">
             <MessagesSquareIcon aria-hidden="true" />
+          </DashboardNavigationItem>
+          <DashboardNavigationItem href="/painel/base-de-conhecimento" label="Base de conhecimento">
+            <BookOpenIcon aria-hidden="true" />
           </DashboardNavigationItem>
         </SidebarMenu>
       </nav>

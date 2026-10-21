@@ -5,6 +5,7 @@ import { createMemberManagement, createTenantOnboarding } from "@/modules/tenanc
 import { createResendMailer } from "@/platform/resend-mailer";
 import { createChannelService } from "@/modules/channels";
 import { createReplyService } from "@/modules/conversations";
+import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import { createWhatsAppGateway } from "@/server/whatsapp";
 import { createWebhookInbox, pruneInboxEvents } from "@/modules/webhook-inbox";
 import { createQStashJobQueue, createQStashJobVerifier, qstashJobUrl } from "@/platform/qstash";
@@ -41,6 +42,8 @@ export const channelService = createChannelService({
   clock: systemClock,
   getWhatsApp: createWhatsAppGateway,
 });
+
+export const knowledgeBaseEditor = createKnowledgeBaseEditor({ db, clock: systemClock });
 
 export const replyService = createReplyService({
   db,
