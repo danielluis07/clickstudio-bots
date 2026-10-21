@@ -1,0 +1,392 @@
+import { beforeEach, describe, expect, test } from "bun:test";
+import type { ChannelRoute } from "@/modules/channels";
+import { createBotCore, type BotTurn, type ContextMessage } from "@/modules/bot";
+import { createTestBotRepository, createTestUsageMeter, type TestBotRepository, type TestUsageMeter } from "@/test/support/bot";
+import { createTestClock } from "@/test/support/clock";
+import { createTestModel, type TestModel } from "@/test/support/model";
+
+// The proof a live turn carries; resolveChannelPhoneNumber makes the real one.
+const turn: BotTurn = { scope: { channelId: "channel-a", tenantId: "tenant-a" } as ChannelRoute, conversationId: "conversation-a" };
+const start = new Date("2026-03-10T12:00:00.000Z");
+const clock = createTestClock(start);
+let model: TestModel;
+let repository: TestBotRepository;
+let meter: TestUsageMeter;
+
+const minutesAgo = (minutes: number) => new Date(clock.now().getTime() - minutes * 60_000);
+const fromContact = (text: string, sentAt = minutesAgo(1)): ContextMessage => ({ author: "contact", text, sentAt });
+
+const core = (options: Partial<Parameters<typeof createBotCore>[0]> = {}) =>
+  createBotCore({ model, repository, meter, clock, ...options });
+
+beforeEach(() => {
+  clock.set(start);
+  model = createTestModel();
+  repository = createTestBotRepository();
+  meter = createTestUsageMeter();
+  repository.messages = [fromContact("Quanto custa o corte?")];
+});
+
+describe("grounded answers", () => {
+  test("answers from the Knowledge base it was given", async () => {
+    model.script((request) => ({
+      text: request.knowledgeBase.includes("O corte custa R$ 80.") ? "O corte custa R$ 80." : "?",
+    }));
+
+    expect(await core().respond(turn)).toEqual({ kind: "answer", reply: "O corte custa R$ 80." });
+    const [request] = model.requests;
+    expect(request.messages).toEqual([{ role: "user", text: "Quanto custa o corte?" }]);
+    expect(request.instructions).toContain("Barbearia Navalha");
+    expect(request.instructions).toContain("Não marcamos horário pelo WhatsApp");
+    expect(request.knowledgeBase).toContain("Pagamento");
+    expect(request.knowledgeBase).toContain("Aceitamos PIX e cartão.");
+    expect(request.tools.map((tool) => tool.name)).toEqual(["handoff"]);
+  });
+});
+
+describe("cached prompt prefix", () => {
+  test("is identical across turns until the Tenant saves an edit, which the next turn uses", async () => {
+    model.script({ text: "Oi!" }, { text: "Oi!" }, { text: "Oi!" });
+    const prefix = (index: number) => {
+      const { tools, instructions, knowledgeBase } = model.requests[index];
+      return { tools, instructions, knowledgeBase };
+    };
+
+    await core().respond(turn);
+    clock.advance(60_000);
+    repository.messages = [...repository.messages, fromContact("E a barba?")];
+    await core().respond(turn);
+    repository.knowledgeBase = { ...repository.knowledgeBase, faqs: [{ question: "Quanto custa o corte?", answer: "O corte custa R$ 90." }] };
+    await core().respond(turn);
+
+    expect(prefix(1)).toEqual(prefix(0));
+    expect(prefix(2).knowledgeBase).toContain("R$ 90");
+    expect(prefix(2).knowledgeBase).not.toContain("R$ 80");
+  });
+});
+
+const handoffCall = (reason: string, input: Record<string, unknown> = {}) =>
+  ({ id: "call-1", name: "handoff", input: { reason, ...input } });
+
+describe("Handoff", () => {
+  test("unknown information hands off as sem_resposta with a short closing line", async () => {
+    repository.messages = [fromContact("Vocês fazem luzes?")];
+    model.script({ toolCalls: [handoffCall("sem_resposta")] });
+
+    expect(await core().respond(turn)).toEqual({
+      kind: "handoff",
+      reason: "sem_resposta",
+      reply: "Não tenho essa informação, vou chamar alguém da equipe.",
+    });
+  });
+
+  test("contradictory Knowledge base entries hand off as sem_resposta", async () => {
+    repository.knowledgeBase = {
+      faqs: [
+        { question: "Quanto custa a barba?", answer: "A barba custa R$ 40." },
+        { question: "Preço da barba", answer: "A barba custa R$ 50." },
+      ],
+      sections: [],
+    };
+    repository.messages = [fromContact("Quanto custa a barba?")];
+    model.script((request) => request.knowledgeBase.includes("R$ 40") && request.knowledgeBase.includes("R$ 50")
+      ? { toolCalls: [handoffCall("sem_resposta")] }
+      : { text: "A barba custa R$ 40." });
+
+    expect(await core().respond(turn)).toEqual({
+      kind: "handoff",
+      reason: "sem_resposta",
+      reply: "Não tenho essa informação, vou chamar alguém da equipe.",
+    });
+  });
+
+  test("a mixed question gets the answerable part and a Handoff in one reply", async () => {
+    repository.messages = [fromContact("Quanto custa o corte? E vocês fazem luzes?")];
+    model.script({ text: "O corte custa R$ 80.", toolCalls: [handoffCall("sem_resposta")] });
+
+    expect(await core().respond(turn)).toEqual({
+      kind: "handoff",
+      reason: "sem_resposta",
+      reply: "O corte custa R$ 80.\n\nSobre o restante, vou chamar alguém da equipe.",
+    });
+  });
+
+  test("every Handoff reply tells the Contact the team will reply, whatever the model wrote", async () => {
+    repository.messages = [fromContact("Quero falar com alguém")];
+    model.script({ text: "Claro!", toolCalls: [handoffCall("pedido_do_contato")] });
+
+    expect(await core().respond(turn)).toEqual({
+      kind: "handoff",
+      reason: "pedido_do_contato",
+      reply: "Claro!\n\nCerto, vou chamar alguém da equipe para continuar o atendimento.",
+    });
+  });
+
+  test("a Contact asking for a person hands off as pedido_do_contato", async () => {
+    repository.messages = [fromContact("Quero falar com uma pessoa")];
+    model.script({ toolCalls: [handoffCall("pedido_do_contato")] });
+
+    expect(await core().respond(turn)).toEqual({
+      kind: "handoff",
+      reason: "pedido_do_contato",
+      reply: "Certo, vou chamar alguém da equipe para continuar o atendimento.",
+    });
+  });
+
+  test("a Tenant Handoff topic hands off as regra_do_negocio", async () => {
+    repository.messages = [fromContact("Quero fazer uma reclamação")];
+    model.script((request) => request.instructions.includes("reclamações")
+      ? { toolCalls: [handoffCall("regra_do_negocio")] }
+      : { text: "Pode falar!" });
+
+    expect(await core().respond(turn)).toEqual({
+      kind: "handoff",
+      reason: "regra_do_negocio",
+      reply: "Vou passar seu atendimento para a equipe, que responderá em breve.",
+    });
+  });
+});
+
+describe("tool call validation", () => {
+  test("an invalid call is refused to the model and retried once", async () => {
+    model.script(
+      { text: "Um momento.", toolCalls: [handoffCall("talvez")] },
+      { toolCalls: [{ id: "call-2", name: "handoff", input: { reason: "sem_resposta" } }] },
+    );
+
+    expect(await core().respond(turn)).toEqual({
+      kind: "handoff",
+      reason: "sem_resposta",
+      reply: "Não tenho essa informação, vou chamar alguém da equipe.",
+    });
+    const retry = model.requests[1];
+    expect(retry.messages.slice(0, -2)).toEqual(model.requests[0].messages);
+    expect(retry.messages.at(-2)).toEqual({ role: "assistant", text: "Um momento.", toolCalls: [handoffCall("talvez")] });
+    expect(retry.messages.at(-1)).toMatchObject({ role: "tool", results: [{ callId: "call-1", name: "handoff" }] });
+  });
+
+  test("a second invalid call hands off without a third request", async () => {
+    model.script(
+      { toolCalls: [{ id: "call-1", name: "handoff", input: "not json" }] },
+      { text: "O corte custa R$ 80.", toolCalls: [{ id: "call-2", name: "handoff", input: {} }] },
+    );
+
+    expect(await core().respond(turn)).toEqual({
+      kind: "handoff",
+      reason: "bot_indisponivel",
+      reply: "No momento não consigo responder, vou chamar alguém da equipe.",
+    });
+    expect(model.requests).toHaveLength(2);
+  });
+
+  test("tools outside the catalog, or not offered to this Tenant, are refused", async () => {
+    model.script(
+      { toolCalls: [{ id: "call-1", name: "send_payment", input: { amount: 10 } }] },
+      { toolCalls: [{ id: "call-2", name: "capture_contact", input: { name: "Ana" } }] },
+    );
+
+    expect(await core().respond(turn)).toMatchObject({ kind: "handoff", reason: "bot_indisponivel" });
+    expect(model.requests[1].messages.at(-1)).toMatchObject({ role: "tool", results: [{ callId: "call-1", name: "send_payment" }] });
+  });
+
+  test("every call in a response with an invalid one is refused, valid ones included", async () => {
+    model.script(
+      { toolCalls: [handoffCall("sem_resposta"), { id: "call-2", name: "send_payment", input: {} }] },
+      { text: "O corte custa R$ 80." },
+    );
+
+    expect(await core().respond(turn)).toEqual({ kind: "answer", reply: "O corte custa R$ 80." });
+    expect(model.requests[1].messages.at(-1)).toMatchObject({
+      role: "tool",
+      results: [{ callId: "call-1", name: "handoff" }, { callId: "call-2", name: "send_payment" }],
+    });
+  });
+
+  test("Tenant and Conversation ids from the model are ignored; the turn's scope applies", async () => {
+    model.script({ toolCalls: [handoffCall("pedido_do_contato", { tenantId: "tenant-b", conversationId: "conversation-b" })] });
+
+    expect(await core().respond(turn)).toEqual({
+      kind: "handoff",
+      reason: "pedido_do_contato",
+      reply: "Certo, vou chamar alguém da equipe para continuar o atendimento.",
+    });
+    expect(repository.turns).toEqual([turn]);
+    expect(meter.records.map((record) => record.tenantId)).toEqual(["tenant-a"]);
+  });
+});
+
+describe("provider failures", () => {
+  const unavailable = "No momento não consigo responder, vou chamar alguém da equipe.";
+
+  test("a provider error hands off as bot_indisponivel, with no other provider tried", async () => {
+    model.script(new Error("529 overloaded"));
+
+    expect(await core().respond(turn)).toEqual({ kind: "handoff", reason: "bot_indisponivel", reply: unavailable });
+    expect(model.requests).toHaveLength(1);
+  });
+
+  test("a provider timeout hands off as bot_indisponivel", async () => {
+    model.script(new DOMException("The operation timed out.", "TimeoutError"));
+
+    expect(await core().respond(turn)).toEqual({ kind: "handoff", reason: "bot_indisponivel", reply: unavailable });
+  });
+
+  test("a provider error during the retry hands off and still meters the first request", async () => {
+    model.script(
+      { toolCalls: [handoffCall("talvez")], usage: { inputTokens: 30, outputTokens: 5 } },
+      new Error("500"),
+    );
+
+    expect(await core().respond(turn)).toEqual({ kind: "handoff", reason: "bot_indisponivel", reply: unavailable });
+    expect(meter.records[0].usage).toEqual({ inputTokens: 30, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0, toolRoundTrips: 1 });
+  });
+
+  test("an empty response hands off rather than send nothing", async () => {
+    model.script({ text: "  " });
+
+    expect(await core().respond(turn)).toEqual({ kind: "handoff", reason: "bot_indisponivel", reply: unavailable });
+  });
+});
+
+describe("Conversation context", () => {
+  const day = 24 * 60;
+
+  test("replays at most the last 20 messages from the last 7 days", async () => {
+    repository.messages = [
+      fromContact("Mensagem antiga", minutesAgo(8 * day)),
+      ...Array.from({ length: 25 }, (_, index) => fromContact(`Mensagem ${index + 1}`, minutesAgo(25 - index))),
+    ];
+    model.script({ text: "Oi!" });
+
+    await core().respond(turn);
+
+    const texts = model.requests[0].messages.map((message) => message.role === "user" && message.text);
+    expect(texts).toEqual(Array.from({ length: 20 }, (_, index) => `Mensagem ${index + 6}`));
+  });
+
+  test("drops messages older than 7 days even within the 20", async () => {
+    repository.messages = [
+      fromContact("Semana passada", minutesAgo(7 * day + 1)),
+      fromContact("Hoje"),
+    ];
+    model.script({ text: "Oi!" });
+
+    await core().respond(turn);
+
+    expect(model.requests[0].messages).toEqual([{ role: "user", text: "Hoje" }]);
+  });
+
+  test("the caps are configurable", async () => {
+    repository.messages = [
+      fromContact("Ontem", minutesAgo(day + 1)),
+      fromContact("Primeira", minutesAgo(3)),
+      fromContact("Segunda", minutesAgo(2)),
+      fromContact("Terceira", minutesAgo(1)),
+    ];
+    model.script({ text: "Oi!" });
+
+    await core({ context: { maxMessages: 2, maxAgeDays: 1 } }).respond(turn);
+
+    expect(model.requests[0].messages).toEqual([{ role: "user", text: "Segunda" }, { role: "user", text: "Terceira" }]);
+  });
+
+  test("asks the repository for the capped window only", async () => {
+    const asked: { since: Date; limit: number }[] = [];
+    const listRecentMessages = repository.listRecentMessages;
+    repository.listRecentMessages = async (scope, window) => {
+      asked.push(window);
+      return listRecentMessages(scope, window);
+    };
+    model.script({ text: "Oi!" });
+
+    await core().respond(turn);
+
+    expect(asked).toEqual([{ since: new Date("2026-03-03T12:00:00.000Z"), limit: 20 }]);
+  });
+
+  test("labels Member replies apart from Bot replies, in the order sent", async () => {
+    repository.messages = [
+      { author: "member", text: "Pode vir às 15h.", sentAt: minutesAgo(3) },
+      fromContact("Oi, quanto custa o corte?", minutesAgo(5)),
+      { author: "bot", text: "O corte custa R$ 80.", sentAt: minutesAgo(4) },
+      fromContact("Obrigado!", minutesAgo(2)),
+    ];
+    model.script({ text: "Por nada!" });
+
+    await core().respond(turn);
+
+    expect(model.requests[0].messages).toEqual([
+      { role: "user", text: "Oi, quanto custa o corte?" },
+      { role: "assistant", text: "O corte custa R$ 80." },
+      { role: "assistant", text: "[Team member] Pode vir às 15h." },
+      { role: "user", text: "Obrigado!" },
+    ]);
+  });
+
+  test("starts the replay at a Contact message", async () => {
+    repository.messages = [
+      { author: "bot", text: "O corte custa R$ 80.", sentAt: minutesAgo(3) },
+      fromContact("E a barba?", minutesAgo(2)),
+    ];
+    model.script({ text: "Não tenho essa informação." });
+
+    await core().respond(turn);
+
+    expect(model.requests[0].messages).toEqual([{ role: "user", text: "E a barba?" }]);
+  });
+
+  test("with no unanswered Contact message there is nothing to answer and no request", async () => {
+    repository.messages = [fromContact("Oi", minutesAgo(3)), { author: "bot", text: "Olá!", sentAt: minutesAgo(2) }];
+
+    expect(await core().respond(turn)).toEqual({ kind: "nothing_to_answer" });
+    expect(model.requests).toHaveLength(0);
+    expect(meter.records).toHaveLength(0);
+  });
+
+  test("forwards only author and text, so a Contact phone number never reaches the model", async () => {
+    const phone = "5511988887777";
+    // As if an adapter returned more of the row than the port declares.
+    repository.messages = [{ ...fromContact("Oi"), phone, contactId: "contact-a" } as ContextMessage];
+    model.script({ text: "Oi!" });
+
+    await core().respond(turn);
+
+    expect(JSON.stringify(model.requests)).not.toContain(phone);
+    expect(model.requests[0].messages).toEqual([{ role: "user", text: "Oi" }]);
+  });
+});
+
+describe("usage metering", () => {
+  test("records tokens, cache and tool round trips per Tenant, summed over the turn", async () => {
+    model.script(
+      { toolCalls: [handoffCall("talvez")], usage: { inputTokens: 40, outputTokens: 12, cacheReadTokens: 0, cacheWriteTokens: 9000 } },
+      { text: "O corte custa R$ 80.", usage: { inputTokens: 60, outputTokens: 20, cacheReadTokens: 9000, cacheWriteTokens: 0 } },
+    );
+
+    await core().respond(turn);
+
+    expect(meter.records).toEqual([{
+      tenantId: "tenant-a",
+      at: clock.now(),
+      usage: { inputTokens: 100, outputTokens: 32, cacheReadTokens: 9000, cacheWriteTokens: 9000, toolRoundTrips: 1 },
+    }]);
+  });
+
+  test("records no message content", async () => {
+    repository.messages = [fromContact("Meu CPF é 123.456.789-00")];
+    model.script({ text: "Não posso ajudar com isso." });
+
+    await core().respond(turn);
+
+    const recorded = JSON.stringify(meter.records);
+    expect(recorded).not.toContain("CPF");
+    expect(recorded).not.toContain("Não posso ajudar");
+  });
+
+  test("a metering failure does not lose the reply", async () => {
+    meter.failNext();
+    model.script({ text: "O corte custa R$ 80." });
+
+    expect(await core().respond(turn)).toEqual({ kind: "answer", reply: "O corte custa R$ 80." });
+  });
+});
