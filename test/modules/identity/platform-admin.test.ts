@@ -1,14 +1,15 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, onTestFinished, test } from "bun:test";
 import {
   createPlatformAdmin,
   createUserRepository,
   isPlatformAdmin,
 } from "@/modules/identity";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 
 describe("platform administrator check", () => {
   test("only a user with the admin role passes, whatever the caller claims", async () => {
     const db = await createTestDatabase();
+    onTestFinished(() => closeTestDatabase(db));
     const admin = await createPlatformAdmin(db, {
       name: "Daniel Admin",
       email: "admin@clickstudio.example",

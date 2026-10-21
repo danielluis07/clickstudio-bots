@@ -1,10 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, onTestFinished, test } from "bun:test";
 import { createUserRepository } from "@/modules/identity";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 
 describe("user repository", () => {
   test("finds a created user by email", async () => {
-    const users = createUserRepository(await createTestDatabase());
+    const db = await createTestDatabase();
+    onTestFinished(() => closeTestDatabase(db));
+    const users = createUserRepository(db);
 
     const created = await users.create({
       name: "Ana Souza",

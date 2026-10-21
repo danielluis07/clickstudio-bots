@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { TRPCError } from "@trpc/server";
 import type { Database } from "@/db/database";
 import { channel, member, organization, user } from "@/db/schema";
@@ -7,7 +7,7 @@ import { createReplyService, recordInboundTextMessage } from "@/modules/conversa
 import type { TRPCContext } from "@/trpc/init";
 import { appRouter } from "@/trpc/routers/_app";
 import { createTestClock } from "@/test/support/clock";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
 import { createAblyRealtime } from "@/platform/ably";
 import { createTestNotifier } from "@/test/support/notifier";
@@ -38,6 +38,8 @@ const codeOf = async (call: Promise<unknown>) => {
 // Calls a procedure by its dotted path, e.g. "conversations.list".
 const callByPath = (caller: ReturnType<typeof callerFor>, path: string, input: unknown) =>
   (path.split(".").reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], caller) as (input: unknown) => Promise<unknown>)(input);
+
+afterAll(() => closeTestDatabase(db));
 
 beforeAll(async () => {
   db = await createTestDatabase();

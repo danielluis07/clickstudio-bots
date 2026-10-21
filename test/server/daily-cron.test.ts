@@ -1,14 +1,15 @@
-import { expect, test } from "bun:test";
+import { expect, onTestFinished, test } from "bun:test";
 import { inboxEvent } from "@/db/schema";
 import { createWebhookInbox, pruneInboxEvents } from "@/modules/webhook-inbox";
 import { createDailyCronRoute } from "@/server/daily-cron";
 import { createTestClock } from "@/test/support/clock";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
 
 test("the authenticated daily cron prunes only inbox rows strictly older than 30 days", async () => {
   const db = await createTestDatabase();
+  onTestFinished(() => closeTestDatabase(db));
   const clock = createTestClock(new Date("2026-10-21T12:00:00Z"));
   const cutoff = new Date("2026-09-21T12:00:00Z");
   await db.insert(inboxEvent).values([

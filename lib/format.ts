@@ -13,3 +13,8 @@ const shortDateTimeFormat = new Intl.DateTimeFormat("pt-BR", {
 });
 
 export const formatShortDateTime = (date: Date) => shortDateTimeFormat.format(date);
+
+const countFormat = new Intl.NumberFormat("pt-BR");
+
+// 30000 → "30.000".
+export const formatCount = (count: number) => countFormat.format(count);

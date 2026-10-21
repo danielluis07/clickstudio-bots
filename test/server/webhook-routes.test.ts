@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { channel, member, organization, user } from "@/db/schema";
 import { createConversationRepository } from "@/modules/conversations";
@@ -8,7 +8,7 @@ import { createQStashJobVerifier } from "@/platform/qstash";
 import { createInboxFailureRoute, createInboxJobRoute, createWhatsAppWebhookRoute } from "@/server/webhook-routes";
 import { createTestClock } from "@/test/support/clock";
 import { createTestNotifier } from "@/test/support/notifier";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue, type TestJobQueue } from "@/test/support/job-queue";
 import { metaAppSecret, metaDelivery, signMetaDelivery, textMessageChange } from "@/test/support/meta-webhook";
 import { qstashSigningKeys, signQStashRequest } from "@/test/support/qstash";
@@ -44,6 +44,8 @@ const messagesOfTenantA = async () => {
   const { conversations } = await repository.listConversations();
   return (await Promise.all(conversations.map(async ({ id }) => (await repository.listMessages(id))!.messages))).flat();
 };
+
+afterAll(() => closeTestDatabase(db));
 
 beforeAll(async () => {
   db = await createTestDatabase();

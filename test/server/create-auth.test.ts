@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { createPlatformAdmin, createUserRepository } from "@/modules/identity";
 import {
@@ -9,7 +9,7 @@ import {
 } from "@/modules/tenancy";
 import { systemClock } from "@/platform/clock";
 import { createAuth } from "@/server/auth/create-auth";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestMailer, type TestMailer } from "@/test/support/mailer";
 
 const baseURL = "http://localhost:3000";
@@ -67,6 +67,8 @@ const joinAsMember = async (scope: TenantScope, email: string) => {
   if (!accepted.ok) throw new Error(`setup failed: ${accepted.error}`);
   return scopeOf(accepted.userId, scope.tenantId);
 };
+
+afterAll(() => closeTestDatabase(db));
 
 beforeAll(async () => {
   db = await createTestDatabase();

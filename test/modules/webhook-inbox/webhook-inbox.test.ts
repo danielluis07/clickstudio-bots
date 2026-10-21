@@ -1,11 +1,11 @@
-import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { channel, contact, conversation, inboxEvent, member, message, messageChange, organization, user } from "@/db/schema";
 import { createConversationRepository, createReplyService } from "@/modules/conversations";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { createWebhookInbox } from "@/modules/webhook-inbox";
 import { createTestClock } from "@/test/support/clock";
-import { createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue, type TestJobQueue } from "@/test/support/job-queue";
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
 import { createTestNotifier, type TestNotifier } from "@/test/support/notifier";
@@ -36,6 +36,8 @@ const conversationsOf = async (scope: TenantScope) => {
     messages: (await repository.listMessages(id))!.messages,
   })));
 };
+
+afterAll(() => closeTestDatabase(db));
 
 beforeAll(async () => {
   db = await createTestDatabase();
