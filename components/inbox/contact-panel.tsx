@@ -28,9 +28,9 @@ export function ContactPanel({
           <dd>{formatContactPhone(contact.phone)}</dd>
         </div>
       </dl>
-      <ContactNameForm key={contact.id} contact={contact} />
+      <ContactNameForm key={`name-${contact.id}`} contact={contact} />
       {canDeleteContacts && (
-        <DeleteContactButton key={contact.id} contact={contact} onDeleted={onDeleted} />
+        <DeleteContactButton key={`delete-${contact.id}`} contact={contact} onDeleted={onDeleted} />
       )}
     </aside>
   );
