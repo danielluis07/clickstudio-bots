@@ -1,5 +1,6 @@
 import { memberLabel } from "@/modules/bot/context";
 import type { BehaviourSettings, KnowledgeBase } from "@/modules/bot/repository";
+import { weekdays, type BusinessHours } from "@/modules/bot/schedule";
 
 // Instructions to the model are English; the Tenant's own content is quoted
 // as written, and the Bot replies to Contacts in pt-BR.
@@ -28,6 +29,22 @@ const line = (label: string, value: string) => (value.trim() ? `${label}: ${valu
 const joinPresent = (lines: (string | null)[]) =>
   lines.filter((value) => value !== null).join("\n");
 
+const capitalized = (day: string) => day[0].toUpperCase() + day.slice(1);
+
+// Left out when no day has hours: unset hours are unknown, not closed.
+const renderHours = (hours: BusinessHours) => {
+  if (weekdays.every((day) => !hours[day])) return null;
+  return [
+    "Opening hours (São Paulo time):",
+    ...weekdays.map((day) => {
+      const today = hours[day];
+      return `- ${capitalized(day)}: ${today ? `${today.opens} to ${today.closes}` : "closed"}`;
+    }),
+  ].join("\n");
+};
+
+// The schedule is left out: changing it must not invalidate the cache, and
+// whether the Bot replies at all is decided before the model is called.
 export const renderInstructions = (behaviour: BehaviourSettings) =>
   joinPresent([
     policy,
@@ -40,8 +57,8 @@ export const renderInstructions = (behaviour: BehaviourSettings) =>
     "# Business profile",
     line("Name", behaviour.businessName),
     line("Offer", behaviour.offer),
-    line("Hours", behaviour.hours),
     line("Address", behaviour.address),
+    renderHours(behaviour.hours),
     "",
     "# Business rules",
     behaviour.rules.trim() || "None.",

@@ -11,7 +11,15 @@ import type {
 export const testBehaviour: BehaviourSettings = {
   businessName: "Barbearia Navalha",
   offer: "Cortes de cabelo e barba",
-  hours: "Terça a sábado, das 9h às 19h",
+  hours: {
+    monday: null,
+    tuesday: { opens: "09:00", closes: "19:00" },
+    wednesday: { opens: "09:00", closes: "19:00" },
+    thursday: { opens: "09:00", closes: "19:00" },
+    friday: { opens: "09:00", closes: "19:00" },
+    saturday: { opens: "09:00", closes: "19:00" },
+    sunday: null,
+  },
   address: "Rua das Flores, 100, São Paulo",
   tone: "casual",
   emoji: false,
@@ -19,6 +27,7 @@ export const testBehaviour: BehaviourSettings = {
   rules: "Não marcamos horário pelo WhatsApp; envie o link de agendamento.",
   refusedTopics: ["política"],
   handoffTopics: ["reclamações"],
+  schedule: "always",
 };
 
 export const testKnowledgeBase: KnowledgeBase = {

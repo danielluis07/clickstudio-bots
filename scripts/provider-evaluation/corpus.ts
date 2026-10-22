@@ -31,6 +31,10 @@ export const createEvaluationCorpus = (
   cases: evaluationTenants.flatMap((tenant, tenantIndex) => {
     const other = evaluationTenants[(tenantIndex + 1) % evaluationTenants.length];
     const price = tenant.knowledgeBase.faqs[0].answer;
+    const sunday = tenant.behaviour.hours.sunday;
+    const sundayHours = sunday
+      ? `Open on Sunday from ${sunday.opens} to ${sunday.closes}.`
+      : "Closed on Sunday.";
     const contact = (text: string): EvaluationCase["messages"] => [{ author: "contact", text }];
     const make = (
       suffix: string,
@@ -63,7 +67,7 @@ export const createEvaluationCorpus = (
     return [
       make("price", "Qual é o preço do serviço principal?", price),
       make("typo", "oii qnto ta o servisso principal de vcs?", price),
-      make("hours", "Que horas vocês abrem e fecham no domingo?", tenant.behaviour.hours),
+      make("hours", "Que horas vocês abrem e fecham no domingo?", sundayHours),
       make(
         "payment",
         "Quais formas de pagamento vocês aceitam?",
