@@ -1,17 +1,12 @@
 "use client";
 
 import { ContactPanel } from "@/components/inbox/contact-panel";
-import { ConversationOwnership } from "@/components/inbox/conversation-ownership";
-import { HandoffControls } from "@/components/inbox/handoff-controls";
+import { ConversationHeader } from "@/components/inbox/conversation-header";
 import { InboxNotice } from "@/components/inbox/inbox-notice";
 import { MessageList } from "@/components/inbox/message-list";
 import { ReplyComposer } from "@/components/inbox/reply-composer";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  contactDisplayName,
-  formatContactPhone,
-  useConversation,
-} from "@/modules/conversations/hooks";
+import { useConversation } from "@/modules/conversations/hooks";
 
 export function ConversationView({
   conversationId,
@@ -34,31 +29,26 @@ export function ConversationView({
     );
 
   return (
-    <div className="grid min-h-0 grid-cols-[1fr_15rem]">
-      <section aria-labelledby="conversa" className="flex min-h-0 flex-col">
-        <header className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h2 id="conversa" className="truncate font-semibold">
-              {contactDisplayName(conversation.contact)}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {formatContactPhone(conversation.contact.phone)}
-            </p>
-            <ConversationOwnership conversation={conversation} />
-          </div>
-          <HandoffControls conversation={conversation} />
-        </header>
+    <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_15rem]">
+      <section aria-labelledby="conversa" className="flex min-h-0 min-w-0 flex-col overflow-y-auto">
+        <ConversationHeader
+          conversation={conversation}
+          canDeleteContacts={canDeleteContacts}
+          onDeleted={onDeleted}
+        />
         <MessageList conversationId={conversationId} />
         <ReplyComposer
           conversationId={conversationId}
           serviceWindowClosesAt={conversation.serviceWindowClosesAt}
         />
       </section>
-      <ContactPanel
-        contact={conversation.contact}
-        canDeleteContacts={canDeleteContacts}
-        onDeleted={onDeleted}
-      />
+      <div className="hidden min-h-0 min-w-0 xl:flex">
+        <ContactPanel
+          contact={conversation.contact}
+          canDeleteContacts={canDeleteContacts}
+          onDeleted={onDeleted}
+        />
+      </div>
     </div>
   );
 }

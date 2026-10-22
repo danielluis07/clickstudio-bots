@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,7 +18,7 @@ type ContactDetailInputProps = {
 };
 
 export function ContactDetailInput({ input, onChange }: ContactDetailInputProps) {
-  const id = `contact-${input.field}`;
+  const id = useId();
   const props = {
     id,
     maxLength: input.maxLength,

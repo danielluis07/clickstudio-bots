@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { ContactDetailsForm } from "@/components/inbox/contact-details-form";
 import { DeleteContactButton } from "@/components/inbox/delete-contact-button";
 import { formatContactPhone } from "@/modules/conversations/hooks";
@@ -14,12 +15,13 @@ export function ContactPanel({
   canDeleteContacts: boolean;
   onDeleted: () => void;
 }) {
+  const headingId = useId();
   return (
     <aside
-      aria-labelledby="contato"
-      className="flex min-h-0 flex-col gap-6 overflow-y-auto border-l border-border p-4"
+      aria-labelledby={headingId}
+      className="flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto border-l border-border p-4"
     >
-      <h2 id="contato" className="font-semibold">
+      <h2 id={headingId} className="font-semibold">
         Contato
       </h2>
       <dl className="flex flex-col gap-3 text-sm">

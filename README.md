@@ -43,6 +43,8 @@ To enable owner-managed WhatsApp Channels, follow [WhatsApp Channel setup](docs/
 
 To enable live inbox updates, set the server-only `ABLY_API_KEY` as described in [Realtime inbox setup](docs/realtime-inbox.md).
 
+See [Phone inbox](docs/phone-inbox.md) for responsive layouts and browser checks.
+
 To configure the Bot, start with [Behaviour settings](docs/bot-settings.md) and
 [Testar Bot setup and code entry points](docs/bot-sandbox.md). The sandbox guide
 explains provider keys, model access, daily limits and production isolation.

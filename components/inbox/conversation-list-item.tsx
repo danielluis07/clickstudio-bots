@@ -21,11 +21,13 @@ export function ConversationListItem({
       aria-current={selected ? "true" : undefined}
       onClick={() => onSelect(conversation.id)}
       className={cn(
-        "flex w-full flex-col gap-1 px-4 py-3 text-left transition-colors outline-none hover:bg-muted focus-visible:bg-muted",
+        "flex w-full min-w-0 flex-col gap-1 px-4 py-3 text-left transition-colors outline-none hover:bg-muted focus-visible:bg-muted",
         selected && "bg-muted",
       )}
     >
-      <span className="truncate font-medium">{contactDisplayName(conversation.contact)}</span>
+      <span className="max-w-full truncate font-medium">
+        {contactDisplayName(conversation.contact)}
+      </span>
       <ConversationOwnership conversation={conversation} />
       <time
         dateTime={conversation.lastMessageAt.toISOString()}
