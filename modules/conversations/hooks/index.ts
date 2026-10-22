@@ -1,5 +1,4 @@
 export {
-  contactDetailInputs,
   contactDisplayName,
   formatContactPhone,
 } from "@/modules/conversations/hooks/contact-display";

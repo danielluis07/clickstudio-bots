@@ -1,10 +1,11 @@
-import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import { contact, conversation } from "@/db/schema";
 import type { ChannelRoute } from "@/modules/channels";
 import {
   contactDetailFields,
   contactDetailSchemas,
+  noContactDetails,
   type ContactDetailField,
   type ContactDetails,
 } from "@/modules/conversations/contact-details";
@@ -88,8 +89,6 @@ const contactDetailColumns = {
   need: contact.need,
 };
 
-const noDetails: ContactDetails = { name: null, email: null, city: null, need: null };
-
 // The Contact of a Conversation on the route's Channel, never another's.
 const contactOfConversation = (db: Database, route: ChannelRoute, conversationId: string) =>
   and(
@@ -119,11 +118,13 @@ export const readConversationContactDetails = async (
     .select(contactDetailColumns)
     .from(contact)
     .where(contactOfConversation(db, route, conversationId));
-  return found ?? noDetails;
+  return found ?? noContactDetails;
 };
 
 // Stores what the Bot captured on the turn's Contact, keeping the details it
 // did not capture. Each value is checked again here, whoever validated it.
+// The name doubles as the one Members give the Contact, so a capture only
+// fills it while empty and never replaces a Member's.
 export const saveCapturedContactDetails = async ({
   db,
   route,
@@ -140,7 +141,10 @@ export const saveCapturedContactDetails = async ({
   const values = Object.fromEntries(
     contactDetailFields.flatMap((field) => {
       const parsed = contactDetailSchemas[field].safeParse(details[field]);
-      return parsed.success ? [[field, parsed.data]] : [];
+      if (!parsed.success) return [];
+      return [
+        [field, field === "name" ? sql`coalesce(${contact.name}, ${parsed.data})` : parsed.data],
+      ];
     }),
   );
   if (!Object.keys(values).length) return;

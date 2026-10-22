@@ -7,7 +7,11 @@ import type { Model } from "@/modules/bot/model";
 import { botTimeZone } from "@/modules/bot/schedule";
 import { readBehaviour } from "@/modules/bot/settings";
 import { createBotCore } from "@/modules/bot/turn";
-import { contactDetailSchemas, type ContactDetails } from "@/modules/conversations";
+import {
+  contactDetailSchemas,
+  noContactDetails,
+  type ContactDetails,
+} from "@/modules/conversations";
 import { readKnowledgeBase } from "@/modules/knowledge-base";
 import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
@@ -98,12 +102,7 @@ export const createBotSandbox = ({
       ].map((message) => ({ ...message, sentAt: now }));
       // Captured details stay with this request and go back to the browser;
       // no production Contact exists to write to.
-      let contact: ContactDetails = parsed.data.contact ?? {
-        name: null,
-        email: null,
-        city: null,
-        need: null,
-      };
+      let contact: ContactDetails = parsed.data.contact ?? noContactDetails;
       const core = createBotCore({
         model,
         clock,
@@ -113,7 +112,8 @@ export const createBotSandbox = ({
           getCapture: (turn) => readCapture(db, turn.scope),
           getContactDetails: async () => contact,
           saveContactDetails: async (_turn, details) => {
-            contact = { ...contact, ...details };
+            // As on a production Contact, a capture never replaces a name.
+            contact = { ...contact, ...details, name: contact.name ?? details.name ?? null };
           },
           listRecentMessages: async () => messages,
         },

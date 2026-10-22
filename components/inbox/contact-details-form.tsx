@@ -1,11 +1,10 @@
 "use client";
 
+import { ContactDetailInput } from "@/components/inbox/contact-detail-input";
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { FieldGroup } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
-import { contactDetailInputs, useContactDetailsForm } from "@/modules/conversations/hooks";
+import { useContactDetailsForm } from "@/modules/conversations/hooks";
 
 type ContactDetailsFormProps = {
   contact: {
@@ -25,33 +24,13 @@ export function ContactDetailsForm({ contact }: ContactDetailsFormProps) {
   return (
     <form onSubmit={form.submit}>
       <FieldGroup>
-        {contactDetailInputs.map(({ field, label, placeholder, maxLength }) => {
-          const props = {
-            id: `contact-${field}`,
-            maxLength,
-            autoComplete: "off",
-            placeholder:
-              field === "name"
-                ? (contact.appName ?? contact.profileName ?? placeholder)
-                : placeholder,
-            value: form.details[field],
-            onChange: (event: { target: { value: string } }) =>
-              form.change(field, event.target.value),
-          };
-          return (
-            <Field key={field}>
-              <FieldLabel htmlFor={props.id}>{label}</FieldLabel>
-              {field === "need" ? (
-                <Textarea rows={3} {...props} />
-              ) : (
-                <Input type={field === "email" ? "email" : "text"} {...props} />
-              )}
-              {field === "name" && (
-                <FieldDescription>Deixe em branco para usar o nome do WhatsApp.</FieldDescription>
-              )}
-            </Field>
-          );
-        })}
+        {form.inputs.map((input) => (
+          <ContactDetailInput
+            key={input.field}
+            input={input}
+            onChange={(value) => form.change(input.field, value)}
+          />
+        ))}
         {form.failed && (
           <p role="alert" className="text-sm text-destructive">
             {form.invalid

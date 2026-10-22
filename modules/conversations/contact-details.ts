@@ -11,6 +11,8 @@ export type ContactDetailField = (typeof contactDetailFields)[number];
 
 export type ContactDetails = Record<ContactDetailField, string | null>;
 
+export const noContactDetails: ContactDetails = { name: null, email: null, city: null, need: null };
+
 // The longest each detail may be, in characters.
 export const contactDetailLimits: Record<ContactDetailField, number> = {
   name: 100,

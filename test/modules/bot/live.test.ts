@@ -479,3 +479,31 @@ test("a live Handoff first asks for missing required details, leaving the Bot in
     handoffReason: null,
   });
 });
+
+test("a Bot capture never replaces a name a Member gave, but fills the other details", async () => {
+  const { scope, clock, model, activation, conversationId, worker, repository } = await setup();
+  await createCaptureSettingsEditor({ db, clock }).saveCapture(scope, {
+    enabled: true,
+    fields: { name: "optional", email: "optional", city: "optional", need: "off" },
+  });
+  await activation.activate(scope);
+  const { id: contactId } = (await repository.getConversation(conversationId))!.contact;
+  await repository.updateContactDetails(contactId, {
+    name: "Ana Souza (Loja Centro)",
+    email: "antigo@example.com",
+    city: null,
+    need: null,
+  });
+  model.script({
+    text: "Anotado!",
+    toolCalls: [captureCall({ name: "Aninha", email: "ana@example.com", city: "Santos" })],
+  });
+
+  await worker.run(conversationId);
+
+  expect((await repository.getConversation(conversationId))!.contact).toMatchObject({
+    name: "Ana Souza (Loja Centro)",
+    email: "ana@example.com",
+    city: "Santos",
+  });
+});

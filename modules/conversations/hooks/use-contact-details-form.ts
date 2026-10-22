@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import type { inferOutput } from "@trpc/tanstack-react-query";
 import { useState, type FormEvent } from "react";
+import { contactDetailInputs } from "@/modules/conversations/hooks/contact-display";
 import { useTRPC } from "@/trpc/client";
 
 type Trpc = ReturnType<typeof useTRPC>;
@@ -17,12 +18,14 @@ type Details = { name: string; email: string; city: string; need: string };
 type ContactWithDetails = {
   id: string;
   name: string | null;
+  appName: string | null;
+  profileName: string | null;
   email: string | null;
   city: string | null;
   need: string | null;
 };
 
-const shown = (value: string) => value.trim() || null;
+const blankAsNull = (value: string) => value.trim() || null;
 
 // Shows the Contact's new details at once, in the open Conversation and its
 // name in the list, and restores the previous ones if the server refuses.
@@ -36,9 +39,11 @@ export const useUpdateContactDetails = () => {
       onMutate: async ({ contactId, name, email, city, need }) => {
         await Promise.all(affected.map((filter) => queryClient.cancelQueries(filter)));
         const previous = affected.flatMap((filter) => queryClient.getQueriesData(filter));
-        const rename = <T extends { contact: { id: string; name: string | null } }>(found: T): T =>
+        const renameInList = <T extends { contact: { id: string; name: string | null } }>(
+          found: T,
+        ): T =>
           found.contact.id === contactId
-            ? { ...found, contact: { ...found.contact, name: shown(name) } }
+            ? { ...found, contact: { ...found.contact, name: blankAsNull(name) } }
             : found;
 
         queryClient.setQueriesData<Conversation>(trpc.conversations.get.pathFilter(), (found) =>
@@ -47,10 +52,10 @@ export const useUpdateContactDetails = () => {
                 ...found,
                 contact: {
                   ...found.contact,
-                  name: shown(name),
-                  email: shown(email),
-                  city: shown(city),
-                  need: shown(need),
+                  name: blankAsNull(name),
+                  email: blankAsNull(email),
+                  city: blankAsNull(city),
+                  need: blankAsNull(need),
                 },
               }
             : found,
@@ -62,7 +67,7 @@ export const useUpdateContactDetails = () => {
               ...list,
               pages: list.pages.map((page) => ({
                 ...page,
-                conversations: page.conversations.map(rename),
+                conversations: page.conversations.map(renameInList),
               })),
             },
         );
@@ -102,7 +107,10 @@ export const useContactDetailsForm = (contact: ContactWithDetails) => {
   };
 
   return {
-    details,
+    inputs: contactDetailInputs(contact).map((input) => ({
+      ...input,
+      value: details[input.field],
+    })),
     change,
     submit,
     saving: update.isPending,

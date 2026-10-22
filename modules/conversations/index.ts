@@ -10,6 +10,7 @@ export {
   contactDetailFields,
   contactDetailLimits,
   contactDetailSchemas,
+  noContactDetails,
   type ContactDetailField,
   type ContactDetails,
 } from "@/modules/conversations/contact-details";

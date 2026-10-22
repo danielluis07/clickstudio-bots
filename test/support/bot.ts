@@ -1,14 +1,15 @@
-import type {
-  BehaviourSettings,
-  BotRepository,
-  BotTurn,
-  CaptureSettings,
-  ContextMessage,
-  KnowledgeBase,
-  TurnUsage,
-  UsageMeter,
+import {
+  disabledCapture,
+  type BehaviourSettings,
+  type BotRepository,
+  type BotTurn,
+  type CaptureSettings,
+  type ContextMessage,
+  type KnowledgeBase,
+  type TurnUsage,
+  type UsageMeter,
 } from "@/modules/bot";
-import type { ContactDetails } from "@/modules/conversations";
+import { noContactDetails, type ContactDetails } from "@/modules/conversations";
 
 export const testBehaviour: BehaviourSettings = {
   businessName: "Barbearia Navalha",
@@ -37,14 +38,6 @@ export const testKnowledgeBase: KnowledgeBase = {
   sections: [{ title: "Pagamento", body: "Aceitamos PIX e cartão." }],
 };
 
-// Capture is off until a test turns it on.
-export const noCapture: CaptureSettings = {
-  enabled: false,
-  fields: { name: "off", email: "off", city: "off", need: "off" },
-};
-
-export const noContactDetails: ContactDetails = { name: null, email: null, city: null, need: null };
-
 export type TestBotRepository = BotRepository & {
   behaviour: BehaviourSettings;
   knowledgeBase: KnowledgeBase;
@@ -64,7 +57,7 @@ export const createTestBotRepository = (): TestBotRepository => {
   const repository: TestBotRepository = {
     behaviour: testBehaviour,
     knowledgeBase: testKnowledgeBase,
-    capture: noCapture,
+    capture: disabledCapture,
     contact: noContactDetails,
     captured: [],
     messages: [],

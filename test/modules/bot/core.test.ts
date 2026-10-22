@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { ChannelRoute } from "@/modules/channels";
+import { noContactDetails } from "@/modules/conversations";
 import {
   createBotCore,
+  disabledCapture,
   type BotTurn,
   type CaptureSettings,
   type ContextMessage,
@@ -9,8 +11,6 @@ import {
 import {
   createTestBotRepository,
   createTestUsageMeter,
-  noCapture,
-  noContactDetails,
   type TestBotRepository,
   type TestUsageMeter,
 } from "@/test/support/bot";
@@ -582,7 +582,7 @@ const captureCall = (input: unknown, id = "call-1") => ({
 describe("Contact capture", () => {
   const capturing = (fields: Partial<CaptureSettings["fields"]>): CaptureSettings => ({
     enabled: true,
-    fields: { ...noCapture.fields, ...fields },
+    fields: { ...disabledCapture.fields, ...fields },
   });
 
   test("offers the capture tool with only the fields the Tenant chose, and none when disabled", async () => {
@@ -642,28 +642,33 @@ describe("Contact capture", () => {
   test.each([
     [
       "the capability is disabled",
-      { ...noCapture.fields, name: "required" },
+      { ...disabledCapture.fields, name: "required" },
       false,
       { name: "Ana" },
     ],
     [
       "the Tenant did not choose the field",
-      { ...noCapture.fields, name: "required" },
+      { ...disabledCapture.fields, name: "required" },
       true,
       { city: "Santos" },
     ],
-    ["the email is malformed", { ...noCapture.fields, email: "optional" }, true, { email: "ana@" }],
-    ["a value is blank", { ...noCapture.fields, name: "optional" }, true, { name: "  " }],
-    ["no detail is sent", { ...noCapture.fields, name: "optional" }, true, {}],
+    [
+      "the email is malformed",
+      { ...disabledCapture.fields, email: "optional" },
+      true,
+      { email: "ana@" },
+    ],
+    ["a value is blank", { ...disabledCapture.fields, name: "optional" }, true, { name: "  " }],
+    ["no detail is sent", { ...disabledCapture.fields, name: "optional" }, true, {}],
     [
       "the name is too long",
-      { ...noCapture.fields, name: "optional" },
+      { ...disabledCapture.fields, name: "optional" },
       true,
       { name: "A".repeat(101) },
     ],
     [
       "it names another Contact",
-      { ...noCapture.fields, name: "optional" },
+      { ...disabledCapture.fields, name: "optional" },
       true,
       { name: "Ana", contactId: "contact-b", tenantId: "tenant-b" },
     ],

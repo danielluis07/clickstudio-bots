@@ -22,16 +22,58 @@ export const formatContactPhone = (phone: string) => {
 export const contactDisplayName = (contact: ContactNames) =>
   contact.name ?? contact.appName ?? contact.profileName ?? formatContactPhone(contact.phone);
 
-const detailLabels: Record<ContactDetailField, { label: string; placeholder: string }> = {
-  name: { label: "Nome", placeholder: "Sem nome" },
-  email: { label: "E-mail", placeholder: "Não informado" },
-  city: { label: "Cidade", placeholder: "Não informada" },
-  need: { label: "Necessidade", placeholder: "Não informada" },
+type DetailInput = {
+  label: string;
+  placeholder: string;
+  type: "text" | "email";
+  // Free text the Contact wrote, shown on several lines.
+  multiline: boolean;
+  description: string | null;
 };
 
-// The Contact panel's detail inputs, in the order it shows them.
-export const contactDetailInputs = contactDetailFields.map((field) => ({
-  field,
-  maxLength: contactDetailLimits[field],
-  ...detailLabels[field],
-}));
+const detailInputs: Record<ContactDetailField, DetailInput> = {
+  name: {
+    label: "Nome",
+    placeholder: "Sem nome",
+    type: "text",
+    multiline: false,
+    description: "Deixe em branco para usar o nome do WhatsApp.",
+  },
+  email: {
+    label: "E-mail",
+    placeholder: "Não informado",
+    type: "email",
+    multiline: false,
+    description: null,
+  },
+  city: {
+    label: "Cidade",
+    placeholder: "Não informada",
+    type: "text",
+    multiline: false,
+    description: null,
+  },
+  need: {
+    label: "Necessidade",
+    placeholder: "Não informada",
+    type: "text",
+    multiline: true,
+    description: null,
+  },
+};
+
+// The Contact panel's detail inputs, in the order it shows them. A blank name
+// shows the WhatsApp name it falls back to.
+export const contactDetailInputs = (contact: Omit<ContactNames, "phone" | "name">) =>
+  contactDetailFields.map((field) => {
+    const input = detailInputs[field];
+    return {
+      field,
+      maxLength: contactDetailLimits[field],
+      ...input,
+      placeholder:
+        field === "name"
+          ? (contact.appName ?? contact.profileName ?? input.placeholder)
+          : input.placeholder,
+    };
+  });

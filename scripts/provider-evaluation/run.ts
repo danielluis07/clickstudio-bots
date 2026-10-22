@@ -1,5 +1,12 @@
-import { createBotCore, type Model, type ModelToolCall, type TurnUsage } from "@/modules/bot";
+import {
+  createBotCore,
+  disabledCapture,
+  type Model,
+  type ModelToolCall,
+  type TurnUsage,
+} from "@/modules/bot";
 import type { ChannelRoute } from "@/modules/channels";
+import { noContactDetails } from "@/modules/conversations";
 import type {
   EvaluationCase,
   EvaluationPricing,
@@ -81,11 +88,8 @@ export const runEvaluation = async ({
         getBehaviour: async () => tenant.behaviour,
         getKnowledgeBase: async () => item.knowledgeBase ?? tenant.knowledgeBase,
         // The corpus predates capture: its capture cases expect a safe Handoff.
-        getCapture: async () => ({
-          enabled: false,
-          fields: { name: "off", email: "off", city: "off", need: "off" },
-        }),
-        getContactDetails: async () => ({ name: null, email: null, city: null, need: null }),
+        getCapture: async () => disabledCapture,
+        getContactDetails: async () => noContactDetails,
         saveContactDetails: async () => {},
         listRecentMessages: async () =>
           item.messages.map((message, index) => ({

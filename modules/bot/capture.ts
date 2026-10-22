@@ -65,19 +65,20 @@ const requestedDetails: Record<ContactDetailField, string> = {
 // Starts every request, so a later turn can tell the Bot already asked.
 const detailsRequestOpening = "Antes de chamar a equipe, me informe";
 
-const listed = (items: string[]) =>
+const joinedInPortuguese = (items: string[]) =>
   items.length > 1 ? `${items.slice(0, -1).join(", ")} e ${items.at(-1)}` : items[0];
 
 // The Bot's request for missing required details before a Handoff, after the
 // answerable part of the Contact's message, if any.
 export const detailsRequest = (missing: ContactDetailField[], answered: string) => {
-  const request = `${detailsRequestOpening} ${listed(missing.map((field) => requestedDetails[field]))}, por favor.`;
+  const request = `${detailsRequestOpening} ${joinedInPortuguese(missing.map((field) => requestedDetails[field]))}, por favor.`;
   return answered ? `${answered}\n\n${request}` : request;
 };
 
 export const isDetailsRequest = (text: string) => text.includes(detailsRequestOpening);
 
-const disabledCapture: CaptureSettings = {
+// Before the owner's first save.
+export const disabledCapture: CaptureSettings = {
   enabled: false,
   fields: { name: "off", email: "off", city: "off", need: "off" },
 };

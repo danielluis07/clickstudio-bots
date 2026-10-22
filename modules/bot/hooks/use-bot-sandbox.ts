@@ -105,7 +105,7 @@ export const useBotSandbox = () => {
     available: status.data?.available,
     sending: send.isPending,
     messages,
-    captured: captureFieldOptions.flatMap(({ field, label }) => {
+    contactDetails: captureFieldOptions.flatMap(({ field, label }) => {
       const value = contact?.[field];
       return value ? [{ field, label, value }] : [];
     }),

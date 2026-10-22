@@ -38,6 +38,9 @@ server, whatever the provider checked:
 - The write targets only the Contact of the turn's Conversation, resolved under
   the turn's `ChannelRoute`, and checks each value again before saving.
 - Valid details are stored immediately, even if the reply is later not sent.
+- A captured email, city or need replaces the saved one. A captured name only
+  fills an empty name, because Members also give the Contact its name; a
+  Member's correction is never replaced. The sandbox follows the same rule.
 - A response that captures without writing a reply gets one tool round trip,
   so the model can write that reply. It is metered as a tool round trip.
 

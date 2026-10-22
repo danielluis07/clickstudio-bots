@@ -4,6 +4,7 @@ export { createBotActivation } from "@/modules/bot/activation";
 export {
   captureModes,
   createCaptureSettingsEditor,
+  disabledCapture,
   readCapture,
   type CaptureMode,
   type CaptureSettings,
