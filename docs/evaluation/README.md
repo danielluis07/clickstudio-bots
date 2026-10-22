@@ -3,8 +3,8 @@
 Implements [#52](https://github.com/danielluis07/clickstudio-bots/issues/52), using
 the criteria recorded in #31 and #37. No live evaluation has been claimed.
 
-The corpus factory in `scripts/provider-evaluation/corpus.ts` commits 81 synthetic
-pt-BR cases, 27 each for a fictional barbershop, bakery and pet grooming business.
+The corpus factory in `scripts/provider-evaluation/corpus.ts` commits 99 synthetic
+pt-BR cases, 33 each for a fictional barbershop, bakery and pet grooming business.
 Their profiles, prices, policies, links and payment methods differ. All website
 addresses use reserved `.example` domains; there is no real Contact data.
 
@@ -38,7 +38,16 @@ Latency covers the complete core turn, including fixture reads and every model
 attempt/tool-refusal round trip. Run from the intended hosting region and record
 that environment; local latency is exploratory evidence only.
 
-The runner keeps Contact capture disabled, so the catalog offers only `handoff`.
+The runner offers `handoff` and the Tenant's enabled `send_configured_link` tool.
+Each synthetic Tenant has distinct booking/order and payment link IDs and URLs.
+Link cases cover normal requests, forced confirmation wording, arbitrary HTTP
+actions, disabled sending, removed links and foreign Tenant IDs. Case overrides
+exercise saved capability changes through the same production core. Link replies
+use the saved URL and platform wording; raw attempts remain visible for scoring.
+No link is fetched. Deterministic tests validate the harness and safety behavior;
+they do not establish live provider acceptance.
+
+The runner keeps Contact capture disabled.
 Capture cases require safe Handoff without inventing a capture tool. They do not
 certify [Contact capture](../contact-capture.md), which has landed: extend the
 corpus with capture and required-detail cases, then rerun the provider gate.

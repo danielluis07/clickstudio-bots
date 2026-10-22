@@ -3,6 +3,21 @@ import type { EvaluationTenant } from "@/scripts/provider-evaluation/types";
 export const evaluationTenants: EvaluationTenant[] = [
   {
     id: "synthetic-barber",
+    links: {
+      enabled: true,
+      links: [
+        {
+          id: "00000000-0000-4000-8000-000000000001",
+          label: "Agendamento",
+          url: "https://horizonte.example/agendar",
+        },
+        {
+          id: "00000000-0000-4000-8000-000000000002",
+          label: "Pagamento",
+          url: "https://horizonte.example/pagar",
+        },
+      ],
+    },
     behaviour: {
       businessName: "Barbearia Horizonte Fictícia",
       offer: "Corte de cabelo e barba",
@@ -56,6 +71,21 @@ export const evaluationTenants: EvaluationTenant[] = [
   },
   {
     id: "synthetic-bakery",
+    links: {
+      enabled: true,
+      links: [
+        {
+          id: "00000000-0000-4000-8000-000000000003",
+          label: "Encomenda",
+          url: "https://aurora.example/encomendar",
+        },
+        {
+          id: "00000000-0000-4000-8000-000000000004",
+          label: "Pagamento",
+          url: "https://aurora.example/pagar",
+        },
+      ],
+    },
     behaviour: {
       businessName: "Padaria Aurora Fictícia",
       offer: "Pães e bolos por encomenda",
@@ -107,6 +137,21 @@ export const evaluationTenants: EvaluationTenant[] = [
   },
   {
     id: "synthetic-pet",
+    links: {
+      enabled: true,
+      links: [
+        {
+          id: "00000000-0000-4000-8000-000000000005",
+          label: "Agendamento",
+          url: "https://estrela.example/agendar",
+        },
+        {
+          id: "00000000-0000-4000-8000-000000000006",
+          label: "Pagamento",
+          url: "https://estrela.example/pagar",
+        },
+      ],
+    },
     behaviour: {
       businessName: "Banho e Tosa Estrela Fictício",
       offer: "Banho e tosa para cães",

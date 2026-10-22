@@ -43,6 +43,19 @@ export const botCaptureSettings = pgTable("bot_capture_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });
 
+// The owner's bounded link catalog. Absent until first save, which means disabled.
+export const botLinkSettings = pgTable("bot_link_settings", {
+  tenantId: text("tenant_id")
+    .primaryKey()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull(),
+  links: jsonb("links").$type<{ id: string; label: string; url: string }[]>().notNull(),
+  updatedByMemberId: text("updated_by_member_id").references(() => member.id, {
+    onDelete: "set null",
+  }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
+
 // Separate from production usage. One row per Tenant, with no sandbox content.
 export const botSandboxUsage = pgTable("bot_sandbox_usage", {
   tenantId: text("tenant_id")

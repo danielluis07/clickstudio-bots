@@ -2,6 +2,15 @@
 // Model, repository and usage ports.
 export { createBotActivation } from "@/modules/bot/activation";
 export {
+  createLinkSettingsEditor,
+  readLinks,
+  disabledLinks,
+  linkSettingsLimits,
+  type ConfiguredLink,
+  type LinkSettings,
+  type LinkSettingsLimits,
+} from "@/modules/bot/links";
+export {
   captureModes,
   createCaptureSettingsEditor,
   disabledCapture,

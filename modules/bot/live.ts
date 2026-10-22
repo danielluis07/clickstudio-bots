@@ -1,5 +1,6 @@
 import type { Database } from "@/db/database";
 import { readCapture } from "@/modules/bot/capture";
+import { readLinks } from "@/modules/bot/links";
 import { createBotCore } from "@/modules/bot/turn";
 import { readBehaviour } from "@/modules/bot/settings";
 import { scheduleAllows } from "@/modules/bot/schedule";
@@ -135,6 +136,7 @@ export const createLiveBot = ({
             getBehaviour: ({ scope }) => readBehaviour(db, scope),
             getKnowledgeBase: ({ scope }) => readKnowledgeBase(db, scope),
             getCapture: ({ scope }) => readCapture(db, scope),
+            getLinks: ({ scope }) => readLinks(db, scope),
             getContactDetails: () =>
               readConversationContactDetails(db, initial.scope, conversationId),
             // Stored as soon as captured: the Contact stated them whether or

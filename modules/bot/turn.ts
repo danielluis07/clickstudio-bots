@@ -1,4 +1,5 @@
 import { detailsRequest, isDetailsRequest, missingRequired } from "@/modules/bot/capture";
+import { configuredLinkReply } from "@/modules/bot/links";
 import {
   contextWindow,
   defaultContextLimits,
@@ -64,10 +65,11 @@ export const createBotCore = ({
 
   async respond(turn: BotTurn): Promise<TurnOutcome> {
     const window = contextWindow(clock.now(), context);
-    const [behaviour, knowledgeBase, capture, details, recent] = await Promise.all([
+    const [behaviour, knowledgeBase, capture, links, details, recent] = await Promise.all([
       repository.getBehaviour(turn),
       repository.getKnowledgeBase(turn),
       repository.getCapture(turn),
+      repository.getLinks(turn),
       repository.getContactDetails(turn),
       repository.listRecentMessages(turn, window),
     ]);
@@ -81,8 +83,8 @@ export const createBotCore = ({
     const askedForDetails =
       latestBotReply?.role === "assistant" && isDetailsRequest(latestBotReply.text);
     const request: ModelRequest = {
-      tools: modelTools(capture),
-      instructions: renderInstructions(behaviour, capture),
+      tools: modelTools(capture, links),
+      instructions: renderInstructions(behaviour, capture, links),
       knowledgeBase: renderKnowledgeBase(knowledgeBase),
       contact: renderContactDetails(capture, details),
       messages,
@@ -120,7 +122,7 @@ export const createBotCore = ({
       };
       for (;;) {
         const response = await generate(messages);
-        const checked = checkToolCalls(response.toolCalls, capture);
+        const checked = checkToolCalls(response.toolCalls, capture, links);
         if (!checked.valid) {
           // A refused response's text is never sent, even beside a valid answer.
           if (retried) return handoff("bot_indisponivel");
@@ -133,7 +135,9 @@ export const createBotCore = ({
           await repository.saveContactDetails(turn, checked.captured);
           Object.assign(known, checked.captured);
         }
-        const reply = response.text.trim();
+        const reply = checked.links.length
+          ? configuredLinkReply(checked.links)
+          : response.text.trim();
         if (checked.handoff) {
           const missing = missingRequired(capture, known);
           if (missing.length && !askedForDetails)

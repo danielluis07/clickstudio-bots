@@ -32,6 +32,10 @@ records. Contact capture keeps its details in the page and the request only; see
 [Capturing Contact details](contact-capture.md#sandbox). Adding a capability to
 the core must preserve this isolation before exposing its effects in the sandbox.
 
+[Configured Tenant links](bot-links.md) use the current saved list and the same
+ID-only tool as production. The core renders the saved URL with a notice that
+sending a link does not confirm a booking or payment; it never fetches the URL.
+
 Only a daily counter is persisted in `bot_sandbox_usage`: one row per Tenant,
 containing its day and attempted-turn count, with deletion cascading from the
 Tenant. No transcript, Contact fields or model output is stored there.
