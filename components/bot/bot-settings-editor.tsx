@@ -1,13 +1,17 @@
+import { BotCaptureForm } from "@/components/bot/bot-capture-form";
 import { BotSettingsForm } from "@/components/bot/bot-settings-form";
 import { BotSettingsSavedNote } from "@/components/bot/bot-settings-saved-note";
 import { BotSandboxChat } from "@/components/bot/bot-sandbox-chat";
 import { BotActivation } from "@/components/bot/bot-activation";
 import { botSettingsLimits } from "@/modules/bot";
 import type { TenantScope } from "@/modules/tenancy";
-import { botSettingsEditor } from "@/server/services";
+import { botSettingsEditor, captureSettingsEditor } from "@/server/services";
 
 export async function BotSettingsEditor({ scope }: { scope: TenantScope }) {
-  const { settings, updatedAt, updatedBy } = await botSettingsEditor.getSettings(scope);
+  const [{ settings, updatedAt, updatedBy }, capture] = await Promise.all([
+    botSettingsEditor.getSettings(scope),
+    captureSettingsEditor.getCapture(scope),
+  ]);
   // Disabling the form is not the authorization: the module re-checks.
   const canEdit = scope.role === "owner";
 
@@ -33,6 +37,7 @@ export async function BotSettingsEditor({ scope }: { scope: TenantScope }) {
         limits={botSettingsLimits}
         canEdit={canEdit}
       />
+      <BotCaptureForm capture={capture.settings} savedAt={capture.updatedAt} canEdit={canEdit} />
       {canEdit ? <BotSandboxChat /> : null}
     </div>
   );

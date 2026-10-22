@@ -16,6 +16,10 @@ _Avoid_: User, agent, operator
 An end customer who messages a Tenant through one of its Channels.
 _Avoid_: Customer, lead, user, client
 
+**Contact details**:
+What a Tenant knows about a Contact beyond the phone number: name, email, city and need. The Bot captures them when the Tenant enables capture; Members see and edit them on the Contact.
+_Avoid_: Lead, request, captured data
+
 ## Messaging
 
 **Channel**:

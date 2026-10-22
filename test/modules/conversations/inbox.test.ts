@@ -2,9 +2,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:tes
 import type { Database } from "@/db/database";
 import { channel, contact, conversation, member, message, organization, user } from "@/db/schema";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
-import { createConversationRepository, recordInboundTextMessage } from "@/modules/conversations";
+import {
+  createConversationRepository,
+  recordInboundTextMessage,
+  updateContactDetails,
+} from "@/modules/conversations";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
+import { createTestNotifier } from "@/test/support/notifier";
 
 let db: Database;
 let tenantA: TenantScope;
@@ -197,6 +202,9 @@ describe("Conversation view", () => {
         profileName: "Ana",
         appName: null,
         name: null,
+        email: null,
+        city: null,
+        need: null,
       },
       serviceWindowClosesAt: new Date("2026-10-21T09:05:00Z"),
     });
@@ -272,62 +280,95 @@ describe("Conversation view", () => {
 });
 
 describe("Contact panel", () => {
-  test("a Member renames a Contact; the name survives new messages and is searchable", async () => {
-    await receive(channelA, "5511900000001", "Oi", "2026-10-20T09:00:00Z", "Ana");
-    const inbox = inboxOf(tenantA);
-    const [
-      {
-        id,
-        contact: { id: contactId },
-      },
-    ] = (await inbox.listConversations()).conversations;
+  const blank = { name: "", email: "", city: "", need: "" };
+  const update = (scope: TenantScope, contactId: string, details: Partial<typeof blank>) =>
+    updateContactDetails({
+      db,
+      scope,
+      notifier: createTestNotifier(),
+      contactId,
+      details: { ...blank, ...details },
+    });
+  const firstContact = async (scope: TenantScope) => {
+    const [found] = (await inboxOf(scope).listConversations()).conversations;
+    return { conversationId: found.id, contactId: found.contact.id };
+  };
 
-    expect(await inbox.renameContact(contactId, "  Ana Souza (Loja Centro)  ")).toEqual({
-      id: contactId,
-      phone: "5511900000001",
-      profileName: "Ana",
-      appName: null,
-      name: "Ana Souza (Loja Centro)",
+  test("a Member edits a Contact's details; the name survives new messages and is searchable", async () => {
+    await receive(channelA, "5511900000001", "Oi", "2026-10-20T09:00:00Z", "Ana");
+    const { conversationId, contactId } = await firstContact(tenantA);
+
+    expect(
+      await update(tenantA, contactId, {
+        name: "  Ana Souza (Loja Centro)  ",
+        email: " ana@example.com ",
+        city: "Santos",
+        need: "Orçamento de corte para noivas",
+      }),
+    ).toEqual({
+      ok: true,
+      contact: {
+        id: contactId,
+        phone: "5511900000001",
+        profileName: "Ana",
+        appName: null,
+        name: "Ana Souza (Loja Centro)",
+        email: "ana@example.com",
+        city: "Santos",
+        need: "Orçamento de corte para noivas",
+      },
     });
     await receive(channelA, "5511900000001", "Tudo bem?", "2026-10-20T09:05:00Z", "Ana WhatsApp");
 
-    expect((await inbox.getConversation(id))?.contact).toEqual({
+    expect((await inboxOf(tenantA).getConversation(conversationId))?.contact).toEqual({
       id: contactId,
       phone: "5511900000001",
       profileName: "Ana WhatsApp",
       appName: null,
       name: "Ana Souza (Loja Centro)",
+      email: "ana@example.com",
+      city: "Santos",
+      need: "Orçamento de corte para noivas",
     });
     expect(
-      (await inbox.listConversations({ search: "loja centro" })).conversations.map(
+      (await inboxOf(tenantA).listConversations({ search: "loja centro" })).conversations.map(
         (found) => found.id,
       ),
-    ).toEqual([id]);
+    ).toEqual([conversationId]);
   });
 
-  test("clearing the name falls back to the WhatsApp profile name", async () => {
+  test("clearing a detail removes it, and the name falls back to the WhatsApp profile name", async () => {
     await receive(channelA, "5511900000001", "Oi", "2026-10-20T09:00:00Z", "Ana");
-    const inbox = inboxOf(tenantA);
-    const [
-      {
-        contact: { id: contactId },
-      },
-    ] = (await inbox.listConversations()).conversations;
-    await inbox.renameContact(contactId, "Ana Souza");
+    const { contactId } = await firstContact(tenantA);
+    await update(tenantA, contactId, { name: "Ana Souza", city: "Santos" });
 
-    expect((await inbox.renameContact(contactId, "   "))?.name).toBeNull();
+    expect(await update(tenantA, contactId, { name: "   " })).toMatchObject({
+      ok: true,
+      contact: { name: null, email: null, city: null, need: null },
+    });
   });
 
-  test("refuses to rename another Tenant's Contact", async () => {
-    await receive(channelB, "5511900000001", "Oi", "2026-10-20T09:00:00Z", "Ana");
-    const [
-      {
-        id,
-        contact: { id: contactId },
-      },
-    ] = (await inboxOf(tenantB).listConversations()).conversations;
+  test.each([
+    ["a malformed email", { email: "ana@" }],
+    ["a name over 100 characters", { name: "A".repeat(101) }],
+    ["a need over 500 characters", { need: "a".repeat(501) }],
+  ])("refuses %s and keeps the saved details", async (_case, details) => {
+    await receive(channelA, "5511900000001", "Oi", "2026-10-20T09:00:00Z", "Ana");
+    const { conversationId, contactId } = await firstContact(tenantA);
+    await update(tenantA, contactId, { city: "Santos" });
 
-    expect(await inboxOf(tenantA).renameContact(contactId, "Invasor")).toBeNull();
-    expect((await inboxOf(tenantB).getConversation(id))?.contact.name).toBeNull();
+    expect(await update(tenantA, contactId, details)).toEqual({ ok: false, error: "invalid" });
+    expect((await inboxOf(tenantA).getConversation(conversationId))?.contact.city).toBe("Santos");
+  });
+
+  test("refuses to edit another Tenant's Contact", async () => {
+    await receive(channelB, "5511900000001", "Oi", "2026-10-20T09:00:00Z", "Ana");
+    const { conversationId, contactId } = await firstContact(tenantB);
+
+    expect(await update(tenantA, contactId, { name: "Invasor" })).toEqual({
+      ok: false,
+      error: "not_found",
+    });
+    expect((await inboxOf(tenantB).getConversation(conversationId))?.contact.name).toBeNull();
   });
 });

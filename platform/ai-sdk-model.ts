@@ -17,10 +17,17 @@ type Request = {
   tools: { name: string; description: string; inputSchema: Record<string, unknown> }[];
   instructions: string;
   knowledgeBase: string;
+  contact: string;
   messages: (
     | { role: "user"; text: string }
     | { role: "assistant"; text: string; toolCalls?: ToolCall[] }
-    | { role: "tool"; results: { callId: string; name: string; error: string }[] }
+    | {
+        role: "tool";
+        results: (
+          | { callId: string; name: string; error: string }
+          | { callId: string; name: string; output: string }
+        )[];
+      }
   )[];
 };
 
@@ -64,7 +71,10 @@ const toSdkMessage = (message: Request["messages"][number]): SdkMessage => {
           type: "tool-result" as const,
           toolCallId: result.callId,
           toolName: result.name,
-          output: { type: "error-text" as const, value: result.error },
+          output:
+            "error" in result
+              ? { type: "error-text" as const, value: result.error }
+              : { type: "text" as const, value: result.output },
         })),
       };
   }
@@ -100,6 +110,8 @@ export const createAiSdkModel = ({
           content: request.knowledgeBase,
           providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
         },
+        // After the breakpoint: it differs per Contact.
+        ...(request.contact ? [{ role: "system" as const, content: request.contact }] : []),
       ],
       messages: request.messages.map(toSdkMessage),
       providerOptions,

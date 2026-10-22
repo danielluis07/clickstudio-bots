@@ -35,6 +35,7 @@ const callerFor = (session: TRPCContext["session"]) =>
     }),
   });
 const ownerA = { userId: "owner-a", activeTenantId: "tenant-a" };
+const blank = { name: "", email: "", city: "", need: "" };
 
 const codeOf = async (call: Promise<unknown>) => {
   try {
@@ -221,15 +222,15 @@ describe("tRPC router", () => {
     expect(await codeOf(caller.conversations.messages({ conversationId: conversationOfB }))).toBe(
       "NOT_FOUND",
     );
-    expect(await codeOf(caller.contacts.rename({ contactId: contactOfB, name: "Invasor" }))).toBe(
-      "NOT_FOUND",
-    );
+    expect(
+      await codeOf(caller.contacts.update({ contactId: contactOfB, ...blank, name: "Invasor" })),
+    ).toBe("NOT_FOUND");
     expect(
       await codeOf(caller.replies.send({ conversationId: conversationOfB, text: "Invasão" })),
     ).toBe("NOT_FOUND");
   });
 
-  test("a Member reads and renames their own Tenant's Contacts", async () => {
+  test("a Member reads and edits their own Tenant's Contacts", async () => {
     const caller = callerFor({ userId: "owner-b", activeTenantId: "tenant-b" });
     notifier.pings.length = 0;
 
@@ -238,9 +239,17 @@ describe("tRPC router", () => {
         ({ text }) => text,
       ),
     ).toEqual(["Oi"]);
-    expect((await caller.contacts.rename({ contactId: contactOfB, name: "Ana Souza" })).name).toBe(
-      "Ana Souza",
-    );
+    expect(
+      await caller.contacts.update({
+        contactId: contactOfB,
+        ...blank,
+        name: "Ana Souza",
+        email: "ana@example.com",
+      }),
+    ).toMatchObject({ name: "Ana Souza", email: "ana@example.com" });
+    expect(
+      await codeOf(caller.contacts.update({ contactId: contactOfB, ...blank, email: "ana@" })),
+    ).toBe("BAD_REQUEST");
     expect((await caller.conversations.get({ conversationId: conversationOfB })).contact.name).toBe(
       "Ana Souza",
     );

@@ -3,8 +3,9 @@ import { z } from "zod";
 import {
   createConversationRepository,
   createHandoffControls,
+  contactDetailLimits,
   deleteContact,
-  renameContact,
+  updateContactDetails,
   type HandoffControls,
 } from "@/modules/conversations";
 import { systemClock } from "@/platform/clock";
@@ -87,13 +88,31 @@ export const contactsRouter = createTRPCRouter({
         throw new TRPCError({ code: result.error === "forbidden" ? "FORBIDDEN" : "NOT_FOUND" });
     }),
 
-  rename: tenantProcedure
-    .input(z.object({ contactId: z.string(), name: z.string().max(100) }))
-    .mutation(async ({ ctx, input }) =>
-      orNotFound(
-        await renameContact({ db: ctx.db, scope: ctx.scope, notifier: ctx.notifier, ...input }),
-      ),
-    ),
+  // Every detail at once, as the Contact panel shows them. The module checks
+  // each value's bounds in characters and that the Contact is the Tenant's;
+  // these UTF-16 bounds only cap the request.
+  update: tenantProcedure
+    .input(
+      z.object({
+        contactId: z.string(),
+        name: z.string().max(contactDetailLimits.name * 2),
+        email: z.string().max(contactDetailLimits.email * 2),
+        city: z.string().max(contactDetailLimits.city * 2),
+        need: z.string().max(contactDetailLimits.need * 2),
+      }),
+    )
+    .mutation(async ({ ctx, input: { contactId, ...details } }) => {
+      const result = await updateContactDetails({
+        db: ctx.db,
+        scope: ctx.scope,
+        notifier: ctx.notifier,
+        contactId,
+        details,
+      });
+      if (!result.ok)
+        throw new TRPCError({ code: result.error === "invalid" ? "BAD_REQUEST" : "NOT_FOUND" });
+      return result.contact;
+    }),
 });
 
 const handoffProcedure = (command: keyof HandoffControls) =>

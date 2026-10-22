@@ -43,6 +43,7 @@ To enable live inbox updates, set the server-only `ABLY_API_KEY` as described in
 To configure the Bot, start with [Behaviour settings](docs/bot-settings.md) and
 [Testar Bot setup and code entry points](docs/bot-sandbox.md). The sandbox guide
 explains provider keys, model access, daily limits and production isolation.
+[Capturing Contact details](docs/contact-capture.md) covers the capture capability.
 
 Before testing in a browser, run `bun run doctor`. It checks local readiness
 without applying migrations, seeding data or calling a Model. See

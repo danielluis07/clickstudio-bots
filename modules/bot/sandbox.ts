@@ -2,10 +2,16 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
 import { botActivation, botSandboxUsage } from "@/db/schema";
+import { readCapture } from "@/modules/bot/capture";
 import type { Model } from "@/modules/bot/model";
 import { botTimeZone } from "@/modules/bot/schedule";
 import { readBehaviour } from "@/modules/bot/settings";
 import { createBotCore } from "@/modules/bot/turn";
+import {
+  contactDetailSchemas,
+  noContactDetails,
+  type ContactDetails,
+} from "@/modules/conversations";
 import { readKnowledgeBase } from "@/modules/knowledge-base";
 import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
@@ -19,12 +25,22 @@ const sandboxMessageSchema = z.strictObject({
   text: z.string().min(1).max(8_000),
 });
 
+// The test Contact's details, captured earlier in this browser's transcript.
+const sandboxContactSchema = z.strictObject({
+  name: contactDetailSchemas.name.nullable(),
+  email: contactDetailSchemas.email.nullable(),
+  city: contactDetailSchemas.city.nullable(),
+  need: contactDetailSchemas.need.nullable(),
+}) satisfies z.ZodType<ContactDetails>;
+
 export const sandboxInputSchema = z.strictObject({
   text: z.string().trim().min(1).max(4_096),
   history: z.array(sandboxMessageSchema).max(20),
+  contact: sandboxContactSchema.optional(),
 });
 
 export type SandboxMessage = z.infer<typeof sandboxMessageSchema>;
+export type SandboxContact = z.infer<typeof sandboxContactSchema>;
 
 const dayFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: botTimeZone });
 const forbidden = { ok: false as const, error: "forbidden" as const };
@@ -84,12 +100,21 @@ export const createBotSandbox = ({
         ...parsed.data.history,
         { author: "contact" as const, text: parsed.data.text },
       ].map((message) => ({ ...message, sentAt: now }));
+      // Captured details stay with this request and go back to the browser;
+      // no production Contact exists to write to.
+      let contact: ContactDetails = parsed.data.contact ?? noContactDetails;
       const core = createBotCore({
         model,
         clock,
         repository: {
           getBehaviour: (turn) => readBehaviour(db, turn.scope),
           getKnowledgeBase: (turn) => readKnowledgeBase(db, turn.scope),
+          getCapture: (turn) => readCapture(db, turn.scope),
+          getContactDetails: async () => contact,
+          saveContactDetails: async (_turn, details) => {
+            // As on a production Contact, a capture never replaces a name.
+            contact = { ...contact, ...details, name: contact.name ?? details.name ?? null };
+          },
           listRecentMessages: async () => messages,
         },
         // Production cost and reply metering are never given to the sandbox.
@@ -113,6 +138,7 @@ export const createBotSandbox = ({
       return {
         ok: true as const,
         outcome,
+        contact,
         allowance: { used: reserved.used, limit: sandboxDailyCap },
       };
     },

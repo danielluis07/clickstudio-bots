@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent, type KeyboardEvent } from "react";
-import type { SandboxMessage } from "@/modules/bot/sandbox";
+import { captureFieldOptions } from "@/modules/bot/hooks/settings-labels";
+import type { SandboxContact, SandboxMessage } from "@/modules/bot/sandbox";
 import { useTRPC } from "@/trpc/client";
 
 export type SandboxChatMessage = SandboxMessage & { id: string; handoff?: boolean };
@@ -20,6 +21,8 @@ export const useBotSandbox = () => {
   const status = useQuery(trpc.sandbox.status.queryOptions());
   const [text, setText] = useState("");
   const [messages, setMessages] = useState<SandboxChatMessage[]>([]);
+  // The test Contact's captured details, kept only in this page like the transcript.
+  const [contact, setContact] = useState<SandboxContact | undefined>(undefined);
   const send = useMutation(
     trpc.sandbox.respond.mutationOptions({
       onMutate: (input) => {
@@ -33,8 +36,9 @@ export const useBotSandbox = () => {
       onError: (_error, _input, context) => {
         setMessages((previous) => previous.filter(({ id }) => id !== context?.pendingMessageId));
       },
-      onSuccess: ({ outcome }) => {
+      onSuccess: ({ outcome, contact }) => {
         setText("");
+        setContact(contact);
         setMessages((previous) => [
           ...previous,
           ...(outcome.kind === "nothing_to_answer"
@@ -71,6 +75,7 @@ export const useBotSandbox = () => {
     send.mutate({
       text,
       history: messages.slice(-20).map(({ author, text }) => ({ author, text })),
+      contact,
     });
   };
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -100,5 +105,9 @@ export const useBotSandbox = () => {
     available: status.data?.available,
     sending: send.isPending,
     messages,
+    contactDetails: captureFieldOptions.flatMap(({ field, label }) => {
+      const value = contact?.[field];
+      return value ? [{ field, label, value }] : [];
+    }),
   };
 };

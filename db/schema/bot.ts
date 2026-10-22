@@ -27,6 +27,22 @@ export const botSettings = pgTable("bot_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });
 
+// The Contact capture capability, saved by the owner. Absent until the first
+// save, which means disabled.
+export const botCaptureSettings = pgTable("bot_capture_settings", {
+  tenantId: text("tenant_id")
+    .primaryKey()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull(),
+  // "off", "optional" or "required" per Contact detail, keyed by its name.
+  fields: jsonb("fields").$type<Record<string, "off" | "optional" | "required">>().notNull(),
+  // The Member who last saved them. Null once that Member is removed.
+  updatedByMemberId: text("updated_by_member_id").references(() => member.id, {
+    onDelete: "set null",
+  }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
+
 // Separate from production usage. One row per Tenant, with no sandbox content.
 export const botSandboxUsage = pgTable("bot_sandbox_usage", {
   tenantId: text("tenant_id")

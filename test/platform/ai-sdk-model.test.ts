@@ -27,6 +27,7 @@ const request: ModelRequest = {
   ],
   instructions: "Behaviour",
   knowledgeBase: "# Knowledge base",
+  contact: "",
   messages: [
     { role: "user", text: "Quanto custa?" },
     {
@@ -86,6 +87,37 @@ describe("AI SDK model", () => {
         ],
       },
     ]);
+  });
+
+  test("sends Contact details after the cached breakpoint, and tool outputs as text", async () => {
+    const provider = new MockLanguageModelV4({
+      doGenerate: async () => generated([{ type: "text", text: "Oi, Ana" }]),
+    });
+
+    await createAiSdkModel({ model: provider }).generate({
+      ...request,
+      contact: "# Contact details",
+      messages: [
+        { role: "user", text: "Sou a Ana" },
+        {
+          role: "assistant",
+          text: "",
+          toolCalls: [{ id: "call-1", name: "capture_contact_details", input: { name: "Ana" } }],
+        },
+        {
+          role: "tool",
+          results: [{ callId: "call-1", name: "capture_contact_details", output: "Saved." }],
+        },
+      ],
+    });
+
+    const [call] = provider.doGenerateCalls;
+    expect(call.prompt[1]).toMatchObject({ role: "system", content: "# Knowledge base" });
+    expect(call.prompt[2]).toEqual({ role: "system", content: "# Contact details" });
+    expect(call.prompt.at(-1)).toMatchObject({
+      role: "tool",
+      content: [{ type: "tool-result", output: { type: "text", value: "Saved." } }],
+    });
   });
 
   test("returns text, every tool call as sent, and token usage split by cache", async () => {

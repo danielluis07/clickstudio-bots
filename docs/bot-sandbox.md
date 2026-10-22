@@ -26,10 +26,11 @@ Each submitted message is limited to 4,096 characters; each history entry to 8,0
 
 The sandbox has no WhatsApp sender, production usage meter, notifier or repository
 that writes Contacts or Conversations. A Handoff is displayed as a simulation;
-the owner can continue testing afterward. The current production catalog offers
-only `handoff`: attempted capture or send tools are rejected by the same core
-validation and cannot modify production records. Adding a capability to the core
-must preserve this isolation before exposing its effects in the sandbox.
+the owner can continue testing afterward. Attempted send or other uncatalogued
+tools are rejected by the same core validation and cannot modify production
+records. Contact capture keeps its details in the page and the request only; see
+[Capturing Contact details](contact-capture.md#sandbox). Adding a capability to
+the core must preserve this isolation before exposing its effects in the sandbox.
 
 Only a daily counter is persisted in `bot_sandbox_usage`: one row per Tenant,
 containing its day and attempted-turn count, with deletion cascading from the

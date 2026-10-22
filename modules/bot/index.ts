@@ -2,6 +2,14 @@
 // Model, repository and usage ports.
 export { createBotActivation } from "@/modules/bot/activation";
 export {
+  captureModes,
+  createCaptureSettingsEditor,
+  disabledCapture,
+  readCapture,
+  type CaptureMode,
+  type CaptureSettings,
+} from "@/modules/bot/capture";
+export {
   createLiveBot,
   type LiveBot,
   type BotJob,
@@ -16,6 +24,7 @@ export type {
   ModelResponse,
   ModelTool,
   ModelToolCall,
+  ModelToolOutput,
   ModelToolRefusal,
   ModelUsage,
 } from "@/modules/bot/model";
@@ -50,5 +59,6 @@ export {
   sandboxDailyCap,
   sandboxInputSchema,
   type BotSandbox,
+  type SandboxContact,
   type SandboxMessage,
 } from "@/modules/bot/sandbox";

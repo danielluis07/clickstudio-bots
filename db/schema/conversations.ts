@@ -38,6 +38,11 @@ export const contact = pgTable(
     // synced through coexistence, and when the app last changed it.
     appName: text("app_name"),
     appNameChangedAt: timestamp("app_name_changed_at", { withTimezone: true }),
+    // Details the Bot captured or a Member entered; the name above is the
+    // captured name too. Deleted with the Contact.
+    email: text("email"),
+    city: text("city"),
+    need: text("need"),
     ...timestamps(),
   },
   (t) => [uniqueIndex("contact_tenant_id_phone_unique").on(t.tenantId, t.phone)],

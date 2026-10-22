@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { ChannelRoute } from "@/modules/channels";
-import { createBotCore, type BotTurn, type ContextMessage } from "@/modules/bot";
+import { noContactDetails } from "@/modules/conversations";
+import {
+  createBotCore,
+  disabledCapture,
+  type BotTurn,
+  type CaptureSettings,
+  type ContextMessage,
+} from "@/modules/bot";
 import {
   createTestBotRepository,
   createTestUsageMeter,
@@ -160,8 +167,8 @@ describe("behaviour settings", () => {
   });
 });
 
-const handoffCall = (reason: string, input: Record<string, unknown> = {}) => ({
-  id: "call-1",
+const handoffCall = (reason: string, input: Record<string, unknown> = {}, id = "call-1") => ({
+  id,
   name: "handoff",
   input: { reason, ...input },
 });
@@ -563,5 +570,280 @@ describe("usage metering", () => {
     model.script({ text: "O corte custa R$ 80." });
 
     expect(await core().respond(turn)).toEqual({ kind: "answer", reply: "O corte custa R$ 80." });
+  });
+});
+
+const captureCall = (input: unknown, id = "call-1") => ({
+  id,
+  name: "capture_contact_details",
+  input,
+});
+
+describe("Contact capture", () => {
+  const capturing = (fields: Partial<CaptureSettings["fields"]>): CaptureSettings => ({
+    enabled: true,
+    fields: { ...disabledCapture.fields, ...fields },
+  });
+
+  test("offers the capture tool with only the fields the Tenant chose, and none when disabled", async () => {
+    repository.capture = capturing({ name: "required", need: "optional" });
+    model.script({ text: "Oi!" });
+    await core().respond(turn);
+
+    repository.capture = { ...repository.capture, enabled: false };
+    model.script({ text: "Oi!" });
+    await core().respond(turn);
+
+    const [enabled, disabled] = model.requests;
+    expect(enabled.tools.map((tool) => tool.name)).toEqual(["handoff", "capture_contact_details"]);
+    const schema = enabled.tools[1].inputSchema as { properties: Record<string, unknown> };
+    expect(Object.keys(schema.properties)).toEqual(["name", "need"]);
+    expect(disabled.tools.map((tool) => tool.name)).toEqual(["handoff"]);
+  });
+
+  test("stores what the Contact stated on the turn's Contact, trimmed, and replies", async () => {
+    repository.capture = capturing({ name: "optional", need: "optional" });
+    repository.messages = [fromContact("Sou a Ana, quero cortar o cabelo")];
+    model.script({
+      text: "Prazer, Ana! O corte custa R$ 80.",
+      toolCalls: [captureCall({ name: " Ana ", need: "Cortar o cabelo" })],
+    });
+
+    expect(await core().respond(turn)).toEqual({
+      kind: "answer",
+      reply: "Prazer, Ana! O corte custa R$ 80.",
+    });
+    expect(repository.captured).toEqual([{ name: "Ana", need: "Cortar o cabelo" }]);
+  });
+
+  test("a capture without a reply returns the result to the model once for its reply", async () => {
+    repository.capture = capturing({ email: "required" });
+    repository.messages = [fromContact("Meu e-mail é ana@example.com")];
+    model.script(
+      { toolCalls: [captureCall({ email: "ana@example.com" })] },
+      { text: "Obrigado, anotei seu e-mail." },
+    );
+
+    expect(await core().respond(turn)).toEqual({
+      kind: "answer",
+      reply: "Obrigado, anotei seu e-mail.",
+    });
+    expect(repository.captured).toEqual([{ email: "ana@example.com" }]);
+    expect(model.requests[1].messages.slice(-2)).toEqual([
+      { role: "assistant", text: "", toolCalls: [captureCall({ email: "ana@example.com" })] },
+      {
+        role: "tool",
+        results: [{ callId: "call-1", name: "capture_contact_details", output: "Saved." }],
+      },
+    ]);
+    expect(meter.records[0].usage.toolRoundTrips).toBe(1);
+  });
+
+  test.each([
+    [
+      "the capability is disabled",
+      { ...disabledCapture.fields, name: "required" },
+      false,
+      { name: "Ana" },
+    ],
+    [
+      "the Tenant did not choose the field",
+      { ...disabledCapture.fields, name: "required" },
+      true,
+      { city: "Santos" },
+    ],
+    [
+      "the email is malformed",
+      { ...disabledCapture.fields, email: "optional" },
+      true,
+      { email: "ana@" },
+    ],
+    ["a value is blank", { ...disabledCapture.fields, name: "optional" }, true, { name: "  " }],
+    ["no detail is sent", { ...disabledCapture.fields, name: "optional" }, true, {}],
+    [
+      "the name is too long",
+      { ...disabledCapture.fields, name: "optional" },
+      true,
+      { name: "A".repeat(101) },
+    ],
+    [
+      "it names another Contact",
+      { ...disabledCapture.fields, name: "optional" },
+      true,
+      { name: "Ana", contactId: "contact-b", tenantId: "tenant-b" },
+    ],
+  ] as const)(
+    "a capture is refused, retried and stores nothing when %s",
+    async (_case, fields, enabled, input) => {
+      repository.capture = { enabled, fields };
+      model.script({ toolCalls: [captureCall(input)] }, { text: "Como posso ajudar?" });
+
+      expect(await core().respond(turn)).toEqual({ kind: "answer", reply: "Como posso ajudar?" });
+      expect(repository.captured).toEqual([]);
+      expect(model.requests[1].messages.at(-1)).toMatchObject({
+        role: "tool",
+        results: [{ callId: "call-1", name: "capture_contact_details", error: expect.any(String) }],
+      });
+    },
+  );
+
+  test("a valid capture beside an invalid call is not stored", async () => {
+    repository.capture = capturing({ name: "optional" });
+    model.script(
+      { toolCalls: [captureCall({ name: "Ana" }), handoffCall("talvez")] },
+      new Error("500"),
+    );
+
+    expect(await core().respond(turn)).toMatchObject({
+      kind: "handoff",
+      reason: "bot_indisponivel",
+    });
+    expect(repository.captured).toEqual([]);
+  });
+
+  test("injects the Contact's chosen details apart from the cached prefix, never the phone", async () => {
+    repository.capture = capturing({ name: "required", email: "required", need: "optional" });
+    repository.contact = { name: "Ana", email: null, city: "Santos", need: null };
+    model.script({ text: "Oi, Ana!" }, { text: "Oi, Bia!" });
+
+    await core().respond(turn);
+    repository.contact = { ...repository.contact, name: "Bia" };
+    await core().respond(turn);
+
+    const [first, second] = model.requests;
+    expect(first.contact).toBe(
+      [
+        "# Contact details",
+        "Name: Ana",
+        "Email: not provided (required before a handoff)",
+        "Need: not provided",
+      ].join("\n"),
+    );
+    expect(second.contact).toContain("Name: Bia");
+    expect(second.instructions).toBe(first.instructions);
+    expect(first.instructions).toContain(
+      "# Contact details to capture\n- Name: required\n- Email: required\n- Need: optional",
+    );
+    expect(first.instructions).not.toContain("Ana");
+    expect(first.knowledgeBase).not.toContain("Ana");
+  });
+
+  describe("required details before a Handoff", () => {
+    const askNameAndEmail =
+      "Antes de chamar a equipe, me informe seu nome e seu e-mail, por favor.";
+
+    beforeEach(() => {
+      repository.capture = capturing({ name: "required", email: "required", need: "optional" });
+      repository.messages = [fromContact("Quanto custa o corte? Quero falar com alguém")];
+    });
+
+    test("asks only for the missing required details instead of handing off", async () => {
+      model.script({
+        text: "O corte custa R$ 80.",
+        toolCalls: [handoffCall("pedido_do_contato")],
+      });
+
+      expect(await core().respond(turn)).toEqual({
+        kind: "answer",
+        reply: `O corte custa R$ 80.\n\n${askNameAndEmail}`,
+      });
+    });
+
+    test("hands off anyway when the Contact does not give them after the request", async () => {
+      repository.messages = [
+        fromContact("Quero falar com alguém", minutesAgo(3)),
+        { author: "bot", text: askNameAndEmail, sentAt: minutesAgo(2) },
+        fromContact("Prefiro não informar"),
+      ];
+      model.script({ toolCalls: [handoffCall("pedido_do_contato")] });
+
+      expect(await core().respond(turn)).toEqual({
+        kind: "handoff",
+        reason: "pedido_do_contato",
+        reply: "Certo, vou chamar alguém da equipe para continuar o atendimento.",
+      });
+    });
+
+    test("hands off with what the Contact gave after the request, even if partial", async () => {
+      repository.messages = [
+        fromContact("Quero falar com alguém", minutesAgo(3)),
+        { author: "bot", text: askNameAndEmail, sentAt: minutesAgo(2) },
+        fromContact("Sou a Ana, e-mail não tenho"),
+      ];
+      model.script({
+        toolCalls: [captureCall({ name: "Ana" }), handoffCall("pedido_do_contato", {}, "call-2")],
+      });
+
+      expect(await core().respond(turn)).toMatchObject({
+        kind: "handoff",
+        reason: "pedido_do_contato",
+      });
+      expect(repository.captured).toEqual([{ name: "Ana" }]);
+    });
+
+    test("asks again for a later Handoff once the Bot has replied to something else", async () => {
+      repository.messages = [
+        fromContact("Quero falar com alguém", minutesAgo(5)),
+        { author: "bot", text: askNameAndEmail, sentAt: minutesAgo(4) },
+        fromContact("Deixa, quanto custa a barba?", minutesAgo(3)),
+        { author: "bot", text: "Não tenho essa informação.", sentAt: minutesAgo(2) },
+        fromContact("Então quero falar com alguém"),
+      ];
+      model.script({ toolCalls: [handoffCall("pedido_do_contato")] });
+
+      expect(await core().respond(turn)).toEqual({ kind: "answer", reply: askNameAndEmail });
+    });
+
+    test("hands off once the required details are saved, whether before or in the same response", async () => {
+      repository.contact = { ...noContactDetails, name: "Ana" };
+      model.script({
+        toolCalls: [
+          captureCall({ email: "ana@example.com" }),
+          handoffCall("sem_resposta", {}, "call-2"),
+        ],
+      });
+
+      expect(await core().respond(turn)).toMatchObject({ kind: "handoff", reason: "sem_resposta" });
+    });
+
+    test("does not ask for optional details", async () => {
+      repository.contact = { ...noContactDetails, name: "Ana", email: "ana@example.com" };
+      model.script({ toolCalls: [handoffCall("regra_do_negocio")] });
+
+      expect(await core().respond(turn)).toMatchObject({
+        kind: "handoff",
+        reason: "regra_do_negocio",
+      });
+    });
+
+    test("does not ask while capture is disabled", async () => {
+      repository.capture = { ...repository.capture, enabled: false };
+      model.script({ toolCalls: [handoffCall("pedido_do_contato")] });
+
+      expect(await core().respond(turn)).toMatchObject({
+        kind: "handoff",
+        reason: "pedido_do_contato",
+      });
+    });
+
+    test("does not delay a Handoff when the Bot is unavailable", async () => {
+      model.script(new Error("529 overloaded"));
+
+      expect(await core().respond(turn)).toMatchObject({
+        kind: "handoff",
+        reason: "bot_indisponivel",
+      });
+    });
+  });
+
+  test("sends no Contact details or capture instructions while capture is disabled", async () => {
+    repository.contact = { name: "Ana", email: "ana@example.com", city: null, need: null };
+    model.script({ text: "Oi!" });
+
+    await core().respond(turn);
+
+    expect(model.requests[0].contact).toBe("");
+    expect(JSON.stringify(model.requests[0])).not.toContain("Ana");
+    expect(model.requests[0].instructions).not.toContain("capture");
   });
 });
