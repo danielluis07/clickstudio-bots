@@ -1,6 +1,8 @@
 "use client";
 
 import { ContactPanel } from "@/components/inbox/contact-panel";
+import { ConversationOwnership } from "@/components/inbox/conversation-ownership";
+import { HandoffControls } from "@/components/inbox/handoff-controls";
 import { InboxNotice } from "@/components/inbox/inbox-notice";
 import { MessageList } from "@/components/inbox/message-list";
 import { ReplyComposer } from "@/components/inbox/reply-composer";
@@ -34,13 +36,17 @@ export function ConversationView({
   return (
     <div className="grid min-h-0 grid-cols-[1fr_15rem]">
       <section aria-labelledby="conversa" className="flex min-h-0 flex-col">
-        <header className="border-b border-border px-4 py-3">
-          <h2 id="conversa" className="truncate font-semibold">
-            {contactDisplayName(conversation.contact)}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {formatContactPhone(conversation.contact.phone)}
-          </p>
+        <header className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+          <div className="flex min-w-0 flex-col gap-1">
+            <h2 id="conversa" className="truncate font-semibold">
+              {contactDisplayName(conversation.contact)}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {formatContactPhone(conversation.contact.phone)}
+            </p>
+            <ConversationOwnership conversation={conversation} />
+          </div>
+          <HandoffControls conversation={conversation} />
         </header>
         <MessageList conversationId={conversationId} />
         <ReplyComposer

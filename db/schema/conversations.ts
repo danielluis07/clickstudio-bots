@@ -59,7 +59,23 @@ export const conversation = pgTable(
     owner: text("owner", { enum: ["bot", "team"] })
       .notNull()
       .default("bot"),
-    handoffReason: text("handoff_reason"),
+    // Why the latest Handoff happened. Kept after "Devolver ao Bot" while the
+    // Conversation still waits; "Resolvida" clears it.
+    handoffReason: text("handoff_reason", {
+      enum: [
+        "sem_resposta",
+        "pedido_do_contato",
+        "regra_do_negocio",
+        "bot_indisponivel",
+        "limite_atingido",
+        "assumida",
+        "resposta_no_painel",
+        "resposta_no_app",
+      ],
+    }),
+    // On the waiting list for the team. Every Handoff adds it; only "Resolvida"
+    // removes it, independently of who owns the Conversation.
+    waiting: boolean("waiting").notNull().default(false),
     botLeaseToken: text("bot_lease_token"),
     botLeaseUntil: timestamp("bot_lease_until", { withTimezone: true }),
     // When the latest message was sent; the inbox lists the most recent first.
@@ -107,6 +123,9 @@ export const message = pgTable(
     // Shared from the WhatsApp Business app's history after onboarding. Never a
     // reason for a Bot turn, a Handoff or a counted Bot reply.
     imported: boolean("imported").notNull().default(false),
+    // An app echo filed while a Bot reply awaited Meta's wamid: it may be that
+    // reply's own echo, so its Handoff waits until the send's outcome is known.
+    echoUnresolved: boolean("echo_unresolved").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

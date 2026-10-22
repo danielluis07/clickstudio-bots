@@ -3,6 +3,7 @@ import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Database } from "@/db/database";
 import { contact, conversation, member, message, messageChange, user } from "@/db/schema";
 import { recordSentWamid } from "@/modules/conversations/echoes";
+import { handOffFromBot } from "@/modules/conversations/handoff";
 import type { TenantScope } from "@/modules/tenancy";
 import type { ChannelRoute } from "@/modules/channels";
 
@@ -80,6 +81,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
         channelId: conversation.channelId,
         owner: conversation.owner,
         handoffReason: conversation.handoffReason,
+        waiting: conversation.waiting,
         contact: contactFields,
         // Null until the Contact has written; the window never opens otherwise.
         serviceWindowClosesAt: sql`(
@@ -96,12 +98,15 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
   return {
     getConversation,
 
+    // With `waiting`, only those on the waiting list for the team.
     async listConversations({
       search = "",
+      waiting = false,
       cursor = null,
       limit = 30,
     }: {
       search?: string;
+      waiting?: boolean;
       cursor?: ConversationCursor | null;
       limit?: number;
     } = {}) {
@@ -111,6 +116,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
           channelId: conversation.channelId,
           owner: conversation.owner,
           handoffReason: conversation.handoffReason,
+          waiting: conversation.waiting,
           contact: contactFields,
           lastMessageAt: conversation.lastMessageAt,
         })
@@ -120,6 +126,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
           and(
             eq(conversation.tenantId, scope.tenantId),
             matchesSearch(search),
+            waiting ? eq(conversation.waiting, true) : undefined,
             before(
               conversation.lastMessageAt,
               conversation.id,
@@ -191,7 +198,8 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
     },
 
     // Stores the scope's Member's reply before it is sent, so a send that
-    // fails or never answers still shows in the Conversation.
+    // fails or never answers still shows in the Conversation. The reply
+    // silences the Bot before Meta is called.
     async insertPendingReply(
       conversationId: string,
       { text, sentAt }: { text: string; sentAt: Date },
@@ -220,6 +228,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
           .where(
             and(eq(conversation.id, conversationId), eq(conversation.tenantId, scope.tenantId)),
           );
+        await handOffFromBot(tx, scope, conversationId, "resposta_no_painel");
         return inserted;
       });
     },

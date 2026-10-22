@@ -14,6 +14,11 @@ export {
   type EchoClassification,
   type MessageEcho,
 } from "@/modules/conversations/echoes";
+export {
+  createHandoffControls,
+  type ConversationHandoffReason,
+  type HandoffControls,
+} from "@/modules/conversations/handoff";
 export { recordImportedHistory, type ImportedHistory } from "@/modules/conversations/history";
 export { recordInboundTextMessage, type InboundTextMessage } from "@/modules/conversations/inbound";
 export {

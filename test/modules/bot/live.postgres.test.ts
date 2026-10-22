@@ -148,7 +148,7 @@ suite("live turns on real Postgres", () => {
         await tx.execute(sql`set local lock_timeout = '1s'`);
         await tx
           .update(conversation)
-          .set({ handoffReason: "probe" })
+          .set({ handoffReason: "assumida" })
           .where(eq(conversation.id, conversationId));
       });
       probeCompleted = true;

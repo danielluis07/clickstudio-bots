@@ -2,8 +2,10 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   createConversationRepository,
+  createHandoffControls,
   deleteContact,
   renameContact,
+  type HandoffControls,
 } from "@/modules/conversations";
 import { systemClock } from "@/platform/clock";
 import { createTRPCRouter, tenantProcedure } from "@/trpc/init";
@@ -18,6 +20,7 @@ export const conversationsRouter = createTRPCRouter({
     .input(
       z.object({
         search: z.string().max(100).optional(),
+        waiting: z.boolean().optional(),
         cursor: z.object({ lastMessageAt: z.date(), id: z.string() }).nullish(),
       }),
     )
@@ -91,4 +94,20 @@ export const contactsRouter = createTRPCRouter({
         await renameContact({ db: ctx.db, scope: ctx.scope, notifier: ctx.notifier, ...input }),
       ),
     ),
+});
+
+const handoffProcedure = (command: keyof HandoffControls) =>
+  tenantProcedure
+    .input(z.object({ conversationId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const controls = createHandoffControls({ db: ctx.db, notifier: ctx.notifier });
+      const result = await controls[command](ctx.scope, input.conversationId);
+      if (!result.ok) throw new TRPCError({ code: "NOT_FOUND" });
+    });
+
+// Any Member, whoever took the Conversation over.
+export const handoffRouter = createTRPCRouter({
+  takeOver: handoffProcedure("takeOver"),
+  returnToBot: handoffProcedure("returnToBot"),
+  resolve: handoffProcedure("resolve"),
 });
