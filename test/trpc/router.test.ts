@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { TRPCError } from "@trpc/server";
 import type { Database } from "@/db/database";
-import { channel, member, organization, user } from "@/db/schema";
+import { botReplyUsage, channel, member, organization, user } from "@/db/schema";
 import { resolveChannelPhoneNumber } from "@/modules/channels";
-import { createBotSandbox } from "@/modules/bot";
+import { createBotAllowance, createBotSandbox } from "@/modules/bot";
 import { createReplyService, recordInboundTextMessage } from "@/modules/conversations";
 import type { TRPCContext } from "@/trpc/init";
 import { appRouter } from "@/trpc/routers/_app";
@@ -13,6 +13,7 @@ import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
 import { createAblyRealtime } from "@/platform/ably";
 import { createTestNotifier } from "@/test/support/notifier";
 import { createTestModel } from "@/test/support/model";
+import { createTestMailer } from "@/test/support/mailer";
 
 let db: Database;
 let conversationOfB: string;
@@ -27,6 +28,7 @@ const callerFor = (session: TRPCContext["session"]) =>
     realtime: createAblyRealtime({ apiKey: "test.key:private-test-secret" }),
     notifier,
     sandbox: createBotSandbox({ db, clock: createTestClock(), model: sandboxModel }),
+    allowance: createBotAllowance({ db, clock: createTestClock(), mailer: createTestMailer() }),
     replies: createReplyService({
       db,
       clock: createTestClock(),
@@ -99,6 +101,25 @@ beforeAll(async () => {
 });
 
 describe("tRPC router", () => {
+  test("only an owner can read the current Tenant's reply usage without supplying a Tenant id", async () => {
+    await db
+      .insert(botReplyUsage)
+      .values({ tenantId: "tenant-b", period: "2026-01-01", replies: 4444 });
+    expect(await callerFor(ownerA).bot.usage()).toMatchObject({
+      used: 0,
+      limit: 5000,
+      period: "2026-01-01",
+    });
+    expect(
+      await callerFor({ userId: "owner-b", activeTenantId: "tenant-b" }).bot.usage(),
+    ).toMatchObject({ used: 4444, warning: true });
+    expect(
+      await codeOf(callerFor({ userId: "attendant", activeTenantId: "tenant-b" }).bot.usage()),
+    ).toBe("FORBIDDEN");
+    expect(await codeOf(callByPath(callerFor(ownerA), "bot.usage", { tenantId: "tenant-b" }))).toBe(
+      "BAD_REQUEST",
+    );
+  });
   test("only the owner can test the Bot, and sandbox requests cannot select a Tenant or production records", async () => {
     const attendant = callerFor({ userId: "attendant", activeTenantId: "tenant-b" });
     const input = { text: "Oi", history: [] };

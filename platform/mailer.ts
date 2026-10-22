@@ -1,4 +1,5 @@
 export type Email = {
+  idempotencyKey?: string;
   to: string;
   subject: string;
   html: string;

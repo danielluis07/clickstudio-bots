@@ -6,11 +6,12 @@ import {
   createBotSettingsEditor,
   createCaptureSettingsEditor,
   createLiveBot,
+  createBotAllowance,
   type BotJob,
   type BotAllowance,
 } from "@/modules/bot";
 import { eq } from "drizzle-orm";
-import { conversation, message } from "@/db/schema";
+import { botReplyUsage, conversation, message } from "@/db/schema";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import { createConversationRepository, recordInboundTextMessage } from "@/modules/conversations";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
@@ -20,6 +21,7 @@ import { createTestModel } from "@/test/support/model";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
+import { createTestMailer } from "@/test/support/mailer";
 import { createWebhookInbox } from "@/modules/webhook-inbox";
 import {
   metaAppSecret,
@@ -33,7 +35,7 @@ afterEach(async () => {
   if (db) await closeTestDatabase(db);
 });
 
-const setup = async (allowance: BotAllowance = { canReply: async () => true }) => {
+const setup = async (allowance?: BotAllowance) => {
   db = await createTestDatabase();
   const seeded = await seedLiveBot(db);
   const { scope, route, clock } = seeded;
@@ -64,7 +66,7 @@ const setup = async (allowance: BotAllowance = { canReply: async () => true }) =
     notifier: createTestNotifier(),
     getSender: () => sender,
     meter: createTestUsageMeter(),
-    allowance,
+    allowance: allowance ?? createBotAllowance({ db, clock, mailer: createTestMailer() }),
   };
   const worker = createLiveBot(dependencies);
   return {
@@ -92,6 +94,176 @@ test("a live Contact message sends exactly once after activation, including dupl
   expect((await repository.listMessages(conversationId))!.messages).toContainEqual(
     expect.objectContaining({ origin: "bot", status: "sent", wamid: "wamid.OUT1" }),
   );
+});
+
+test("the last allowed reply counts once; new messages hand off at the limit and remain with the team next month", async () => {
+  const { scope, route, clock, model, sender, activation, conversationId, worker, repository } =
+    await setup();
+  await activation.activate(scope);
+  const allowance = createBotAllowance({ db, clock, mailer: createTestMailer() });
+  await db
+    .insert(botReplyUsage)
+    .values({ tenantId: scope.tenantId, period: "2026-10-01", replies: 4999 });
+  model.script({ text: "Última resposta do mês." });
+  await worker.run(conversationId);
+  await worker.run(conversationId);
+  expect(await allowance.status(scope)).toMatchObject({ used: 5000, exhausted: true });
+  const requestsBeforeLimit = model.requests.length;
+  await recordInboundTextMessage(db, route, {
+    wamid: "at-limit",
+    from: "5511999990001",
+    profileName: null,
+    text: "Mais uma pergunta",
+    sentAt: clock.now(),
+  });
+  await worker.run(conversationId);
+  expect(model.requests).toHaveLength(requestsBeforeLimit);
+  expect(sender.sent).toHaveLength(1);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "team",
+    waiting: true,
+    handoffReason: "limite_atingido",
+  });
+  clock.set(new Date("2026-11-01T03:00:00Z"));
+  await recordInboundTextMessage(db, route, {
+    wamid: "next-month-existing",
+    from: "5511999990001",
+    profileName: null,
+    text: "Oi",
+    sentAt: clock.now(),
+  });
+  await worker.run(conversationId);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "team",
+    handoffReason: "limite_atingido",
+  });
+  const freshConversation = (await recordInboundTextMessage(db, route, {
+    wamid: "next-month-new",
+    from: "5511999990002",
+    profileName: null,
+    text: "Preço?",
+    sentAt: clock.now(),
+  }))!;
+  model.script({ text: "R$ 80." });
+  await worker.run(freshConversation);
+  expect(await allowance.status(scope)).toMatchObject({ used: 1, exhausted: false });
+  expect(sender.sent).toHaveLength(2);
+});
+
+test("sandbox output and an uncertain Meta send never consume production replies", async () => {
+  const { scope, clock, model, sender, activation, conversationId, worker } = await setup();
+  const allowance = createBotAllowance({ db, clock, mailer: createTestMailer() });
+  expect(await allowance.status(scope)).toMatchObject({ used: 0 });
+  await activation.activate(scope);
+  model.script({ text: "Não confirmada." });
+  sender.failNext();
+  await worker.run(conversationId);
+  await worker.run(conversationId);
+  expect(await allowance.status(scope)).toMatchObject({ used: 0 });
+});
+
+test("exhaustion hands off a new Contact message even while Schedule pauses replies", async () => {
+  const { scope, clock, model, sender, activation, conversationId, worker, repository } =
+    await setup();
+  await activation.activate(scope);
+  await createBotSettingsEditor({ db, clock }).saveSettings(scope, {
+    ...testBehaviour,
+    schedule: "outside_business_hours",
+  });
+  await db
+    .insert(botReplyUsage)
+    .values({ tenantId: scope.tenantId, period: "2026-10-01", replies: 5000 });
+  const previousRequests = model.requests.length;
+  await worker.run(conversationId);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "team",
+    waiting: true,
+    handoffReason: "limite_atingido",
+  });
+  expect(model.requests).toHaveLength(previousRequests);
+  expect(sender.sent).toHaveLength(0);
+});
+
+test("the 4,000th acknowledged reply warns the owner; email failure never resends or recounts the Bot reply", async () => {
+  const { scope, clock, model, sender, activation, conversationId, dependencies } = await setup();
+  await activation.activate(scope);
+  const mailer = createTestMailer();
+  const allowance = createBotAllowance({ db, clock, mailer });
+  const worker = createLiveBot({ ...dependencies, allowance });
+  await db
+    .insert(botReplyUsage)
+    .values({ tenantId: scope.tenantId, period: "2026-10-01", replies: 3999 });
+  model.script({ text: "Resposta que atinge o aviso." });
+  mailer.failNext();
+  await expect(worker.run(conversationId)).rejects.toThrow("Mailer unavailable");
+  await worker.run(conversationId);
+  await allowance.retryWarnings();
+  expect(await allowance.status(scope)).toMatchObject({ used: 4000, warning: true });
+  expect(mailer.sent).toHaveLength(1);
+  expect(sender.sent).toHaveLength(1);
+});
+
+test("concurrent Conversations may finish their in-flight replies at the limit, without losing counts", async () => {
+  const { scope, route, clock, model, sender, activation, conversationId, worker } = await setup();
+  await activation.activate(scope);
+  await db
+    .insert(botReplyUsage)
+    .values({ tenantId: scope.tenantId, period: "2026-10-01", replies: 4999 });
+  const otherConversationId = (await recordInboundTextMessage(db, route, {
+    wamid: "concurrent-contact",
+    from: "5511999990002",
+    profileName: null,
+    text: "Preço?",
+    sentAt: clock.now(),
+  }))!;
+  const accepted = Promise.withResolvers<void>();
+  let arrivals = 0;
+  sender.beforeAnswering(async () => {
+    if (++arrivals === 2) accepted.resolve();
+    await accepted.promise;
+  });
+  model.script({ text: "R$ 80." }, { text: "R$ 80." });
+  // A concurrent warning claim may retry a job after its reply is already durable.
+  await Promise.allSettled([worker.run(conversationId), worker.run(otherConversationId)]);
+  await worker.run(conversationId);
+  await worker.run(otherConversationId);
+  const allowance = createBotAllowance({ db, clock, mailer: createTestMailer() });
+  expect(await allowance.status(scope)).toMatchObject({ used: 5001, exhausted: true });
+  expect(sender.sent).toHaveLength(2);
+});
+
+test("five simultaneous Conversations cannot overshoot the monthly allowance by more than two replies", async () => {
+  const { scope, route, clock, model, sender, activation, conversationId, dependencies } =
+    await setup();
+  await activation.activate(scope);
+  await db
+    .insert(botReplyUsage)
+    .values({ tenantId: scope.tenantId, period: "2026-10-01", replies: 4999 });
+  const ids = [conversationId];
+  for (let index = 2; index <= 5; index++)
+    ids.push(
+      (await recordInboundTextMessage(db, route, {
+        wamid: `parallel-${index}`,
+        from: `551199999000${index}`,
+        profileName: null,
+        text: "Preço?",
+        sentAt: clock.now(),
+      }))!,
+    );
+  const accepted = Promise.withResolvers<void>();
+  let arrivals = 0;
+  sender.beforeAnswering(async () => {
+    if (++arrivals === 3) accepted.resolve();
+    await accepted.promise;
+  });
+  for (let index = 0; index < 5; index++) model.script({ text: "R$ 80." });
+  await Promise.allSettled(ids.map((id) => createLiveBot(dependencies).run(id)));
+  expect(
+    await createBotAllowance({ db, clock, mailer: createTestMailer() }).status(scope),
+  ).toMatchObject({ used: 5002 });
+  expect(sender.sent).toHaveLength(3);
+  for (const id of ids) await createLiveBot(dependencies).run(id);
+  expect(sender.sent).toHaveLength(3);
 });
 
 test("one turn includes every unanswered Contact message in a large burst", async () => {

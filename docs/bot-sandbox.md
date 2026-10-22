@@ -86,9 +86,9 @@ sandbox counter table. Automated tests use migrated PGlite and the deterministic
 Model fake, requiring neither provider credentials nor WhatsApp access. They
 cover current saved data, context replay, capability validation, network and
 production-record isolation, failed providers, the daily reset, Tenant separation,
-owner authorization and the pt-BR cap refusal. Production reply counting is not
-implemented yet; isolation is enforced by never supplying its meter or send path
-to the sandbox.
+owner authorization and the pt-BR cap refusal. The [production reply allowance](bot-reply-allowance.md)
+is separate; isolation is enforced by never supplying its meter or send path to
+the sandbox.
 
 ## Code entry points
 

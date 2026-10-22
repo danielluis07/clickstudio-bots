@@ -16,6 +16,15 @@ const failures = {
 } as const;
 
 export const botRouter = createTRPCRouter({
+  usage: tenantProcedure.input(z.void()).query(async ({ ctx }) => {
+    const usage = await ctx.allowance.status(ctx.scope);
+    if (!usage)
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Apenas o responsável pelo negócio pode consultar o uso do Bot.",
+      });
+    return usage;
+  }),
   status: tenantProcedure
     .input(z.void())
     .query(({ ctx }) => createBotActivation({ db: ctx.db, clock: systemClock }).status(ctx.scope)),

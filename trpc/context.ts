@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/db";
 import { auth } from "@/server/auth/auth";
-import { botSandbox, notifier, realtime, replyService } from "@/server/services";
+import { botAllowance, botSandbox, notifier, realtime, replyService } from "@/server/services";
 import type { TRPCContext } from "@/trpc/init";
 
 type Session = Awaited<ReturnType<typeof auth.api.getSession>>;
@@ -12,6 +12,7 @@ export const contextForSession = (session: Session): TRPCContext => ({
   realtime,
   notifier,
   sandbox: botSandbox,
+  allowance: botAllowance,
   session: session
     ? { userId: session.user.id, activeTenantId: session.session.activeOrganizationId ?? null }
     : null,
