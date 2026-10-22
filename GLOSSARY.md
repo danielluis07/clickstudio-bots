@@ -41,3 +41,25 @@ _Avoid_: Escalation, transfer, takeover
 **Knowledge base**:
 Everything a Tenant has told its Bot about the business. The Bot answers Contacts only from it.
 _Avoid_: Training data, training, context, documents
+
+## Bot behaviour
+
+**Behaviour settings**:
+The bounded choices a Tenant's owner makes about how its Bot presents itself and answers, such as its tone, greeting, rules, Business hours and Schedule. They are settings, not a conversation flow.
+_Avoid_: Bot config, flow, prompt
+
+**Business hours**:
+When a Tenant is open to Contacts: at most one opening interval per weekday, in São Paulo time.
+_Avoid_: Opening times, working hours, office hours
+
+**Schedule**:
+When a Tenant's Bot may reply: always, or only outside Business hours. Being outside it pauses the Bot but never causes a Handoff.
+_Avoid_: Availability, shift, Bot hours
+
+**Refused topic**:
+A subject the Bot politely declines to discuss, without a Handoff.
+_Avoid_: Blocked topic, forbidden subject
+
+**Handoff topic**:
+A subject that always makes the Bot hand the Conversation to the Tenant's Members.
+_Avoid_: Escalation topic, transfer topic
