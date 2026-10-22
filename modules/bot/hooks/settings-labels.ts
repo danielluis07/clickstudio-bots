@@ -18,7 +18,7 @@ export const scheduleOptions: { value: BotSchedule; label: string }[] = [
 export const captureModeOptions: { value: CaptureMode; label: string }[] = [
   { value: "off", label: "Não capturar" },
   { value: "optional", label: "Opcional" },
-  { value: "required", label: "Obrigatório antes de chamar a equipe" },
+  { value: "required", label: "Pedir uma vez antes de chamar a equipe" },
 ];
 
 export const captureFieldOptions: {

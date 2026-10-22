@@ -5,7 +5,9 @@ Decision: [capabilities #28](https://github.com/danielluis07/clickstudio-bots/is
 
 The Tenant owner sets up capture at **Painel → Bot → Captura de dados do
 contato**. Capture is disabled until the first save. Each field is either not
-captured, optional, or required before a Handoff:
+captured, optional, or required. "Required" means the Bot asks for the field
+once before calling the team, not that the Handoff waits for it (see
+[Required details before a Handoff](#required-details-before-a-handoff)):
 
 | Field | Stored as | Bound |
 | --- | --- | --- |
@@ -58,12 +60,23 @@ Bot does not hand off. It sends the answerable part, if any, followed by:
 
 > Antes de chamar a equipe, me informe seu nome e seu e-mail, por favor.
 
-The Conversation stays with the Bot. These are the uncertain cases, each
-covered by a core test:
+The Conversation stays with the Bot.
 
-- **The Contact does not answer the request.** The Bot asks once. If its latest
-  reply was the request and the model hands off again, the Handoff goes ahead
-  with whatever was given, so a Contact who declines is never stuck.
+> [!WARNING]
+> Do not enable required fields for real clients until
+> [#105](https://github.com/danielluis07/clickstudio-bots/issues/105) is
+> resolved. After the request, the Handoff happens only if the model calls
+> `handoff` again on the Contact's next message. If it doesn't, the Contact's
+> earlier request is silently dropped: the Conversation never reaches the
+> team's waiting list. Optional fields are unaffected.
+
+These are the uncertain cases, each covered by a core test:
+
+- **The Contact does not answer the request.** The Bot asks once; this
+  ask-once rule was approved during review of #58. If its latest reply was the
+  request and the model hands off again, the Handoff goes ahead with whatever
+  was given, so a Contact who declines is never stuck. A required field is
+  therefore asked for once, never enforced.
 - **A later Handoff after other replies.** Once the Bot has replied to
   something else, a new Handoff asks again for what is still missing.
 - **Optional fields** are never asked for.

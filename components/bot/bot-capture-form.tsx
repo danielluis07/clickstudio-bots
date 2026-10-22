@@ -25,8 +25,9 @@ export function BotCaptureForm({ capture, savedAt, canEdit }: BotCaptureFormProp
         <FieldLegend>Captura de dados do contato</FieldLegend>
         <FieldDescription>
           O Bot guarda no contato os dados que ele informar na conversa. A equipe vê e edita esses
-          dados no painel do contato. Antes de chamar a equipe, o Bot pede uma vez os dados
-          obrigatórios que faltarem. Não configure a captura de dados sensíveis.
+          dados no painel do contato. Antes de chamar a equipe, o Bot pede uma única vez os dados
+          marcados para pedir que faltarem; se o contato não informar, o Bot chama a equipe mesmo
+          assim. Não configure a captura de dados sensíveis.
         </FieldDescription>
         <Field orientation="horizontal">
           <Checkbox id="capture-enabled" name="captureEnabled" defaultChecked={capture.enabled} />
