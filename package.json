@@ -12,6 +12,7 @@
     "typecheck": "bun --bun next typegen && tsc --noEmit",
     "typecheck:fast": "bun --bun next typegen && bun check",
     "test": "bun test --timeout 20000",
+    "doctor": "bun scripts/doctor.ts",
     "evaluate:provider": "bun scripts/evaluate-provider.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

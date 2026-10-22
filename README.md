@@ -40,11 +40,21 @@ To enable owner-managed WhatsApp Channels, follow [WhatsApp Channel setup](docs/
 
 To enable live inbox updates, set the server-only `ABLY_API_KEY` as described in [Realtime inbox setup](docs/realtime-inbox.md).
 
+To configure the Bot, start with [Behaviour settings](docs/bot-settings.md) and
+[Testar Bot setup and code entry points](docs/bot-sandbox.md). The sandbox guide
+explains provider keys, model access, daily limits and production isolation.
+
+Before testing in a browser, run `bun run doctor`. It checks local readiness
+without applying migrations, seeding data or calling a Model. See
+[Local readiness and branch protection](docs/local-development.md) for JSON output
+and the optional provider probe.
+
 ## Scripts
 
 | Script                | What it does                                                    |
 | --------------------- | --------------------------------------------------------------- |
 | `bun run dev`         | Next.js dev server                                              |
+| `bun run doctor`      | Read-only local readiness report ([guide](docs/local-development.md)) |
 | `bun run lint`        | ESLint                                                          |
 | `bun run format`      | Format code and configuration with Bun, including Tailwind class order |
 | `bun run format:check` | Check formatting without changing files                       |
@@ -114,5 +124,10 @@ Layout and import rules are in [docs/CONVENTIONS.md](docs/CONVENTIONS.md#layout)
 Tests are `*.test.ts` files under `test/`, organised like the code they exercise (`test/modules/tenancy/…`, `test/server/…`), and run by `bun test`. `test/architecture.test.ts` enforces the import rules. Repository tests build their database with `createTestDatabase()` from `@/test/support/database`: an in-memory PGlite with all migrations applied. Code that depends on time takes a `Clock` (`@/platform/clock`); tests pass `createTestClock()` from `@/test/support/clock` and move it with `set` or `advance`.
 
 CI (`.github/workflows/ci.yml`) checks formatting, lint, TypeScript 7 types, migration drift and tests on every push and pull request.
+
+The active `main` ruleset requires a pull request and the GitHub Actions `check`
+status against the latest base branch. Its source is
+[.github/rulesets/main.json](.github/rulesets/main.json); see the
+[protection notes](docs/local-development.md#main-branch-protection).
 
 Paid provider evaluation runs separately with the [81-case synthetic pt-BR corpus](docs/evaluation/README.md). Routine tests use a fake Model; the manual runner refuses CI.

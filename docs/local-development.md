@@ -1,0 +1,78 @@
+# Local readiness and branch protection
+
+## Local readiness
+
+Run `bun run doctor` before a browser check. Bun loads the local `.env`. The
+command prints pt-BR diagnoses without environment values, Contact data, raw
+database errors or provider error bodies. It exits with code 0 when all checked
+prerequisites pass and 1 when any prerequisite fails.
+
+```powershell
+bun run doctor
+bun run doctor --json
+bun run doctor --help
+```
+
+The report checks:
+
+- Presence of the required environment variables and valid database/app URL protocols.
+- Selected provider and key presence, using Gateway precedence. This does not establish that a key is valid or the model is available.
+- Database connectivity and applied migration names against this checkout's migration folders, matching the installed Drizzle migrator. Missing history counts as pending; migrations unknown to this branch also fail readiness.
+- Presence of an owner membership. This does not verify a password or browser session.
+- An HTTP 200 response from `/entrar` at the configured `APP_URL` origin.
+
+Database inspection uses a short `BEGIN READ ONLY` transaction through a dedicated
+`pg` client, compatible with the pooled endpoint. The command never applies
+migrations, creates metadata tables, seeds a Tenant or changes records. Connection
+and query timeouts bound database checks; the HTTP check times out after three
+seconds. Dependent checks are skipped when their configuration or connection is
+unavailable, while independent checks continue.
+
+A stopped server is an expected failure: start it with `bun run dev`, then rerun
+the report. Prepare missing prerequisites using the existing [setup](../README.md#setup)
+and [demo Tenant](../README.md#demo-tenant) instructions. The doctor reports these
+actions without running them.
+
+### Optional provider probe
+
+```powershell
+bun run doctor --probe-provider
+bun run doctor --probe-provider --json
+```
+
+This explicitly enables one synthetic Model request, which may incur a charge.
+It uses the same provider factory, model, timeout, output cap and no-fallback
+policy as the Bot, without saved Tenant content, tools or production metering.
+It is refused when `CI` is set. Routine doctor runs and CI tests never call a
+real Model.
+
+The probe separates key presence from actual model access: HTTP 401 reports an
+authentication refusal; HTTP 403 reports a model-access refusal and points to
+permissions and credits. Other failures return a generic diagnosis without raw
+provider content. A successful probe establishes connectivity, not Bot quality;
+the [provider evaluation](evaluation/README.md) remains a separate manual run.
+
+The implementation starts at [`scripts/doctor.ts`](../scripts/doctor.ts).
+Report decisions are in [`scripts/doctor/checks.ts`](../scripts/doctor/checks.ts),
+and database, HTTP and Model adapters are in
+[`scripts/doctor/adapters.ts`](../scripts/doctor/adapters.ts).
+
+## Main branch protection
+
+The active [Require PR and CI on main ruleset](https://github.com/danielluis07/clickstudio-bots/rules/25653122)
+targets only `refs/heads/main`. Its request payload is tracked in
+[`.github/rulesets/main.json`](../.github/rulesets/main.json).
+
+The rule requires a pull request and a successful `check` context published by
+GitHub Actions (integration id 15368), with the branch tested against the latest
+base. It requires zero approving reviews, so a solo maintainer can merge after CI
+passes. No bypass actors are configured.
+
+The JSON file documents the setting; committing it does not apply GitHub rules.
+Change the existing ruleset through repository settings or the rulesets API, then
+keep this payload aligned. Renaming the CI job also requires updating its required
+check context. To inspect the effective rules without changing them:
+
+```powershell
+gh api repos/danielluis07/clickstudio-bots/rules/branches/main
+```
