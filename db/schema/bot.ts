@@ -1,4 +1,13 @@
-import { boolean, date, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  date,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 import { member, organization } from "@/db/schema/tenancy";
 
 // A Tenant's Bot behaviour settings, saved by its owner. Absent until the
@@ -64,6 +73,23 @@ export const botSandboxUsage = pgTable("bot_sandbox_usage", {
   day: date("day").notNull(),
   turns: integer("turns").notNull(),
 });
+
+// Acknowledged production replies survive Contact/message deletion. No content.
+export const botReplyUsage = pgTable(
+  "bot_reply_usage",
+  {
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    period: date("period").notNull(),
+    replies: integer("replies").notNull(),
+    warningTo: text("warning_to"),
+    warningClaimToken: text("warning_claim_token"),
+    warningLeaseUntil: timestamp("warning_lease_until", { withTimezone: true }),
+    warningSentAt: timestamp("warning_sent_at", { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.period] })],
+);
 
 // Only the test time is retained, never the sandbox transcript.
 export const botActivation = pgTable("bot_activation", {

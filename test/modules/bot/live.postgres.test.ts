@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { eq, sql } from "drizzle-orm";
-import { conversation } from "@/db/schema";
+import { botReplyUsage, conversation } from "@/db/schema";
 import {
   createBotActivation,
   createBotSandbox,
   createBotSettingsEditor,
   createLiveBot,
+  createBotAllowance,
   type BotJob,
 } from "@/modules/bot";
 import {
@@ -21,6 +22,7 @@ import { createTestUsageMeter, testBehaviour } from "@/test/support/bot";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
+import { createTestMailer } from "@/test/support/mailer";
 
 const url = process.env.BOT_TEST_DATABASE_URL;
 const suite = url ? describe : describe.skip;
@@ -40,6 +42,8 @@ suite("live turns on real Postgres", () => {
     const model = createTestModel();
     const sender = createTestWhatsAppSender();
     const queue = createTestJobQueue<BotJob>();
+    const mailer = createTestMailer();
+    const allowance = createBotAllowance({ db, clock, mailer });
     await createBotSettingsEditor({ db, clock }).saveSettings(scope, testBehaviour);
     await createKnowledgeBaseEditor({ db, clock }).addEntry(scope, {
       kind: "faq",
@@ -64,20 +68,65 @@ suite("live turns on real Postgres", () => {
       notifier: createTestNotifier(),
       getSender: () => sender,
       meter: createTestUsageMeter(),
-      allowance: { canReply: async () => true },
+      allowance,
     };
     return {
       db,
       scope,
+      route,
       clock,
       model,
       sender,
       queue,
       conversationId,
       dependencies,
+      allowance,
+      mailer,
       reader: createConversationRepository(db, scope),
     };
   };
+
+  test("concurrent acknowledged replies increment atomically and send one 80% warning", async () => {
+    const {
+      db,
+      scope,
+      route,
+      clock,
+      model,
+      sender,
+      dependencies,
+      conversationId,
+      allowance,
+      mailer,
+    } = await setup();
+    await db
+      .insert(botReplyUsage)
+      .values({ tenantId: scope.tenantId, period: "2026-10-01", replies: 3999 });
+    const otherConversationId = (await recordInboundTextMessage(db, route, {
+      wamid: crypto.randomUUID(),
+      from: "5511999990002",
+      profileName: null,
+      text: "Preço?",
+      sentAt: clock.now(),
+    }))!;
+    const accepted = Promise.withResolvers<void>();
+    let arrivals = 0;
+    sender.beforeAnswering(async () => {
+      if (++arrivals === 2) accepted.resolve();
+      await accepted.promise;
+    });
+    model.script({ text: "R$ 80." }, { text: "R$ 80." });
+    // Warning contention can ask a worker to retry after persisting its reply.
+    await Promise.allSettled([
+      createLiveBot(dependencies).run(conversationId),
+      createLiveBot(dependencies).run(otherConversationId),
+    ]);
+    await createLiveBot(dependencies).run(conversationId);
+    await createLiveBot(dependencies).run(otherConversationId);
+    expect(await allowance.status(scope)).toMatchObject({ used: 4001, warning: true });
+    expect(mailer.sent).toHaveLength(1);
+    expect(sender.sent).toHaveLength(2);
+  });
 
   test("competing workers cannot both send for one answered-message key", async () => {
     const { model, sender, dependencies, conversationId, reader } = await setup();

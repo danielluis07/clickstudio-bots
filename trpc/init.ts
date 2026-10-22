@@ -2,7 +2,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { Database } from "@/db/database";
 import type { ReplyService } from "@/modules/conversations";
-import type { BotSandbox } from "@/modules/bot";
+import type { BotSandbox, ReplyAllowance } from "@/modules/bot";
 import { resolveTenantScope } from "@/modules/tenancy";
 import type { AblyRealtime } from "@/platform/ably";
 import type { Notifier } from "@/platform/notifier";
@@ -19,6 +19,7 @@ export type TRPCContext = {
   realtime: AblyRealtime | null;
   notifier: Notifier;
   sandbox: BotSandbox;
+  allowance: ReplyAllowance;
 };
 
 const t = initTRPC.context<TRPCContext>().create({

@@ -1,5 +1,5 @@
 import { and, asc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
-import type { Database } from "@/db/database";
+import type { Database, Transaction } from "@/db/database";
 import { channel, conversation, message } from "@/db/schema";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
 import type { HandoffReason } from "@/modules/bot";
@@ -171,6 +171,7 @@ export const createConversationBotRepository = (db: Database, scope: ChannelRout
       text: string,
       now: Date,
       handoffReason?: HandoffReason,
+      beforeReserve?: (tx: Transaction) => Promise<void>,
     ) {
       return db.transaction(async (tx) => {
         // Fencing check and eligibility in one update; the lease is never a DB lock.
@@ -197,6 +198,7 @@ export const createConversationBotRepository = (db: Database, scope: ChannelRout
           .where(and(unanswered(conversationId), inArray(message.id, ids)))
           .for("update");
         if (stillUnanswered.length !== ids.length) return null;
+        await beforeReserve?.(tx);
         const [pending] = await tx
           .insert(message)
           .values({

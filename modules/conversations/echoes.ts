@@ -2,6 +2,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
 import { conversation, message } from "@/db/schema";
 import type { ChannelRoute } from "@/modules/channels";
+import type { TenantScope } from "@/modules/tenancy";
 import { withContactAdmission } from "@/modules/conversations/contact-deletion";
 import { handOffFromBot } from "@/modules/conversations/handoff";
 
@@ -63,8 +64,15 @@ export const resolveUnresolvedEchoes = async (
 // Gives the Tenant's sent message the wamid Meta answered with. Its echo may
 // have been filed as an app reply before that answer; it was this message all
 // along, so the echo's row gives way and its delivery status carries over.
-export const recordSentWamid = (db: Database, tenantId: string, messageId: string, wamid: string) =>
+export const recordSentWamid = (
+  db: Database,
+  scope: ChannelRoute | TenantScope,
+  messageId: string,
+  wamid: string,
+  onAcknowledged?: (tx: Transaction) => Promise<void>,
+) =>
   db.transaction(async (tx) => {
+    const { tenantId } = scope;
     await lockWamid(tx, tenantId, wamid);
     const [sent] = await tx
       .select({ origin: message.origin, conversationId: message.conversationId })
@@ -77,7 +85,7 @@ export const recordSentWamid = (db: Database, tenantId: string, messageId: strin
         and(eq(message.tenantId, tenantId), eq(message.wamid, wamid), eq(message.origin, "app")),
       )
       .returning({ status: message.status });
-    await tx
+    const acknowledged = await tx
       .update(message)
       .set({
         wamid,
@@ -85,7 +93,22 @@ export const recordSentWamid = (db: Database, tenantId: string, messageId: strin
           echoed?.status ??
           sql`case when ${message.origin} = 'bot' then 'sent' else ${message.status} end`,
       })
-      .where(and(eq(message.id, messageId), eq(message.tenantId, tenantId)));
+      .where(and(eq(message.id, messageId), eq(message.tenantId, tenantId), isNull(message.wamid)))
+      .returning({
+        origin: message.origin,
+        direction: message.direction,
+        imported: message.imported,
+        type: message.type,
+      });
+    const reply = acknowledged[0];
+    if (
+      reply?.origin === "bot" &&
+      reply.direction === "outbound" &&
+      reply.type === "text" &&
+      !reply.imported
+    ) {
+      await onAcknowledged?.(tx);
+    }
     if (sent?.origin === "bot")
       await resolveUnresolvedEchoes(tx, tenantId, sent.conversationId, { handOff: true });
   });
@@ -95,7 +118,8 @@ export const recordBotReplySent = (
   route: ChannelRoute,
   messageId: string,
   wamid: string,
-) => recordSentWamid(db, route.tenantId, messageId, wamid);
+  onAcknowledged: (tx: Transaction) => Promise<void>,
+) => recordSentWamid(db, route, messageId, wamid, onAcknowledged);
 
 const classify = (stored: { origin: string; conversationId: string }): EchoClassification => ({
   echo: stored.origin === "app" ? "app_reply" : "own_echo",

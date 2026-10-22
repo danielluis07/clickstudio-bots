@@ -1,5 +1,6 @@
-import type { Database } from "@/db/database";
+import type { Database, Transaction } from "@/db/database";
 import { readCapture } from "@/modules/bot/capture";
+import { recordBotReplyUsage } from "@/modules/bot/allowance";
 import { readLinks } from "@/modules/bot/links";
 import { createBotCore } from "@/modules/bot/turn";
 import { readBehaviour } from "@/modules/bot/settings";
@@ -29,6 +30,8 @@ export interface BotJobQueue {
 // Billing supplies this hook; live turns never infer allowance from sandbox usage.
 export interface BotAllowance {
   canReply(turn: BotTurn): Promise<boolean>;
+  reserve?(tx: Transaction, turn: BotTurn): Promise<void>;
+  notifyWarning?(turn: BotTurn): Promise<void>;
 }
 
 export const createLiveBot = ({
@@ -99,8 +102,6 @@ export const createLiveBot = ({
         if (!found?.serviceWindowClosesAt || found.serviceWindowClosesAt <= clock.now())
           return "skipped" as const;
         const turn = { scope: initial.scope, conversationId };
-        if (!scheduleAllows(await readBehaviour(db, initial.scope), clock.now()))
-          return "skipped" as const;
         // Freeze context before the Model call. Messages arriving later get their own turn.
         const history = snapshot.history;
         const contactIds = new Set(ids);
@@ -120,6 +121,13 @@ export const createLiveBot = ({
           return "skipped" as const;
         }
         if (!eligible(await repository.load(conversationId))) return "skipped" as const;
+        if (!(await allowance.canReply(turn))) {
+          await repository.handoff(conversationId, token, "limite_atingido");
+          await notifyInbox(notifier, initial.tenantId, { conversationId });
+          return "handoff" as const;
+        }
+        if (!scheduleAllows(await readBehaviour(db, initial.scope), clock.now()))
+          return "skipped" as const;
         if (!model) {
           await repository.handoff(conversationId, token, "bot_indisponivel");
           await notifyInbox(notifier, initial.tenantId, { conversationId });
@@ -196,6 +204,7 @@ export const createLiveBot = ({
           outcome.reply,
           clock.now(),
           outcome.kind === "handoff" ? outcome.reason : undefined,
+          allowance.reserve ? (tx) => allowance.reserve!(tx, turn) : undefined,
         );
         if (!messageId) return "skipped" as const;
         // A pending row is the durable send barrier. Never retry a send without a wamid.
@@ -207,13 +216,19 @@ export const createLiveBot = ({
           await notifyInbox(notifier, initial.tenantId, { conversationId });
           return "handoff" as const;
         }
-        await recordBotReplySent(db, initial.scope, messageId, sent.wamid);
+        const acknowledgedAt = clock.now();
+        await recordBotReplySent(db, initial.scope, messageId, sent.wamid, (tx) =>
+          recordBotReplyUsage(tx, initial.scope, acknowledgedAt),
+        );
         await notifyInbox(notifier, initial.tenantId, { conversationId });
         followUp = true;
         return "sent" as const;
       } finally {
         await repository.release(conversationId, token);
         if (followUp) await enqueue(initial.scope, conversationId);
+        // Job retries also recover a warning after an interrupted acknowledgment,
+        // even when the Conversation has no unanswered messages or is with the team.
+        await allowance.notifyWarning?.({ scope: initial.scope, conversationId });
       }
     },
     async cleanup() {

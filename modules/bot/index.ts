@@ -64,6 +64,14 @@ export type { HandoffReason } from "@/modules/bot/tools";
 export { createBotCore, type BotCore, type TurnOutcome } from "@/modules/bot/turn";
 export type { TurnUsage, UsageMeter } from "@/modules/bot/usage";
 export {
+  createBotAllowance,
+  recordBotReplyUsage,
+  monthlyReplyLimit,
+  replyWarningThreshold,
+  type ReplyAllowance,
+  type ReplyUsage,
+} from "@/modules/bot/allowance";
+export {
   createBotSandbox,
   sandboxDailyCap,
   sandboxInputSchema,

@@ -8,6 +8,7 @@ import { createReplyService } from "@/modules/conversations";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import {
   createBotSandbox,
+  createBotAllowance,
   createBotSettingsEditor,
   createCaptureSettingsEditor,
   createLinkSettingsEditor,
@@ -71,6 +72,8 @@ const queue = env.QSTASH_TOKEN
   ? createQStashJobQueue({ token: env.QSTASH_TOKEN, baseUrl: env.QSTASH_URL, appUrl: env.APP_URL })
   : null;
 
+export const botAllowance = createBotAllowance({ db, clock: systemClock, mailer });
+
 export const liveBot = queue
   ? createLiveBot({
       db,
@@ -79,9 +82,9 @@ export const liveBot = queue
       queue,
       notifier,
       getSender: createWhatsAppGateway,
-      // Billing and production cost reporting plug into these independent ports.
+      // Production cost reporting is separate from the acknowledged reply allowance.
       meter: { record: async () => {} },
-      allowance: { canReply: async () => true },
+      allowance: botAllowance,
     })
   : null;
 
@@ -150,6 +153,7 @@ export const dailyCronRoute = createDailyCronRoute({
   diagnostics,
   tasks: [
     { name: "prune-inbox", run: () => pruneInboxEvents(db, systemClock) },
+    { name: "retry-reply-warnings", run: () => botAllowance.retryWarnings() },
     {
       name: "recover-bot-turns",
       run: async () => {
