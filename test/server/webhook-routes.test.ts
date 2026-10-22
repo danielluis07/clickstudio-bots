@@ -5,12 +5,21 @@ import { createConversationRepository } from "@/modules/conversations";
 import { resolveTenantScope } from "@/modules/tenancy";
 import { createWebhookInbox } from "@/modules/webhook-inbox";
 import { createQStashJobVerifier } from "@/platform/qstash";
-import { createInboxFailureRoute, createInboxJobRoute, createWhatsAppWebhookRoute } from "@/server/webhook-routes";
+import {
+  createInboxFailureRoute,
+  createInboxJobRoute,
+  createWhatsAppWebhookRoute,
+} from "@/server/webhook-routes";
 import { createTestClock } from "@/test/support/clock";
 import { createTestNotifier } from "@/test/support/notifier";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue, type TestJobQueue } from "@/test/support/job-queue";
-import { metaAppSecret, metaDelivery, signMetaDelivery, textMessageChange } from "@/test/support/meta-webhook";
+import {
+  metaAppSecret,
+  metaDelivery,
+  signMetaDelivery,
+  textMessageChange,
+} from "@/test/support/meta-webhook";
 import { qstashSigningKeys, signQStashRequest } from "@/test/support/qstash";
 
 const webhookUrl = "https://bots.example.com/api/webhooks/whatsapp";
@@ -26,23 +35,43 @@ const handshake = (params: Record<string, string>) =>
   webhook.GET(new Request(`${webhookUrl}?${new URLSearchParams(params)}`));
 
 const deliver = (body: string, signature: string | null = signMetaDelivery(body)) =>
-  webhook.POST(new Request(webhookUrl, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...(signature === null ? {} : { "x-hub-signature-256": signature }) },
-    body,
-  }));
+  webhook.POST(
+    new Request(webhookUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(signature === null ? {} : { "x-hub-signature-256": signature }),
+      },
+      body,
+    }),
+  );
 
-const runJob = (body: string, signature: string | null = signQStashRequest({ url: jobUrl, body })) =>
-  jobs.POST(new Request(jobUrl, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...(signature === null ? {} : { "upstash-signature": signature }) },
-    body,
-  }));
+const runJob = (
+  body: string,
+  signature: string | null = signQStashRequest({ url: jobUrl, body }),
+) =>
+  jobs.POST(
+    new Request(jobUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(signature === null ? {} : { "upstash-signature": signature }),
+      },
+      body,
+    }),
+  );
 
 const messagesOfTenantA = async () => {
-  const repository = createConversationRepository(db, (await resolveTenantScope(db, { userId: "owner-a" }))!);
+  const repository = createConversationRepository(
+    db,
+    (await resolveTenantScope(db, { userId: "owner-a" }))!,
+  );
   const { conversations } = await repository.listConversations();
-  return (await Promise.all(conversations.map(async ({ id }) => (await repository.listMessages(id))!.messages))).flat();
+  return (
+    await Promise.all(
+      conversations.map(async ({ id }) => (await repository.listMessages(id))!.messages),
+    )
+  ).flat();
 };
 
 afterAll(() => closeTestDatabase(db));
@@ -56,44 +85,90 @@ beforeAll(async () => {
   await db.insert(organization).values({ id: "tenant-a", name: "Tenant A", slug: "a" });
   await db.insert(member).values({ organizationId: "tenant-a", userId: "owner-a", role: "owner" });
   await db.insert(channel).values({
-    id: "channel-a", tenantId: "tenant-a", wabaId: "200", phoneNumberId: "300", displayPhoneNumber: "+55 11 99999-0000",
-    credential: { keyVersion: "v1", iv: "", ciphertext: "", tag: "" }, subscriptionFields: [],
+    id: "channel-a",
+    tenantId: "tenant-a",
+    wabaId: "200",
+    phoneNumberId: "300",
+    displayPhoneNumber: "+55 11 99999-0000",
+    credential: { keyVersion: "v1", iv: "", ciphertext: "", tag: "" },
+    subscriptionFields: [],
   });
   queue = createTestJobQueue();
-  inbox = createWebhookInbox({ db, clock: createTestClock(), queue, notifier: createTestNotifier(), appSecret: metaAppSecret });
+  inbox = createWebhookInbox({
+    db,
+    clock: createTestClock(),
+    queue,
+    notifier: createTestNotifier(),
+    appSecret: metaAppSecret,
+  });
   webhook = createWhatsAppWebhookRoute({ inbox, verifyToken: "verify-me" });
-  jobs = createInboxJobRoute({ inbox, verifier: createQStashJobVerifier(qstashSigningKeys), url: jobUrl });
+  jobs = createInboxJobRoute({
+    inbox,
+    verifier: createQStashJobVerifier(qstashSigningKeys),
+    url: jobUrl,
+  });
 });
 
 test("only a signed failure callback for the inbox job can dead-letter its id-only source", async () => {
   const failureUrl = "https://bots.example.com/api/jobs/inbox-event-failed";
-  const route = createInboxFailureRoute({ inbox, verifier: createQStashJobVerifier(qstashSigningKeys), url: failureUrl, sourceUrl: jobUrl });
+  const route = createInboxFailureRoute({
+    inbox,
+    verifier: createQStashJobVerifier(qstashSigningKeys),
+    url: failureUrl,
+    sourceUrl: jobUrl,
+  });
   queue.take();
-  await deliver(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.DEAD-ROUTE" })));
+  await deliver(
+    metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.DEAD-ROUTE" })),
+  );
   const [job] = queue.take();
   const callback = {
-    status: 500, sourceMessageId: "msg_failed", url: jobUrl,
+    status: 500,
+    sourceMessageId: "msg_failed",
+    url: jobUrl,
     sourceBody: Buffer.from(JSON.stringify({ inboxEventId: job.inboxEventId })).toString("base64"),
   };
   const post = (value: unknown, signFor = failureUrl) => {
     const body = JSON.stringify(value);
-    return route.POST(new Request(failureUrl, { method: "POST", body, headers: {
-      "upstash-signature": signQStashRequest({ url: signFor, body }),
-    } }));
+    return route.POST(
+      new Request(failureUrl, {
+        method: "POST",
+        body,
+        headers: {
+          "upstash-signature": signQStashRequest({ url: signFor, body }),
+        },
+      }),
+    );
   };
   expect((await post(callback, jobUrl)).status).toBe(401);
   expect((await post({ ...callback, url: "https://elsewhere.example.com/job" })).status).toBe(400);
-  expect((await post({ ...callback, sourceBody: Buffer.from(JSON.stringify({ inboxEventId: job.inboxEventId, tenantId: "tenant-b" })).toString("base64") })).status).toBe(400);
+  expect(
+    (
+      await post({
+        ...callback,
+        sourceBody: Buffer.from(
+          JSON.stringify({ inboxEventId: job.inboxEventId, tenantId: "tenant-b" }),
+        ).toString("base64"),
+      })
+    ).status,
+  ).toBe(400);
   expect((await post({ ...callback, sourceBody: "not base64" })).status).toBe(400);
-  expect((await inbox.listFailures("admin"))).toMatchObject({ ok: true, events: [] });
+  expect(await inbox.listFailures("admin")).toMatchObject({ ok: true, events: [] });
   expect((await post(callback)).status).toBe(200);
   expect((await post(callback)).status).toBe(200);
-  expect((await inbox.listFailures("admin"))).toMatchObject({ ok: true, events: [{ id: job.inboxEventId, status: "failed", errorClass: "JobDeliveryError" }] });
+  expect(await inbox.listFailures("admin")).toMatchObject({
+    ok: true,
+    events: [{ id: job.inboxEventId, status: "failed", errorClass: "JobDeliveryError" }],
+  });
 });
 
 describe("WhatsApp webhook route", () => {
   test("answers Meta's verification handshake only with the configured token", async () => {
-    const accepted = await handshake({ "hub.mode": "subscribe", "hub.verify_token": "verify-me", "hub.challenge": "1158201444" });
+    const accepted = await handshake({
+      "hub.mode": "subscribe",
+      "hub.verify_token": "verify-me",
+      "hub.challenge": "1158201444",
+    });
     expect(accepted.status).toBe(200);
     expect(await accepted.text()).toBe("1158201444");
 
@@ -126,18 +201,44 @@ describe("WhatsApp webhook route", () => {
   test("refuses deliveries while the inbox is not configured, yet can still answer the handshake", async () => {
     const tokenOnly = createWhatsAppWebhookRoute({ inbox: null, verifyToken: "verify-me" });
     const body = metaDelivery();
-    expect((await tokenOnly.POST(new Request(webhookUrl, { method: "POST", body, headers: { "x-hub-signature-256": signMetaDelivery(body) } }))).status).toBe(503);
-    expect((await tokenOnly.GET(new Request(`${webhookUrl}?hub.mode=subscribe&hub.verify_token=verify-me&hub.challenge=1`))).status).toBe(200);
+    expect(
+      (
+        await tokenOnly.POST(
+          new Request(webhookUrl, {
+            method: "POST",
+            body,
+            headers: { "x-hub-signature-256": signMetaDelivery(body) },
+          }),
+        )
+      ).status,
+    ).toBe(503);
+    expect(
+      (
+        await tokenOnly.GET(
+          new Request(
+            `${webhookUrl}?hub.mode=subscribe&hub.verify_token=verify-me&hub.challenge=1`,
+          ),
+        )
+      ).status,
+    ).toBe(200);
 
     const unconfigured = createWhatsAppWebhookRoute({ inbox: null, verifyToken: null });
-    expect((await unconfigured.GET(new Request(`${webhookUrl}?hub.mode=subscribe&hub.verify_token=&hub.challenge=1`))).status).toBe(403);
+    expect(
+      (
+        await unconfigured.GET(
+          new Request(`${webhookUrl}?hub.mode=subscribe&hub.verify_token=&hub.challenge=1`),
+        )
+      ).status,
+    ).toBe(403);
   });
 });
 
 describe("Process inbox event job route", () => {
   test("rejects requests QStash did not sign for this endpoint, and processes those it did", async () => {
     queue.take();
-    await deliver(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.J1", body: "Via job" })));
+    await deliver(
+      metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.J1", body: "Via job" })),
+    );
     const [job] = queue.take();
     const body = JSON.stringify({ inboxEventId: job.inboxEventId });
 
@@ -151,16 +252,30 @@ describe("Process inbox event job route", () => {
     ]) {
       expect((await runJob(body, signature)).status).toBe(401);
     }
-    expect(await messagesOfTenantA()).not.toContainEqual(expect.objectContaining({ wamid: "wamid.J1" }));
+    expect(await messagesOfTenantA()).not.toContainEqual(
+      expect.objectContaining({ wamid: "wamid.J1" }),
+    );
 
     expect((await runJob(body)).status).toBe(200);
     // Rotated keys: QStash may sign with the next key.
-    expect((await runJob(body, signQStashRequest({ url: jobUrl, body, key: qstashSigningKeys.nextSigningKey }))).status).toBe(200);
+    expect(
+      (
+        await runJob(
+          body,
+          signQStashRequest({ url: jobUrl, body, key: qstashSigningKeys.nextSigningKey }),
+        )
+      ).status,
+    ).toBe(200);
     expect((await messagesOfTenantA()).filter(({ wamid }) => wamid === "wamid.J1")).toHaveLength(1);
   });
 
   test("accepts only an id-only payload and acknowledges events that no longer exist", async () => {
-    for (const body of ["{}", JSON.stringify({ inboxEventId: "x", text: "Olá" }), JSON.stringify({ inboxEventId: 1 }), "not json"]) {
+    for (const body of [
+      "{}",
+      JSON.stringify({ inboxEventId: "x", text: "Olá" }),
+      JSON.stringify({ inboxEventId: 1 }),
+      "not json",
+    ]) {
       expect((await runJob(body)).status).toBe(400);
     }
     expect((await runJob(JSON.stringify({ inboxEventId: "pruned" }))).status).toBe(200);

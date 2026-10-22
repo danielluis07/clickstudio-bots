@@ -28,8 +28,16 @@ export function ContactNameForm({ contact }: ContactNameFormProps) {
           />
           <FieldDescription>Deixe em branco para usar o nome do WhatsApp.</FieldDescription>
         </Field>
-        {failed && <p role="alert" className="text-sm text-destructive">Não foi possível salvar o nome.</p>}
-        {saved && <p role="status" className="text-sm text-primary">Nome salvo.</p>}
+        {failed && (
+          <p role="alert" className="text-sm text-destructive">
+            Não foi possível salvar o nome.
+          </p>
+        )}
+        {saved && (
+          <p role="status" className="text-sm text-primary">
+            Nome salvo.
+          </p>
+        )}
         <Button type="submit" disabled={saving}>
           {saving && <Spinner />}
           Salvar nome

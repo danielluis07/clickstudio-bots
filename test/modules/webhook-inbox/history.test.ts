@@ -1,6 +1,15 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
-import { channel, contact, conversation, inboxEvent, member, message, organization, user } from "@/db/schema";
+import {
+  channel,
+  contact,
+  conversation,
+  inboxEvent,
+  member,
+  message,
+  organization,
+  user,
+} from "@/db/schema";
 import { createChannelService } from "@/modules/channels";
 import { createConversationRepository } from "@/modules/conversations";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
@@ -10,8 +19,14 @@ import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue, type TestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier, type TestNotifier } from "@/test/support/notifier";
 import {
-  contactSyncChange, historyChange, historyDeclinedChange, messageEchoChange, metaAppSecret, metaDelivery,
-  signMetaDelivery, textMessageChange,
+  contactSyncChange,
+  historyChange,
+  historyDeclinedChange,
+  messageEchoChange,
+  metaAppSecret,
+  metaDelivery,
+  signMetaDelivery,
+  textMessageChange,
 } from "@/test/support/meta-webhook";
 
 let db: Database;
@@ -42,45 +57,130 @@ const deliverAll = async (changes: { field: string; value: unknown }[]) => {
 
 const conversationsOf = async (scope: TenantScope) => {
   const repository = createConversationRepository(db, scope);
-  return Promise.all((await repository.listConversations()).conversations.map(async ({ contact, lastMessageAt, id }) => ({
-    contact: { phone: contact.phone, profileName: contact.profileName, appName: contact.appName, name: contact.name },
-    lastMessageAt,
-    messages: (await repository.listMessages(id))!.messages
-      .map(({ wamid, direction, origin, status, text, sentAt, imported }) => ({ wamid, direction, origin, status, text, sentAt, imported })),
-  })));
+  return Promise.all(
+    (await repository.listConversations()).conversations.map(
+      async ({ contact, lastMessageAt, id }) => ({
+        contact: {
+          phone: contact.phone,
+          profileName: contact.profileName,
+          appName: contact.appName,
+          name: contact.name,
+        },
+        lastMessageAt,
+        messages: (await repository.listMessages(id))!.messages.map(
+          ({ wamid, direction, origin, status, text, sentAt, imported }) => ({
+            wamid,
+            direction,
+            origin,
+            status,
+            text,
+            sentAt,
+            imported,
+          }),
+        ),
+      }),
+    ),
+  );
 };
 
 const channelSummaryOf = (scope: TenantScope) =>
-  createChannelService({ db, clock, getWhatsApp() { throw new Error("unused"); } }).getChannel(scope);
+  createChannelService({
+    db,
+    clock,
+    getWhatsApp() {
+      throw new Error("unused");
+    },
+  }).getChannel(scope);
 
 // Meta shares the last 180 days in three phases, each in chunks that may
 // arrive in any order and more than once.
-const phase0 = historyChange({ phoneNumberId: "300", phase: 0, chunkOrder: 1, progress: 30, threads: [{
-  id: ana,
-  messages: [
-    { wamid: "wamid.H-A3", from: ana, timestamp: "1792411200", body: "Vocês entregam amanhã?" },
-    { wamid: "wamid.H-A4", from: business, timestamp: "1792414800", body: "Entregamos sim.", status: "READ" },
+const phase0 = historyChange({
+  phoneNumberId: "300",
+  phase: 0,
+  chunkOrder: 1,
+  progress: 30,
+  threads: [
+    {
+      id: ana,
+      messages: [
+        { wamid: "wamid.H-A3", from: ana, timestamp: "1792411200", body: "Vocês entregam amanhã?" },
+        {
+          wamid: "wamid.H-A4",
+          from: business,
+          timestamp: "1792414800",
+          body: "Entregamos sim.",
+          status: "READ",
+        },
+      ],
+    },
   ],
-}] });
-const phase1First = historyChange({ phoneNumberId: "300", phase: 1, chunkOrder: 1, progress: 60, threads: [
-  { id: ana, messages: [{ wamid: "wamid.H-A2", from: business, timestamp: "1789822800", body: "Pedido confirmado.", status: "DELIVERED" }] },
-  { id: bruno, messages: [{ wamid: "wamid.H-B1", from: bruno, timestamp: "1789819200", body: "Qual o horário?" }] },
-] });
-const phase1Second = historyChange({ phoneNumberId: "300", phase: 1, chunkOrder: 2, progress: 80, threads: [{
-  id: ana,
-  messages: [
-    { wamid: "wamid.H-A1", from: ana, timestamp: "1789819200", body: "Quero fazer um pedido" },
-    // Media is not imported; its content is not shared in history anyway.
-    { wamid: "wamid.H-MEDIA", from: ana, timestamp: "1789820000", type: "media_placeholder" },
+});
+const phase1First = historyChange({
+  phoneNumberId: "300",
+  phase: 1,
+  chunkOrder: 1,
+  progress: 60,
+  threads: [
+    {
+      id: ana,
+      messages: [
+        {
+          wamid: "wamid.H-A2",
+          from: business,
+          timestamp: "1789822800",
+          body: "Pedido confirmado.",
+          status: "DELIVERED",
+        },
+      ],
+    },
+    {
+      id: bruno,
+      messages: [
+        { wamid: "wamid.H-B1", from: bruno, timestamp: "1789819200", body: "Qual o horário?" },
+      ],
+    },
   ],
-}] });
-const phase2 = historyChange({ phoneNumberId: "300", phase: 2, chunkOrder: 1, progress: 100, threads: [{
-  id: bruno, messages: [{ wamid: "wamid.H-B0", from: bruno, timestamp: "1784635200", body: "Primeiro contato" }],
-}] });
+});
+const phase1Second = historyChange({
+  phoneNumberId: "300",
+  phase: 1,
+  chunkOrder: 2,
+  progress: 80,
+  threads: [
+    {
+      id: ana,
+      messages: [
+        { wamid: "wamid.H-A1", from: ana, timestamp: "1789819200", body: "Quero fazer um pedido" },
+        // Media is not imported; its content is not shared in history anyway.
+        { wamid: "wamid.H-MEDIA", from: ana, timestamp: "1789820000", type: "media_placeholder" },
+      ],
+    },
+  ],
+});
+const phase2 = historyChange({
+  phoneNumberId: "300",
+  phase: 2,
+  chunkOrder: 1,
+  progress: 100,
+  threads: [
+    {
+      id: bruno,
+      messages: [
+        { wamid: "wamid.H-B0", from: bruno, timestamp: "1784635200", body: "Primeiro contato" },
+      ],
+    },
+  ],
+});
 
-const imported = (wamid: string, from: "contact" | "app", text: string, sentAt: string, status: "delivered" | "read" | null = null) => ({
+const imported = (
+  wamid: string,
+  from: "contact" | "app",
+  text: string,
+  sentAt: string,
+  status: "delivered" | "read" | null = null,
+) => ({
   wamid,
-  direction: from === "contact" ? "inbound" as const : "outbound" as const,
+  direction: from === "contact" ? ("inbound" as const) : ("outbound" as const),
   origin: from,
   status,
   text,
@@ -137,8 +237,28 @@ beforeEach(async () => {
   await db.delete(channel);
   const credential = { keyVersion: "v1", iv: "", ciphertext: "", tag: "" };
   await db.insert(channel).values([
-    { id: "channel-a", tenantId: "tenant-a", wabaId: "200", phoneNumberId: "300", displayPhoneNumber: "+55 11 99999-0000", credential, subscriptionFields: [], historySync: "requested", createdAt: clock.now() },
-    { id: "channel-b", tenantId: "tenant-b", wabaId: "201", phoneNumberId: "301", displayPhoneNumber: "+55 11 99999-0001", credential, subscriptionFields: [], historySync: "requested", createdAt: clock.now() },
+    {
+      id: "channel-a",
+      tenantId: "tenant-a",
+      wabaId: "200",
+      phoneNumberId: "300",
+      displayPhoneNumber: "+55 11 99999-0000",
+      credential,
+      subscriptionFields: [],
+      historySync: "requested",
+      createdAt: clock.now(),
+    },
+    {
+      id: "channel-b",
+      tenantId: "tenant-b",
+      wabaId: "201",
+      phoneNumberId: "301",
+      displayPhoneNumber: "+55 11 99999-0001",
+      credential,
+      subscriptionFields: [],
+      historySync: "requested",
+      createdAt: clock.now(),
+    },
   ]);
   queue = createTestJobQueue();
   notifier = createTestNotifier();
@@ -168,20 +288,52 @@ describe("History import", () => {
 
     expect(queue.jobs).toEqual([]);
     const conversations = await conversationsOf(tenantA);
-    expect(conversations.flatMap(({ messages }) => messages).every((found) => found.imported)).toBe(true);
+    expect(conversations.flatMap(({ messages }) => messages).every((found) => found.imported)).toBe(
+      true,
+    );
     // Members' open inboxes refresh to show the imported Conversations.
-    expect(new Set(notifier.pings.map(({ ping }) => "conversationId" in ping && ping.conversationId)).size).toBe(2);
+    expect(
+      new Set(notifier.pings.map(({ ping }) => "conversationId" in ping && ping.conversationId))
+        .size,
+    ).toBe(2);
   });
 
   test("a message received live and again in history keeps its live record", async () => {
-    await deliverAll([textMessageChange({ phoneNumberId: "300", wamid: "wamid.LIVE", from: ana, name: "Ana", body: "Oi", timestamp: "1792497600" })]);
-    await deliverAll([historyChange({ phoneNumberId: "300", threads: [{
-      id: ana, messages: [{ wamid: "wamid.LIVE", from: ana, timestamp: "1792497600", body: "Oi" }],
-    }] })]);
+    await deliverAll([
+      textMessageChange({
+        phoneNumberId: "300",
+        wamid: "wamid.LIVE",
+        from: ana,
+        name: "Ana",
+        body: "Oi",
+        timestamp: "1792497600",
+      }),
+    ]);
+    await deliverAll([
+      historyChange({
+        phoneNumberId: "300",
+        threads: [
+          {
+            id: ana,
+            messages: [{ wamid: "wamid.LIVE", from: ana, timestamp: "1792497600", body: "Oi" }],
+          },
+        ],
+      }),
+    ]);
 
     const [found] = await conversationsOf(tenantA);
     expect(found.contact.profileName).toBe("Ana");
-    expect(found.messages).toEqual([{ wamid: "wamid.LIVE", direction: "inbound", origin: "contact", status: null, text: "Oi", sentAt: new Date("2026-10-20T12:00:00Z"), imported: false }]);
+    expect(found.messages).toEqual([
+      {
+        wamid: "wamid.LIVE",
+        direction: "inbound",
+        origin: "contact",
+        status: null,
+        text: "Oi",
+        sentAt: new Date("2026-10-20T12:00:00Z"),
+        imported: false,
+      },
+    ]);
   });
 
   test("declined history, including error 2593109, shows history not imported", async () => {
@@ -194,16 +346,46 @@ describe("History import", () => {
   });
 
   test("group messages are ignored, in history and live", async () => {
-    await deliverAll([historyChange({ phoneNumberId: "300", threads: [
-      { id: ana, messages: [{ wamid: "wamid.H-GROUP", from: ana, timestamp: "1792411200", groupId: "120363000000000001" }] },
-      // Meta leaves groups out of history; a thread not keyed by a wa_id is not a Contact's.
-      { id: "120363000000000002@g.us", messages: [{ wamid: "wamid.H-GROUP-THREAD", from: bruno, timestamp: "1792411200" }] },
-    ] })]);
+    await deliverAll([
+      historyChange({
+        phoneNumberId: "300",
+        threads: [
+          {
+            id: ana,
+            messages: [
+              {
+                wamid: "wamid.H-GROUP",
+                from: ana,
+                timestamp: "1792411200",
+                groupId: "120363000000000001",
+              },
+            ],
+          },
+          // Meta leaves groups out of history; a thread not keyed by a wa_id is not a Contact's.
+          {
+            id: "120363000000000002@g.us",
+            messages: [{ wamid: "wamid.H-GROUP-THREAD", from: bruno, timestamp: "1792411200" }],
+          },
+        ],
+      }),
+    ]);
     const live = textMessageChange({ phoneNumberId: "300", wamid: "wamid.GROUP", from: bruno });
     const echo = messageEchoChange({ phoneNumberId: "300", wamid: "wamid.GROUP-ECHO", to: bruno });
     await deliverAll([
-      { ...live, value: { ...live.value, messages: [{ ...live.value.messages[0], group_id: "120363000000000001" }] } },
-      { ...echo, value: { ...echo.value, message_echoes: [{ ...echo.value.message_echoes[0], group_id: "120363000000000001" }] } },
+      {
+        ...live,
+        value: {
+          ...live.value,
+          messages: [{ ...live.value.messages[0], group_id: "120363000000000001" }],
+        },
+      },
+      {
+        ...echo,
+        value: {
+          ...echo.value,
+          message_echoes: [{ ...echo.value.message_echoes[0], group_id: "120363000000000001" }],
+        },
+      },
     ]);
 
     expect(await conversationsOf(tenantA)).toEqual([]);
@@ -213,14 +395,36 @@ describe("History import", () => {
 
 describe("Contacts sync", () => {
   test("names saved in the WhatsApp Business app update Contacts without duplicating them", async () => {
-    await deliverAll([textMessageChange({ phoneNumberId: "300", wamid: "wamid.ANA", from: ana, name: "Aninha" })]);
-    await deliverAll([historyChange({ phoneNumberId: "300", threads: [
-      { id: bruno, messages: [{ wamid: "wamid.H-B1", from: bruno, timestamp: "1789819200", body: "Qual o horário?" }] },
-    ] })]);
-    await deliverAll([contactSyncChange({ phoneNumberId: "300", contacts: [
-      { phone: ana, fullName: "Ana Souza" },
-      { phone: bruno, fullName: "Bruno Lima" },
-    ] })]);
+    await deliverAll([
+      textMessageChange({ phoneNumberId: "300", wamid: "wamid.ANA", from: ana, name: "Aninha" }),
+    ]);
+    await deliverAll([
+      historyChange({
+        phoneNumberId: "300",
+        threads: [
+          {
+            id: bruno,
+            messages: [
+              {
+                wamid: "wamid.H-B1",
+                from: bruno,
+                timestamp: "1789819200",
+                body: "Qual o horário?",
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
+    await deliverAll([
+      contactSyncChange({
+        phoneNumberId: "300",
+        contacts: [
+          { phone: ana, fullName: "Ana Souza" },
+          { phone: bruno, fullName: "Bruno Lima" },
+        ],
+      }),
+    ]);
 
     const contacts = (await conversationsOf(tenantA)).map(({ contact }) => contact);
     expect(contacts).toEqual([
@@ -232,31 +436,77 @@ describe("Contacts sync", () => {
 
   test("app contacts who never wrote to the business are not stored", async () => {
     const carla = "5511900000003";
-    await deliverAll([contactSyncChange({ phoneNumberId: "300", contacts: [{ phone: carla, fullName: "Carla Dias" }] })]);
+    await deliverAll([
+      contactSyncChange({
+        phoneNumberId: "300",
+        contacts: [{ phone: carla, fullName: "Carla Dias" }],
+      }),
+    ]);
     expect(notifier.pings).toEqual([]);
 
-    await deliverAll([textMessageChange({ phoneNumberId: "300", wamid: "wamid.CARLA", from: carla, name: "Carla" })]);
-    expect((await conversationsOf(tenantA))[0].contact).toEqual({ phone: carla, profileName: "Carla", appName: null, name: null });
+    await deliverAll([
+      textMessageChange({ phoneNumberId: "300", wamid: "wamid.CARLA", from: carla, name: "Carla" }),
+    ]);
+    expect((await conversationsOf(tenantA))[0].contact).toEqual({
+      phone: carla,
+      profileName: "Carla",
+      appName: null,
+      name: null,
+    });
   });
 
   test("a later app edit or removal wins, whichever order the events arrive in", async () => {
-    await deliverAll([textMessageChange({ phoneNumberId: "300", wamid: "wamid.ANA", from: ana, name: "Aninha" })]);
     await deliverAll([
-      contactSyncChange({ phoneNumberId: "300", contacts: [{ phone: ana, fullName: "Ana Souza Lima", timestamp: "1792497700" }] }),
-      contactSyncChange({ phoneNumberId: "300", contacts: [{ phone: ana, fullName: "Ana Souza", timestamp: "1792497600" }] }),
+      textMessageChange({ phoneNumberId: "300", wamid: "wamid.ANA", from: ana, name: "Aninha" }),
+    ]);
+    await deliverAll([
+      contactSyncChange({
+        phoneNumberId: "300",
+        contacts: [{ phone: ana, fullName: "Ana Souza Lima", timestamp: "1792497700" }],
+      }),
+      contactSyncChange({
+        phoneNumberId: "300",
+        contacts: [{ phone: ana, fullName: "Ana Souza", timestamp: "1792497600" }],
+      }),
     ]);
     expect((await conversationsOf(tenantA))[0].contact.appName).toBe("Ana Souza Lima");
 
-    await deliverAll([contactSyncChange({ phoneNumberId: "300", contacts: [{ phone: ana, action: "remove", timestamp: "1792497800" }] })]);
-    expect((await conversationsOf(tenantA))[0].contact).toEqual({ phone: ana, profileName: "Aninha", appName: null, name: null });
+    await deliverAll([
+      contactSyncChange({
+        phoneNumberId: "300",
+        contacts: [{ phone: ana, action: "remove", timestamp: "1792497800" }],
+      }),
+    ]);
+    expect((await conversationsOf(tenantA))[0].contact).toEqual({
+      phone: ana,
+      profileName: "Aninha",
+      appName: null,
+      name: null,
+    });
   });
 
   test("a name a Member gave in the dashboard is never overwritten", async () => {
-    await deliverAll([textMessageChange({ phoneNumberId: "300", wamid: "wamid.ANA", from: ana, name: "Aninha" })]);
-    const [{ contact: { id } }] = (await createConversationRepository(db, tenantA).listConversations()).conversations;
+    await deliverAll([
+      textMessageChange({ phoneNumberId: "300", wamid: "wamid.ANA", from: ana, name: "Aninha" }),
+    ]);
+    const [
+      {
+        contact: { id },
+      },
+    ] = (await createConversationRepository(db, tenantA).listConversations()).conversations;
     await createConversationRepository(db, tenantA).renameContact(id, "Ana (cliente VIP)");
-    await deliverAll([contactSyncChange({ phoneNumberId: "300", contacts: [{ phone: ana, fullName: "Ana Souza" }] })]);
+    await deliverAll([
+      contactSyncChange({
+        phoneNumberId: "300",
+        contacts: [{ phone: ana, fullName: "Ana Souza" }],
+      }),
+    ]);
 
-    expect((await conversationsOf(tenantA))[0].contact).toEqual({ phone: ana, profileName: "Aninha", appName: "Ana Souza", name: "Ana (cliente VIP)" });
+    expect((await conversationsOf(tenantA))[0].contact).toEqual({
+      phone: ana,
+      profileName: "Aninha",
+      appName: "Ana Souza",
+      name: "Ana (cliente VIP)",
+    });
   });
 });

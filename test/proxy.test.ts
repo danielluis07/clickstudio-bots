@@ -14,15 +14,11 @@ describe("proxy", () => {
     expect(response.status).toBe(307);
     const location = new URL(response.headers.get("location") ?? "");
     expect(location.pathname).toBe("/entrar");
-    expect(location.searchParams.get("voltar")).toBe(
-      "/painel/conversas?filtro=aguardando",
-    );
+    expect(location.searchParams.get("voltar")).toBe("/painel/conversas?filtro=aguardando");
   });
 
   test("lets a request with a session cookie through to the page's own guard", () => {
-    const response = proxy(
-      request("/admin", "better-auth.session_token=opaque-token"),
-    );
+    const response = proxy(request("/admin", "better-auth.session_token=opaque-token"));
 
     expect(response.headers.get("location")).toBeNull();
     expect(response.headers.get("x-middleware-next")).toBe("1");

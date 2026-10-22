@@ -1,6 +1,16 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
-import { channel, contact, conversation, inboxEvent, member, message, messageChange, organization, user } from "@/db/schema";
+import {
+  channel,
+  contact,
+  conversation,
+  inboxEvent,
+  member,
+  message,
+  messageChange,
+  organization,
+  user,
+} from "@/db/schema";
 import { createConversationRepository, createReplyService } from "@/modules/conversations";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { createWebhookInbox } from "@/modules/webhook-inbox";
@@ -9,7 +19,15 @@ import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue, type TestJobQueue } from "@/test/support/job-queue";
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
 import { createTestNotifier, type TestNotifier } from "@/test/support/notifier";
-import { messageEchoChange, metaAppSecret, metaDelivery, referencingChange, signMetaDelivery, statusChange, textMessageChange } from "@/test/support/meta-webhook";
+import {
+  messageEchoChange,
+  metaAppSecret,
+  metaDelivery,
+  referencingChange,
+  signMetaDelivery,
+  statusChange,
+  textMessageChange,
+} from "@/test/support/meta-webhook";
 
 let db: Database;
 let tenantA: TenantScope;
@@ -28,13 +46,17 @@ const runJobs = async () => {
 
 const conversationsOf = async (scope: TenantScope) => {
   const repository = createConversationRepository(db, scope);
-  return Promise.all((await repository.listConversations()).conversations.map(async ({ id, channelId, contact }) => ({
-    id,
-    channelId,
-    contactPhone: contact.phone,
-    contactProfileName: contact.profileName,
-    messages: (await repository.listMessages(id))!.messages,
-  })));
+  return Promise.all(
+    (await repository.listConversations()).conversations.map(
+      async ({ id, channelId, contact }) => ({
+        id,
+        channelId,
+        contactPhone: contact.phone,
+        contactProfileName: contact.profileName,
+        messages: (await repository.listMessages(id))!.messages,
+      }),
+    ),
+  );
 };
 
 afterAll(() => closeTestDatabase(db));
@@ -55,8 +77,24 @@ beforeAll(async () => {
   ]);
   const credential = { keyVersion: "v1", iv: "", ciphertext: "", tag: "" };
   await db.insert(channel).values([
-    { id: "channel-a", tenantId: "tenant-a", wabaId: "200", phoneNumberId: "300", displayPhoneNumber: "+55 11 99999-0000", credential, subscriptionFields: [] },
-    { id: "channel-b", tenantId: "tenant-b", wabaId: "201", phoneNumberId: "301", displayPhoneNumber: "+55 11 99999-0001", credential, subscriptionFields: [] },
+    {
+      id: "channel-a",
+      tenantId: "tenant-a",
+      wabaId: "200",
+      phoneNumberId: "300",
+      displayPhoneNumber: "+55 11 99999-0000",
+      credential,
+      subscriptionFields: [],
+    },
+    {
+      id: "channel-b",
+      tenantId: "tenant-b",
+      wabaId: "201",
+      phoneNumberId: "301",
+      displayPhoneNumber: "+55 11 99999-0001",
+      credential,
+      subscriptionFields: [],
+    },
   ]);
   tenantA = (await resolveTenantScope(db, { userId: "owner-a" }))!;
   tenantB = (await resolveTenantScope(db, { userId: "owner-b" }))!;
@@ -75,7 +113,11 @@ beforeEach(async () => {
 
 describe("Webhook inbox", () => {
   test("a committed inbound message publishes only its Conversation id to its Tenant", async () => {
-    await receive(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.PING", body: "Conteúdo privado" })));
+    await receive(
+      metaDelivery(
+        textMessageChange({ phoneNumberId: "300", wamid: "wamid.PING", body: "Conteúdo privado" }),
+      ),
+    );
     expect(notifier.pings).toEqual([]);
     await runJobs();
 
@@ -98,13 +140,17 @@ describe("Webhook inbox", () => {
   });
 
   test("app replies and their delivery statuses notify only their Conversation's Tenant", async () => {
-    await receive(metaDelivery(messageEchoChange({ phoneNumberId: "301", wamid: "wamid.APP-PING" })));
+    await receive(
+      metaDelivery(messageEchoChange({ phoneNumberId: "301", wamid: "wamid.APP-PING" })),
+    );
     await runJobs();
     const [found] = await conversationsOf(tenantB);
     expect(notifier.pings).toEqual([{ tenantId: "tenant-b", ping: { conversationId: found.id } }]);
 
     notifier.pings.length = 0;
-    await receive(metaDelivery(statusChange({ phoneNumberId: "301", wamid: "wamid.APP-PING", status: "read" })));
+    await receive(
+      metaDelivery(statusChange({ phoneNumberId: "301", wamid: "wamid.APP-PING", status: "read" })),
+    );
     const [job] = queue.take();
     notifier.failNext();
     await expect(inbox.process(job.inboxEventId)).rejects.toThrow("Notifier unavailable");
@@ -114,21 +160,37 @@ describe("Webhook inbox", () => {
   });
 
   test("a signed text message becomes one Contact, one Conversation and one message", async () => {
-    const delivery = metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1", body: "Olá!" }));
+    const delivery = metaDelivery(
+      textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1", body: "Olá!" }),
+    );
 
     expect(await receive(delivery)).toEqual({ ok: true });
     await runJobs();
 
-    expect(await conversationsOf(tenantA)).toEqual([{
-      id: expect.any(String),
-      channelId: "channel-a",
-      contactPhone: "5511988887777",
-      contactProfileName: "Maria Teste",
-      messages: [{
-        id: expect.any(String), wamid: "wamid.A1", direction: "inbound", origin: "contact", authorName: null, status: null,
-        type: "text", text: "Olá!", sentAt: new Date("2026-10-20T12:00:00Z"), imported: false, editedAt: null, revokedAt: null,
-      }],
-    }]);
+    expect(await conversationsOf(tenantA)).toEqual([
+      {
+        id: expect.any(String),
+        channelId: "channel-a",
+        contactPhone: "5511988887777",
+        contactProfileName: "Maria Teste",
+        messages: [
+          {
+            id: expect.any(String),
+            wamid: "wamid.A1",
+            direction: "inbound",
+            origin: "contact",
+            authorName: null,
+            status: null,
+            type: "text",
+            text: "Olá!",
+            sentAt: new Date("2026-10-20T12:00:00Z"),
+            imported: false,
+            editedAt: null,
+            revokedAt: null,
+          },
+        ],
+      },
+    ]);
     expect(await conversationsOf(tenantB)).toEqual([]);
   });
 
@@ -147,7 +209,12 @@ describe("Webhook inbox", () => {
       textMessageChange({ phoneNumberId: "300", wamid: "wamid.A2", body: "Segunda mensagem" }),
       first,
       statusChange({ phoneNumberId: "300", wamid: "wamid.OUT1", status: "delivered" }),
-      statusChange({ phoneNumberId: "300", wamid: "wamid.OUT1", status: "read", timestamp: "1792497800" }),
+      statusChange({
+        phoneNumberId: "300",
+        wamid: "wamid.OUT1",
+        status: "read",
+        timestamp: "1792497800",
+      }),
     );
     expect(await receive(rebatched)).toEqual({ ok: true });
     expect(queue.jobs).toHaveLength(3);
@@ -164,8 +231,18 @@ describe("Webhook inbox", () => {
     const delivery = metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1" }));
     const tampered = delivery.replace("Olá", "Oi");
 
-    for (const signature of [null, "", "sha256=", signMetaDelivery(delivery, "another-secret"), signMetaDelivery(delivery), `sha1=${signMetaDelivery(tampered).slice(7)}`]) {
-      expect(await inbox.receive({ body: tampered, signature })).toEqual({ ok: false, error: "invalid_signature" });
+    for (const signature of [
+      null,
+      "",
+      "sha256=",
+      signMetaDelivery(delivery, "another-secret"),
+      signMetaDelivery(delivery),
+      `sha1=${signMetaDelivery(tampered).slice(7)}`,
+    ]) {
+      expect(await inbox.receive({ body: tampered, signature })).toEqual({
+        ok: false,
+        error: "invalid_signature",
+      });
     }
 
     expect(queue.jobs).toEqual([]);
@@ -199,14 +276,20 @@ describe("Webhook inbox", () => {
   });
 
   test("files each event under the Tenant of the Channel it addressed", async () => {
-    await receive(metaDelivery(
-      textMessageChange({ phoneNumberId: "301", wamid: "wamid.B1", body: "Para B" }),
-      textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1", body: "Para A" }),
-    ));
+    await receive(
+      metaDelivery(
+        textMessageChange({ phoneNumberId: "301", wamid: "wamid.B1", body: "Para B" }),
+        textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1", body: "Para A" }),
+      ),
+    );
     await runJobs();
 
-    expect((await conversationsOf(tenantA)).flatMap(({ messages }) => messages.map(({ text }) => text))).toEqual(["Para A"]);
-    expect(await conversationsOf(tenantB)).toMatchObject([{ channelId: "channel-b", messages: [{ text: "Para B" }] }]);
+    expect(
+      (await conversationsOf(tenantA)).flatMap(({ messages }) => messages.map(({ text }) => text)),
+    ).toEqual(["Para A"]);
+    expect(await conversationsOf(tenantB)).toMatchObject([
+      { channelId: "channel-b", messages: [{ text: "Para B" }] },
+    ]);
   });
 
   test("edits and revokes reusing a message's wamid stay distinct, processable events", async () => {
@@ -221,7 +304,9 @@ describe("Webhook inbox", () => {
     await receive(metaDelivery(edit));
     expect(queue.take()).toEqual([]);
 
-    expect((await conversationsOf(tenantA))[0].messages).toMatchObject([{ wamid: "wamid.A1", text: null, revokedAt: expect.any(Date) }]);
+    expect((await conversationsOf(tenantA))[0].messages).toMatchObject([
+      { wamid: "wamid.A1", text: null, revokedAt: expect.any(Date) },
+    ]);
   });
 
   test("duplicate jobs for one event, even concurrent ones, store its message once", async () => {
@@ -239,29 +324,67 @@ describe("Webhook inbox", () => {
 
 describe("Coexistence echoes", () => {
   test("a reply sent from the WhatsApp Business app appears as the team's reply", async () => {
-    await receive(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1", timestamp: "1792497600" })));
-    await receive(metaDelivery(messageEchoChange({ phoneNumberId: "300", wamid: "wamid.APP1", body: "Abrimos sim!", timestamp: "1792497800" })));
+    await receive(
+      metaDelivery(
+        textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1", timestamp: "1792497600" }),
+      ),
+    );
+    await receive(
+      metaDelivery(
+        messageEchoChange({
+          phoneNumberId: "300",
+          wamid: "wamid.APP1",
+          body: "Abrimos sim!",
+          timestamp: "1792497800",
+        }),
+      ),
+    );
     await runJobs();
 
     const [{ messages }] = await conversationsOf(tenantA);
     expect(messages.at(-1)).toEqual({
-      id: expect.any(String), wamid: "wamid.APP1", direction: "outbound", origin: "app", authorName: null, status: "sent",
-      type: "text", text: "Abrimos sim!", sentAt: new Date("2026-10-20T12:03:20Z"), imported: false, editedAt: null, revokedAt: null,
+      id: expect.any(String),
+      wamid: "wamid.APP1",
+      direction: "outbound",
+      origin: "app",
+      authorName: null,
+      status: "sent",
+      type: "text",
+      text: "Abrimos sim!",
+      sentAt: new Date("2026-10-20T12:03:20Z"),
+      imported: false,
+      editedAt: null,
+      revokedAt: null,
     });
   });
 });
 
 describe("Edits and revokes", () => {
   test("edits and revokes invalidate the existing Conversation without carrying their text", async () => {
-    await receive(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.ORIGINAL" })));
+    await receive(
+      metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.ORIGINAL" })),
+    );
     await runJobs();
     const [found] = await conversationsOf(tenantA);
     notifier.pings.length = 0;
 
-    await receive(metaDelivery(
-      referencingChange({ phoneNumberId: "300", wamid: "wamid.EDIT", originalWamid: "wamid.ORIGINAL", type: "edit", body: "Texto editado privado" }),
-      referencingChange({ phoneNumberId: "300", wamid: "wamid.REVOKE", originalWamid: "wamid.ORIGINAL", type: "revoke" }),
-    ));
+    await receive(
+      metaDelivery(
+        referencingChange({
+          phoneNumberId: "300",
+          wamid: "wamid.EDIT",
+          originalWamid: "wamid.ORIGINAL",
+          type: "edit",
+          body: "Texto editado privado",
+        }),
+        referencingChange({
+          phoneNumberId: "300",
+          wamid: "wamid.REVOKE",
+          originalWamid: "wamid.ORIGINAL",
+          type: "revoke",
+        }),
+      ),
+    );
     await runJobs();
     expect(notifier.pings).toEqual([
       { tenantId: "tenant-a", ping: { conversationId: found.id } },
@@ -271,10 +394,22 @@ describe("Edits and revokes", () => {
 
   // A Contact message and a team reply from the app, both edited later.
   const exchange = async () => {
-    await receive(metaDelivery(
-      textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1", body: "Vocês abrem sábado?", timestamp: "1792497600" }),
-      messageEchoChange({ phoneNumberId: "300", wamid: "wamid.APP1", body: "Abrimos sim", timestamp: "1792497700" }),
-    ));
+    await receive(
+      metaDelivery(
+        textMessageChange({
+          phoneNumberId: "300",
+          wamid: "wamid.A1",
+          body: "Vocês abrem sábado?",
+          timestamp: "1792497600",
+        }),
+        messageEchoChange({
+          phoneNumberId: "300",
+          wamid: "wamid.APP1",
+          body: "Abrimos sim",
+          timestamp: "1792497700",
+        }),
+      ),
+    );
     await runJobs();
   };
 
@@ -287,19 +422,53 @@ describe("Edits and revokes", () => {
 
   const displayedOf = async (scope: TenantScope) =>
     (await conversationsOf(scope)).flatMap(({ messages }) =>
-      messages.map(({ wamid, text, sentAt, editedAt, revokedAt }) => ({ wamid, text, sentAt, editedAt, revokedAt })));
+      messages.map(({ wamid, text, sentAt, editedAt, revokedAt }) => ({
+        wamid,
+        text,
+        sentAt,
+        editedAt,
+        revokedAt,
+      })),
+    );
 
   test("an edit by the Contact or from the app updates the original message in place", async () => {
     await exchange();
 
     await deliver(
-      referencingChange({ phoneNumberId: "300", wamid: "wamid.E1", originalWamid: "wamid.A1", type: "edit", body: "Vocês abrem domingo?", timestamp: "1792497900" }),
-      referencingChange({ phoneNumberId: "300", wamid: "wamid.E2", originalWamid: "wamid.APP1", type: "edit", by: "app", body: "Abrimos sim, das 9h às 13h", timestamp: "1792498000" }),
+      referencingChange({
+        phoneNumberId: "300",
+        wamid: "wamid.E1",
+        originalWamid: "wamid.A1",
+        type: "edit",
+        body: "Vocês abrem domingo?",
+        timestamp: "1792497900",
+      }),
+      referencingChange({
+        phoneNumberId: "300",
+        wamid: "wamid.E2",
+        originalWamid: "wamid.APP1",
+        type: "edit",
+        by: "app",
+        body: "Abrimos sim, das 9h às 13h",
+        timestamp: "1792498000",
+      }),
     );
 
     expect(await displayedOf(tenantA)).toEqual([
-      { wamid: "wamid.A1", text: "Vocês abrem domingo?", sentAt: new Date("2026-10-20T12:00:00Z"), editedAt: new Date("2026-10-20T12:05:00Z"), revokedAt: null },
-      { wamid: "wamid.APP1", text: "Abrimos sim, das 9h às 13h", sentAt: new Date("2026-10-20T12:01:40Z"), editedAt: new Date("2026-10-20T12:06:40Z"), revokedAt: null },
+      {
+        wamid: "wamid.A1",
+        text: "Vocês abrem domingo?",
+        sentAt: new Date("2026-10-20T12:00:00Z"),
+        editedAt: new Date("2026-10-20T12:05:00Z"),
+        revokedAt: null,
+      },
+      {
+        wamid: "wamid.APP1",
+        text: "Abrimos sim, das 9h às 13h",
+        sentAt: new Date("2026-10-20T12:01:40Z"),
+        editedAt: new Date("2026-10-20T12:06:40Z"),
+        revokedAt: null,
+      },
     ]);
   });
 
@@ -307,19 +476,58 @@ describe("Edits and revokes", () => {
     await exchange();
 
     await deliver(
-      referencingChange({ phoneNumberId: "300", wamid: "wamid.R1", originalWamid: "wamid.A1", type: "revoke", timestamp: "1792497900" }),
-      referencingChange({ phoneNumberId: "300", wamid: "wamid.R2", originalWamid: "wamid.APP1", type: "revoke", by: "app", timestamp: "1792498000" }),
+      referencingChange({
+        phoneNumberId: "300",
+        wamid: "wamid.R1",
+        originalWamid: "wamid.A1",
+        type: "revoke",
+        timestamp: "1792497900",
+      }),
+      referencingChange({
+        phoneNumberId: "300",
+        wamid: "wamid.R2",
+        originalWamid: "wamid.APP1",
+        type: "revoke",
+        by: "app",
+        timestamp: "1792498000",
+      }),
     );
 
     expect(await displayedOf(tenantA)).toEqual([
-      { wamid: "wamid.A1", text: null, sentAt: new Date("2026-10-20T12:00:00Z"), editedAt: null, revokedAt: new Date("2026-10-20T12:05:00Z") },
-      { wamid: "wamid.APP1", text: null, sentAt: new Date("2026-10-20T12:01:40Z"), editedAt: null, revokedAt: new Date("2026-10-20T12:06:40Z") },
+      {
+        wamid: "wamid.A1",
+        text: null,
+        sentAt: new Date("2026-10-20T12:00:00Z"),
+        editedAt: null,
+        revokedAt: new Date("2026-10-20T12:05:00Z"),
+      },
+      {
+        wamid: "wamid.APP1",
+        text: null,
+        sentAt: new Date("2026-10-20T12:01:40Z"),
+        editedAt: null,
+        revokedAt: new Date("2026-10-20T12:06:40Z"),
+      },
     ]);
   });
 
   test("changes arriving out of order or repeatedly settle on the latest edit, and a revoke stays final", async () => {
-    const firstEdit = referencingChange({ phoneNumberId: "300", wamid: "wamid.E1", originalWamid: "wamid.A1", type: "edit", body: "Primeira edição", timestamp: "1792497900" });
-    const secondEdit = referencingChange({ phoneNumberId: "300", wamid: "wamid.E2", originalWamid: "wamid.A1", type: "edit", body: "Segunda edição", timestamp: "1792498000" });
+    const firstEdit = referencingChange({
+      phoneNumberId: "300",
+      wamid: "wamid.E1",
+      originalWamid: "wamid.A1",
+      type: "edit",
+      body: "Primeira edição",
+      timestamp: "1792497900",
+    });
+    const secondEdit = referencingChange({
+      phoneNumberId: "300",
+      wamid: "wamid.E2",
+      originalWamid: "wamid.A1",
+      type: "edit",
+      body: "Segunda edição",
+      timestamp: "1792498000",
+    });
     // The latest edit arrives before the original message and the first edit.
     await deliver(secondEdit);
     await exchange();
@@ -329,15 +537,36 @@ describe("Edits and revokes", () => {
     await Promise.all([...jobs, ...jobs].map((job) => inbox.process(job.inboxEventId)));
 
     expect((await displayedOf(tenantA))[0]).toEqual({
-      wamid: "wamid.A1", text: "Segunda edição", sentAt: new Date("2026-10-20T12:00:00Z"), editedAt: new Date("2026-10-20T12:06:40Z"), revokedAt: null,
+      wamid: "wamid.A1",
+      text: "Segunda edição",
+      sentAt: new Date("2026-10-20T12:00:00Z"),
+      editedAt: new Date("2026-10-20T12:06:40Z"),
+      revokedAt: null,
     });
 
     // An edit delivered after the revoke does not bring the text back.
     await deliver(
-      referencingChange({ phoneNumberId: "300", wamid: "wamid.R1", originalWamid: "wamid.A1", type: "revoke", timestamp: "1792498100" }),
-      referencingChange({ phoneNumberId: "300", wamid: "wamid.E3", originalWamid: "wamid.A1", type: "edit", body: "Tarde demais", timestamp: "1792498200" }),
+      referencingChange({
+        phoneNumberId: "300",
+        wamid: "wamid.R1",
+        originalWamid: "wamid.A1",
+        type: "revoke",
+        timestamp: "1792498100",
+      }),
+      referencingChange({
+        phoneNumberId: "300",
+        wamid: "wamid.E3",
+        originalWamid: "wamid.A1",
+        type: "edit",
+        body: "Tarde demais",
+        timestamp: "1792498200",
+      }),
     );
-    expect((await displayedOf(tenantA))[0]).toMatchObject({ wamid: "wamid.A1", text: null, revokedAt: new Date("2026-10-20T12:08:20Z") });
+    expect((await displayedOf(tenantA))[0]).toMatchObject({
+      wamid: "wamid.A1",
+      text: null,
+      revokedAt: new Date("2026-10-20T12:08:20Z"),
+    });
   });
 
   test("a change only reaches its own Tenant's message, in the direction of who changed it", async () => {
@@ -345,13 +574,36 @@ describe("Edits and revokes", () => {
 
     await deliver(
       // The Contact cannot change the team's reply, nor the app the Contact's message.
-      referencingChange({ phoneNumberId: "300", wamid: "wamid.X1", originalWamid: "wamid.APP1", type: "revoke" }),
-      referencingChange({ phoneNumberId: "300", wamid: "wamid.X2", originalWamid: "wamid.A1", type: "edit", by: "app", body: "Adulterado" }),
+      referencingChange({
+        phoneNumberId: "300",
+        wamid: "wamid.X1",
+        originalWamid: "wamid.APP1",
+        type: "revoke",
+      }),
+      referencingChange({
+        phoneNumberId: "300",
+        wamid: "wamid.X2",
+        originalWamid: "wamid.A1",
+        type: "edit",
+        by: "app",
+        body: "Adulterado",
+      }),
       // Another Tenant's Channel naming this Tenant's message.
-      referencingChange({ phoneNumberId: "301", wamid: "wamid.X3", originalWamid: "wamid.A1", type: "revoke" }),
+      referencingChange({
+        phoneNumberId: "301",
+        wamid: "wamid.X3",
+        originalWamid: "wamid.A1",
+        type: "revoke",
+      }),
     );
 
-    expect((await displayedOf(tenantA)).map(({ text, editedAt, revokedAt }) => ({ text, editedAt, revokedAt }))).toEqual([
+    expect(
+      (await displayedOf(tenantA)).map(({ text, editedAt, revokedAt }) => ({
+        text,
+        editedAt,
+        revokedAt,
+      })),
+    ).toEqual([
       { text: "Vocês abrem sábado?", editedAt: null, revokedAt: null },
       { text: "Abrimos sim", editedAt: null, revokedAt: null },
     ]);
@@ -359,18 +611,47 @@ describe("Edits and revokes", () => {
   });
 
   test("echoes of the platform's own sends, edits and revokes are not new activity", async () => {
-    await receive(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1", timestamp: "1792497600" })));
+    await receive(
+      metaDelivery(
+        textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1", timestamp: "1792497600" }),
+      ),
+    );
     await runJobs();
     const [{ id: conversationId }] = await conversationsOf(tenantA);
-    const replies = createReplyService({ db, clock, notifier, getSender: createTestWhatsAppSender });
+    const replies = createReplyService({
+      db,
+      clock,
+      notifier,
+      getSender: createTestWhatsAppSender,
+    });
     await replies.sendReply(tenantA, { conversationId, text: "Abrimos sim!" });
-    const lastMessageAt = async () => (await createConversationRepository(db, tenantA).listConversations()).conversations[0].lastMessageAt;
+    const lastMessageAt = async () =>
+      (await createConversationRepository(db, tenantA).listConversations()).conversations[0]
+        .lastMessageAt;
     const before = await lastMessageAt();
 
     await deliver(
-      messageEchoChange({ phoneNumberId: "300", wamid: "wamid.OUT1", body: "Abrimos sim!", timestamp: "1792498500" }),
-      referencingChange({ phoneNumberId: "300", wamid: "wamid.E1", originalWamid: "wamid.A1", type: "edit", timestamp: "1792498600" }),
-      referencingChange({ phoneNumberId: "300", wamid: "wamid.R1", originalWamid: "wamid.OUT1", type: "revoke", by: "app", timestamp: "1792498700" }),
+      messageEchoChange({
+        phoneNumberId: "300",
+        wamid: "wamid.OUT1",
+        body: "Abrimos sim!",
+        timestamp: "1792498500",
+      }),
+      referencingChange({
+        phoneNumberId: "300",
+        wamid: "wamid.E1",
+        originalWamid: "wamid.A1",
+        type: "edit",
+        timestamp: "1792498600",
+      }),
+      referencingChange({
+        phoneNumberId: "300",
+        wamid: "wamid.R1",
+        originalWamid: "wamid.OUT1",
+        type: "revoke",
+        by: "app",
+        timestamp: "1792498700",
+      }),
     );
 
     const [{ messages }] = await conversationsOf(tenantA);
@@ -389,12 +670,21 @@ describe("Delivery statuses", () => {
     await receive(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1" })));
     await runJobs();
     const [{ id: conversationId }] = await conversationsOf(tenantA);
-    const replies = createReplyService({ db, clock, notifier, getSender: createTestWhatsAppSender });
-    expect(await replies.sendReply(tenantA, { conversationId, text: "Abrimos sim!" })).toEqual({ ok: true });
+    const replies = createReplyService({
+      db,
+      clock,
+      notifier,
+      getSender: createTestWhatsAppSender,
+    });
+    expect(await replies.sendReply(tenantA, { conversationId, text: "Abrimos sim!" })).toEqual({
+      ok: true,
+    });
   };
 
   const statusesOf = async (scope: TenantScope) =>
-    (await conversationsOf(scope)).flatMap(({ messages }) => messages.map(({ wamid, status }) => ({ wamid, status })));
+    (await conversationsOf(scope)).flatMap(({ messages }) =>
+      messages.map(({ wamid, status }) => ({ wamid, status })),
+    );
 
   const deliver = async (...changes: ReturnType<typeof statusChange>[]) => {
     for (const change of changes) {
@@ -405,11 +695,17 @@ describe("Delivery statuses", () => {
 
   test("sent, delivered and read update the reply without creating messages", async () => {
     await replyToContact();
-    expect(await statusesOf(tenantA)).toEqual([{ wamid: "wamid.A1", status: null }, { wamid: "wamid.OUT1", status: "pending" }]);
+    expect(await statusesOf(tenantA)).toEqual([
+      { wamid: "wamid.A1", status: null },
+      { wamid: "wamid.OUT1", status: "pending" },
+    ]);
 
     for (const status of ["sent", "delivered", "read"] as const) {
       await deliver(statusChange({ phoneNumberId: "300", wamid: "wamid.OUT1", status }));
-      expect(await statusesOf(tenantA)).toEqual([{ wamid: "wamid.A1", status: null }, { wamid: "wamid.OUT1", status }]);
+      expect(await statusesOf(tenantA)).toEqual([
+        { wamid: "wamid.A1", status: null },
+        { wamid: "wamid.OUT1", status },
+      ]);
     }
   });
 
@@ -417,9 +713,24 @@ describe("Delivery statuses", () => {
     await replyToContact();
 
     await deliver(
-      statusChange({ phoneNumberId: "300", wamid: "wamid.OUT1", status: "read", timestamp: "1792497800" }),
-      statusChange({ phoneNumberId: "300", wamid: "wamid.OUT1", status: "sent", timestamp: "1792497600" }),
-      statusChange({ phoneNumberId: "300", wamid: "wamid.OUT1", status: "delivered", timestamp: "1792497700" }),
+      statusChange({
+        phoneNumberId: "300",
+        wamid: "wamid.OUT1",
+        status: "read",
+        timestamp: "1792497800",
+      }),
+      statusChange({
+        phoneNumberId: "300",
+        wamid: "wamid.OUT1",
+        status: "sent",
+        timestamp: "1792497600",
+      }),
+      statusChange({
+        phoneNumberId: "300",
+        wamid: "wamid.OUT1",
+        status: "delivered",
+        timestamp: "1792497700",
+      }),
     );
 
     expect((await statusesOf(tenantA)).at(-1)).toEqual({ wamid: "wamid.OUT1", status: "read" });
@@ -430,7 +741,12 @@ describe("Delivery statuses", () => {
 
     await deliver(
       statusChange({ phoneNumberId: "300", wamid: "wamid.OUT1", status: "sent" }),
-      statusChange({ phoneNumberId: "300", wamid: "wamid.OUT1", status: "failed", timestamp: "1792497800" }),
+      statusChange({
+        phoneNumberId: "300",
+        wamid: "wamid.OUT1",
+        status: "failed",
+        timestamp: "1792497800",
+      }),
     );
 
     expect((await statusesOf(tenantA)).at(-1)).toEqual({ wamid: "wamid.OUT1", status: "failed" });
@@ -444,7 +760,10 @@ describe("Delivery statuses", () => {
       statusChange({ phoneNumberId: "300", wamid: "wamid.UNKNOWN", status: "read" }),
     );
 
-    expect(await statusesOf(tenantA)).toEqual([{ wamid: "wamid.A1", status: null }, { wamid: "wamid.OUT1", status: "pending" }]);
+    expect(await statusesOf(tenantA)).toEqual([
+      { wamid: "wamid.A1", status: null },
+      { wamid: "wamid.OUT1", status: "pending" },
+    ]);
     expect(await conversationsOf(tenantB)).toEqual([]);
   });
 });

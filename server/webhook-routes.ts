@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { answerSubscriptionChallenge, type InboxDiagnostics, type WebhookInbox } from "@/modules/webhook-inbox";
+import {
+  answerSubscriptionChallenge,
+  type InboxDiagnostics,
+  type WebhookInbox,
+} from "@/modules/webhook-inbox";
 import { classifyError } from "@/platform/diagnostics";
 
 type JobVerifier = {
@@ -8,22 +12,34 @@ type JobVerifier = {
 
 const empty = (status: number) => new Response(null, { status });
 
-const receiveStatus = { invalid_signature: 401, invalid_payload: 400, enqueue_failed: 500 } as const;
+const receiveStatus = {
+  invalid_signature: 401,
+  invalid_payload: 400,
+  enqueue_failed: 500,
+} as const;
 
 // Request adapters only. Failures are logged without detail: database errors
 // can echo event content, and logs must never carry message text or phones.
 // Each half works without the other: Meta's handshake needs only the token.
-export const createWhatsAppWebhookRoute = ({ inbox, verifyToken }: {
+export const createWhatsAppWebhookRoute = ({
+  inbox,
+  verifyToken,
+}: {
   inbox: WebhookInbox | null;
   verifyToken: string | null;
 }) => ({
   GET(request: Request) {
     const params = new URL(request.url).searchParams;
-    const challenge = verifyToken && answerSubscriptionChallenge({
-      mode: params.get("hub.mode"),
-      token: params.get("hub.verify_token"),
-      challenge: params.get("hub.challenge"),
-    }, verifyToken);
+    const challenge =
+      verifyToken &&
+      answerSubscriptionChallenge(
+        {
+          mode: params.get("hub.mode"),
+          token: params.get("hub.verify_token"),
+          challenge: params.get("hub.challenge"),
+        },
+        verifyToken,
+      );
     return challenge
       ? new Response(challenge, { headers: { "content-type": "text/plain; charset=utf-8" } })
       : empty(403);
@@ -47,7 +63,11 @@ export const createWhatsAppWebhookRoute = ({ inbox, verifyToken }: {
 
 const inboxJobSchema = z.strictObject({ inboxEventId: z.string().min(1).max(64) });
 const parseJson = (body: string): unknown => {
-  try { return JSON.parse(body); } catch { return null; }
+  try {
+    return JSON.parse(body);
+  } catch {
+    return null;
+  }
 };
 
 export const createInboxJobRoute = (
@@ -60,7 +80,7 @@ export const createInboxJobRoute = (
     try {
       const body = await request.text();
       const signature = request.headers.get("upstash-signature");
-      if (!await config.verifier.verify({ signature, body, url: config.url })) return empty(401);
+      if (!(await config.verifier.verify({ signature, body, url: config.url }))) return empty(401);
       const job = inboxJobSchema.safeParse(parseJson(body));
       if (!job.success) return empty(400);
       inboxEventId = job.data.inboxEventId;
@@ -69,7 +89,11 @@ export const createInboxJobRoute = (
       return empty(200);
     } catch (error) {
       // QStash retries the job; repeated failures reach its dead-letter queue.
-      diagnostics?.log({ kind: "inbox_processing_failed", inboxEventId, errorClass: classifyError(error) });
+      diagnostics?.log({
+        kind: "inbox_processing_failed",
+        inboxEventId,
+        errorClass: classifyError(error),
+      });
       return empty(500);
     }
   },
@@ -89,10 +113,19 @@ export const createInboxFailureRoute = (
     if (!config) return empty(503);
     try {
       const body = await request.text();
-      if (!await config.verifier.verify({ signature: request.headers.get("upstash-signature"), body, url: config.url })) return empty(401);
+      if (
+        !(await config.verifier.verify({
+          signature: request.headers.get("upstash-signature"),
+          body,
+          url: config.url,
+        }))
+      )
+        return empty(401);
       const callback = failureSchema.safeParse(parseJson(body));
       if (!callback.success || callback.data.url !== config.sourceUrl) return empty(400);
-      const job = inboxJobSchema.safeParse(parseJson(Buffer.from(callback.data.sourceBody, "base64").toString("utf8")));
+      const job = inboxJobSchema.safeParse(
+        parseJson(Buffer.from(callback.data.sourceBody, "base64").toString("utf8")),
+      );
       if (!job.success) return empty(400);
       // Ignore response bodies, headers and caller IP; only the source job's ID
       // is needed. Duplicate callbacks and already-settled events are no-ops.

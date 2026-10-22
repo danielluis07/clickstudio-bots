@@ -7,7 +7,11 @@ import {
 
 // Delivery statuses arrive under `messages`; there is no `statuses` field.
 export const whatsAppWebhookFields = [
-  "messages", "account_update", "smb_message_echoes", "history", "smb_app_state_sync",
+  "messages",
+  "account_update",
+  "smb_message_echoes",
+  "history",
+  "smb_app_state_sync",
 ] as const;
 
 type Options = {
@@ -48,7 +52,12 @@ export const createWhatsAppAdapter = (options: Options) => {
   };
 
   return {
-    async exchangeSignup(input: { tenantId: string; code: string; wabaId: string; phoneNumberId?: string }) {
+    async exchangeSignup(input: {
+      tenantId: string;
+      code: string;
+      wabaId: string;
+      phoneNumberId?: string;
+    }) {
       try {
         const result = await request("oauth/access_token", {
           method: "POST",
@@ -61,13 +70,20 @@ export const createWhatsAppAdapter = (options: Options) => {
         const { access_token: token } = z.object({ access_token: z.string().min(1) }).parse(result);
         // The browser's asset ids are hints. Meta must authorize the WABA and
         // confirm that the selected phone is registered for coexistence.
-        const phones = z.object({ data: z.array(phoneSchema) }).parse(await request(
-          `${input.wabaId}/phone_numbers?fields=id,display_phone_number,is_on_biz_app,platform_type&limit=100`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        ));
-        const candidates = phones.data.filter((phone) =>
-          phone.is_on_biz_app && phone.platform_type === "CLOUD_API" &&
-          (!input.phoneNumberId || phone.id === input.phoneNumberId));
+        const phones = z
+          .object({ data: z.array(phoneSchema) })
+          .parse(
+            await request(
+              `${input.wabaId}/phone_numbers?fields=id,display_phone_number,is_on_biz_app,platform_type&limit=100`,
+              { headers: { Authorization: `Bearer ${token}` } },
+            ),
+          );
+        const candidates = phones.data.filter(
+          (phone) =>
+            phone.is_on_biz_app &&
+            phone.platform_type === "CLOUD_API" &&
+            (!input.phoneNumberId || phone.id === input.phoneNumberId),
+        );
         if (candidates.length !== 1) throw new Error();
         const phone = candidates[0];
         const context = { tenantId: input.tenantId, wabaId: input.wabaId, phoneNumberId: phone.id };
@@ -85,19 +101,31 @@ export const createWhatsAppAdapter = (options: Options) => {
       try {
         // WABA subscriptions inherit the app's configured fields. Verify those
         // fields rather than claiming that subscribed_apps configures them.
-        const appSubscriptions = z.object({
-          data: z.array(z.object({
-            object: z.string(),
-            active: z.boolean(),
-            fields: z.array(z.union([z.string(), z.object({ name: z.string() })])),
-          })),
-        }).parse(await request(`${options.appId}/subscriptions`, {
-          headers: { Authorization: `Bearer ${options.appId}|${options.appSecret}` },
-        }));
-        const fields = new Set(appSubscriptions.data
-          .filter((subscription) => subscription.object === "whatsapp_business_account" && subscription.active)
-          .flatMap((subscription) => subscription.fields.map((field) =>
-            typeof field === "string" ? field : field.name)));
+        const appSubscriptions = z
+          .object({
+            data: z.array(
+              z.object({
+                object: z.string(),
+                active: z.boolean(),
+                fields: z.array(z.union([z.string(), z.object({ name: z.string() })])),
+              }),
+            ),
+          })
+          .parse(
+            await request(`${options.appId}/subscriptions`, {
+              headers: { Authorization: `Bearer ${options.appId}|${options.appSecret}` },
+            }),
+          );
+        const fields = new Set(
+          appSubscriptions.data
+            .filter(
+              (subscription) =>
+                subscription.object === "whatsapp_business_account" && subscription.active,
+            )
+            .flatMap((subscription) =>
+              subscription.fields.map((field) => (typeof field === "string" ? field : field.name)),
+            ),
+        );
         if (!whatsAppWebhookFields.every((field) => fields.has(field))) {
           return { ok: false as const, error: "missing_webhook_fields" as const };
         }
@@ -114,14 +142,19 @@ export const createWhatsAppAdapter = (options: Options) => {
       }
     },
 
-    async requestAppSync(input: WhatsAppCredentialContext & {
-      credential: EncryptedWhatsAppToken;
-      syncType: "smb_app_state_sync" | "history";
-    }) {
+    async requestAppSync(
+      input: WhatsAppCredentialContext & {
+        credential: EncryptedWhatsAppToken;
+        syncType: "smb_app_state_sync" | "history";
+      },
+    ) {
       try {
         const result = await request(`${input.phoneNumberId}/smb_app_data`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${cipher.decrypt(input.credential, input)}`, "Content-Type": "application/json" },
+          headers: {
+            Authorization: `Bearer ${cipher.decrypt(input.credential, input)}`,
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({ messaging_product: "whatsapp", sync_type: input.syncType }),
         });
         // Acceptance only; whether the business shares its history arrives later.
@@ -131,7 +164,13 @@ export const createWhatsAppAdapter = (options: Options) => {
       }
     },
 
-    async sendText(input: WhatsAppCredentialContext & { credential: EncryptedWhatsAppToken; to: string; text: string }) {
+    async sendText(
+      input: WhatsAppCredentialContext & {
+        credential: EncryptedWhatsAppToken;
+        to: string;
+        text: string;
+      },
+    ) {
       try {
         const token = cipher.decrypt(input.credential, input);
         const result = await request(`${input.phoneNumberId}/messages`, {
@@ -145,7 +184,9 @@ export const createWhatsAppAdapter = (options: Options) => {
             text: { body: input.text, preview_url: false },
           }),
         });
-        const { messages: [sent] } = z.object({ messages: z.tuple([z.object({ id: z.string().min(1) })]) }).parse(result);
+        const {
+          messages: [sent],
+        } = z.object({ messages: z.tuple([z.object({ id: z.string().min(1) })]) }).parse(result);
         return { wamid: sent.id };
       } catch {
         throw new Error("WhatsApp send failed");

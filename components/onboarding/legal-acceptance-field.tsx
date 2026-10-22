@@ -6,11 +6,15 @@ export function LegalAcceptanceField() {
   return (
     <Field orientation="horizontal">
       <Checkbox id="acceptedTerms" name="acceptedTerms" required />
-      <FieldLabel htmlFor="acceptedTerms" className="block font-normal leading-relaxed">
+      <FieldLabel htmlFor="acceptedTerms" className="block leading-relaxed font-normal">
         Li e aceito os{" "}
-        <Link href="/termos" target="_blank" className="underline underline-offset-4">Termos de Uso</Link>{" "}
+        <Link href="/termos" target="_blank" className="underline underline-offset-4">
+          Termos de Uso
+        </Link>{" "}
         e o{" "}
-        <Link href="/termos#dpa" target="_blank" className="underline underline-offset-4">Acordo de Tratamento de Dados (DPA)</Link>{" "}
+        <Link href="/termos#dpa" target="_blank" className="underline underline-offset-4">
+          Acordo de Tratamento de Dados (DPA)
+        </Link>{" "}
         em nome do negócio.
       </FieldLabel>
     </Field>

@@ -6,9 +6,12 @@ export function AdminTenants() {
       <h1 className="text-3xl font-semibold tracking-tight">Administração</h1>
       <section aria-labelledby="novo-negocio" className="flex flex-col gap-6">
         <div className="flex flex-col gap-2">
-          <h2 id="novo-negocio" className="text-xl font-semibold">Novo negócio</h2>
+          <h2 id="novo-negocio" className="text-xl font-semibold">
+            Novo negócio
+          </h2>
           <p className="text-muted-foreground">
-            Crie o negócio e convide a pessoa responsável. O acesso só começa quando o convite é aceito.
+            Crie o negócio e convide a pessoa responsável. O acesso só começa quando o convite é
+            aceito.
           </p>
         </div>
         <CreateTenantForm />

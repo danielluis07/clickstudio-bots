@@ -22,10 +22,7 @@ let tenantB: { tenantId: string; ownerId: string };
 let scopeA: TenantScope;
 let scopeB: TenantScope;
 
-const onboardTenant = async (
-  tenantName: string,
-  ownerEmail: string,
-) => {
+const onboardTenant = async (tenantName: string, ownerEmail: string) => {
   const created = await onboarding.createTenant(adminId, {
     tenantName,
     ownerEmail,
@@ -125,9 +122,7 @@ describe("Tenant-scoped data access", () => {
   });
 
   test("records who accepted the Terms and DPA and when, visible only to that Tenant", async () => {
-    expect(
-      await createTenantRepository(db, scopeA).listLegalAcceptances(),
-    ).toEqual([
+    expect(await createTenantRepository(db, scopeA).listLegalAcceptances()).toEqual([
       {
         memberName: "Dono Clínica A",
         termsVersion: "2026-10-19",
@@ -137,14 +132,8 @@ describe("Tenant-scoped data access", () => {
   });
 
   test("a Member of Tenant A cannot cancel a Tenant B invitation by passing its id", async () => {
-    const invitationB = await addPendingInvitation(
-      tenantB.tenantId,
-      tenantB.ownerId,
-    );
-    const invitationA = await addPendingInvitation(
-      tenantA.tenantId,
-      tenantA.ownerId,
-    );
+    const invitationB = await addPendingInvitation(tenantB.tenantId, tenantB.ownerId);
+    const invitationA = await addPendingInvitation(tenantA.tenantId, tenantA.ownerId);
     const tenant = createTenantRepository(db, scopeA);
 
     expect(await tenant.cancelInvitation(invitationB)).toBe(false);

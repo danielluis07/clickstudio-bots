@@ -23,7 +23,15 @@ type KnowledgeEntryFormProps = {
   onCancel?: () => void;
 };
 
-export function KnowledgeEntryForm({ kind, entry, otherEntriesSize, cap, titleMaxLength, onSaved, onCancel }: KnowledgeEntryFormProps) {
+export function KnowledgeEntryForm({
+  kind,
+  entry,
+  otherEntriesSize,
+  cap,
+  titleMaxLength,
+  onSaved,
+  onCancel,
+}: KnowledgeEntryFormProps) {
   const id = useId();
   const labels = knowledgeEntryLabels[kind];
   const form = useKnowledgeEntryForm({
@@ -36,7 +44,11 @@ export function KnowledgeEntryForm({ kind, entry, otherEntriesSize, cap, titleMa
 
   return (
     <form action={form.formAction}>
-      {entry ? <input type="hidden" name="entryId" value={entry.id} /> : <input type="hidden" name="kind" value={kind} />}
+      {entry ? (
+        <input type="hidden" name="entryId" value={entry.id} />
+      ) : (
+        <input type="hidden" name="kind" value={kind} />
+      )}
       <FieldGroup>
         <Field>
           <FieldLabel htmlFor={`${id}-title`}>{labels.title}</FieldLabel>
@@ -61,15 +73,27 @@ export function KnowledgeEntryForm({ kind, entry, otherEntriesSize, cap, titleMa
             className="min-h-32"
             required
           />
-          <FieldDescription id={`${id}-allowance`} className={form.overCap ? "text-destructive" : undefined}>
-            {formatCount(form.total)} / {formatCount(cap)} caracteres na base de conhecimento ao salvar
+          <FieldDescription
+            id={`${id}-allowance`}
+            className={form.overCap ? "text-destructive" : undefined}
+          >
+            {formatCount(form.total)} / {formatCount(cap)} caracteres na base de conhecimento ao
+            salvar
           </FieldDescription>
         </Field>
         <FormMessage state={form.state} />
         <div className="flex flex-wrap gap-2">
-          <SubmitButton pending={form.pending}>{entry ? "Salvar alterações" : labels.add}</SubmitButton>
+          <SubmitButton pending={form.pending}>
+            {entry ? "Salvar alterações" : labels.add}
+          </SubmitButton>
           {onCancel && (
-            <Button type="button" variant="ghost" size="lg" onClick={onCancel} disabled={form.pending}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="lg"
+              onClick={onCancel}
+              disabled={form.pending}
+            >
               Cancelar
             </Button>
           )}

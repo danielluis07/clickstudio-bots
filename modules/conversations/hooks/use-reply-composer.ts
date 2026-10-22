@@ -11,14 +11,20 @@ const useServiceWindowOpen = (closesAt: Date | null) => {
 
   useEffect(() => {
     if (!closesAt) return;
-    const timer = setTimeout(() => setNow(Date.now()), Math.max(closesAt.getTime() - Date.now(), 0));
+    const timer = setTimeout(
+      () => setNow(Date.now()),
+      Math.max(closesAt.getTime() - Date.now(), 0),
+    );
     return () => clearTimeout(timer);
   }, [closesAt]);
 
   return closesAt !== null && closesAt.getTime() > now;
 };
 
-export const useReplyComposer = ({ conversationId, serviceWindowClosesAt }: {
+export const useReplyComposer = ({
+  conversationId,
+  serviceWindowClosesAt,
+}: {
   conversationId: string;
   serviceWindowClosesAt: Date | null;
 }) => {
@@ -29,14 +35,17 @@ export const useReplyComposer = ({ conversationId, serviceWindowClosesAt }: {
 
   // A failed send is stored too, and a refusal may mean the window closed, so
   // the Conversation is refetched whatever the outcome.
-  const send = useMutation(trpc.replies.send.mutationOptions({
-    onSuccess: () => setText(""),
-    onSettled: () => Promise.all([
-      queryClient.invalidateQueries(trpc.conversations.messages.pathFilter()),
-      queryClient.invalidateQueries(trpc.conversations.get.pathFilter()),
-      queryClient.invalidateQueries(trpc.conversations.list.pathFilter()),
-    ]),
-  }));
+  const send = useMutation(
+    trpc.replies.send.mutationOptions({
+      onSuccess: () => setText(""),
+      onSettled: () =>
+        Promise.all([
+          queryClient.invalidateQueries(trpc.conversations.messages.pathFilter()),
+          queryClient.invalidateQueries(trpc.conversations.get.pathFilter()),
+          queryClient.invalidateQueries(trpc.conversations.list.pathFilter()),
+        ]),
+    }),
+  );
 
   // The server's clock decides; it may close the window before this one does.
   const windowClosed = !windowOpen || send.error?.message === "window_closed";
@@ -59,5 +68,14 @@ export const useReplyComposer = ({ conversationId, serviceWindowClosesAt }: {
     submit();
   };
 
-  return { text, changeText, submit, keyDown, windowClosed, canSend, sending: send.isPending, failed: send.isError && !windowClosed };
+  return {
+    text,
+    changeText,
+    submit,
+    keyDown,
+    windowClosed,
+    canSend,
+    sending: send.isPending,
+    failed: send.isError && !windowClosed,
+  };
 };

@@ -1,7 +1,11 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 // Meta signs the raw body with the app secret: `X-Hub-Signature-256: sha256=<hex>`.
-export const isValidDeliverySignature = (body: string, header: string | null, appSecret: string) => {
+export const isValidDeliverySignature = (
+  body: string,
+  header: string | null,
+  appSecret: string,
+) => {
   if (!header?.startsWith("sha256=")) return false;
   const expected = createHmac("sha256", appSecret).update(body, "utf8").digest();
   const received = Buffer.from(header.slice("sha256=".length), "hex");

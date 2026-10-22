@@ -17,12 +17,7 @@ export const passwordResetUrl = (appUrl: string, token: string) => {
   return url.href;
 };
 
-export const passwordResetEmail = ({
-  to,
-  name,
-  appUrl,
-  token,
-}: PasswordReset): Email => {
+export const passwordResetEmail = ({ to, name, appUrl, token }: PasswordReset): Email => {
   const resetUrl = passwordResetUrl(appUrl, token);
   const url = escapeHtml(resetUrl);
 

@@ -9,7 +9,10 @@ type DeleteKnowledgeEntryButtonProps = {
   entryTitle: string;
 };
 
-export function DeleteKnowledgeEntryButton({ entryId, entryTitle }: DeleteKnowledgeEntryButtonProps) {
+export function DeleteKnowledgeEntryButton({
+  entryId,
+  entryTitle,
+}: DeleteKnowledgeEntryButtonProps) {
   const { confirm } = useConfirm();
 
   return (
@@ -24,7 +27,8 @@ export function DeleteKnowledgeEntryButton({ entryId, entryTitle }: DeleteKnowle
             "O item sai da base de conhecimento e o Bot deixa de usá-lo a partir da próxima resposta. Não é possível desfazer.",
           action: () => deleteKnowledgeEntryAction(entryId),
         })
-      }>
+      }
+    >
       Excluir
     </Button>
   );

@@ -17,7 +17,12 @@ export type DashboardReply = z.input<typeof replySchema>;
 
 // Members reply to Contacts from the dashboard, only while WhatsApp's service
 // window is open. Outside it they continue in the WhatsApp Business app.
-export const createReplyService = ({ db, clock, notifier, getSender }: {
+export const createReplyService = ({
+  db,
+  clock,
+  notifier,
+  getSender,
+}: {
   db: Database;
   clock: Clock;
   notifier: Notifier;
@@ -36,20 +41,26 @@ export const createReplyService = ({ db, clock, notifier, getSender }: {
     }
     const channel = await findChannelCredential(db, scope, found.channelId);
     // An unconfigured adapter refuses before anything is stored.
-    const sender = channel && await Promise.resolve().then(getSender).catch(() => null);
+    const sender =
+      channel &&
+      (await Promise.resolve()
+        .then(getSender)
+        .catch(() => null));
     if (!channel || !sender) return { ok: false as const, error: "channel_unavailable" as const };
 
     const { id } = await repository.insertPendingReply(conversationId, { text, sentAt: now });
     await notifyInbox(notifier, scope.tenantId, { conversationId });
     const sent = await Promise.resolve()
-      .then(() => sender.sendText({
-        tenantId: channel.tenantId,
-        wabaId: channel.wabaId,
-        phoneNumberId: channel.phoneNumberId,
-        credential: channel.credential,
-        to: found.contact.phone,
-        text,
-      }))
+      .then(() =>
+        sender.sendText({
+          tenantId: channel.tenantId,
+          wabaId: channel.wabaId,
+          phoneNumberId: channel.phoneNumberId,
+          credential: channel.credential,
+          to: found.contact.phone,
+          text,
+        }),
+      )
       .catch(() => null);
     await repository.recordReplySent(id, sent);
     await notifyInbox(notifier, scope.tenantId, { conversationId });

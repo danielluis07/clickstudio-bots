@@ -7,7 +7,10 @@
     "build": "bun --bun next build",
     "start": "bun --bun next start",
     "lint": "eslint",
+    "format": "bun fmt",
+    "format:check": "bun fmt --check",
     "typecheck": "bun --bun next typegen && tsc --noEmit",
+    "typecheck:fast": "bun --bun next typegen && bun check",
     "test": "bun test --timeout 20000",
     "evaluate:provider": "bun scripts/evaluate-provider.ts",
     "db:generate": "drizzle-kit generate",
@@ -53,14 +56,15 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@typescript/native": "npm:typescript@^7.0.2",
     "drizzle-kit": "^1.0.0-rc.4",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
   },
-  "packageManager": "bun@1.4.3",
+  "packageManager": "bun@1.4.4",
   "ignoreScripts": [
     "sharp",
     "unrs-resolver"

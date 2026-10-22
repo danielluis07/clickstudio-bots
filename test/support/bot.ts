@@ -1,4 +1,12 @@
-import type { BehaviourSettings, BotRepository, BotTurn, ContextMessage, KnowledgeBase, TurnUsage, UsageMeter } from "@/modules/bot";
+import type {
+  BehaviourSettings,
+  BotRepository,
+  BotTurn,
+  ContextMessage,
+  KnowledgeBase,
+  TurnUsage,
+  UsageMeter,
+} from "@/modules/bot";
 
 export const testBehaviour: BehaviourSettings = {
   businessName: "Barbearia Navalha",

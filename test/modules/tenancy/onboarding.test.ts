@@ -146,9 +146,7 @@ describe("accepting an owner invitation", () => {
   test("creates the owner's account and joins the invited Tenant", async () => {
     const { invitationId, tenantId } = await inviteOwner();
 
-    const result = await onboarding.acceptInvitation(
-      ownerAcceptance(invitationId),
-    );
+    const result = await onboarding.acceptInvitation(ownerAcceptance(invitationId));
 
     expect(result).toMatchObject({
       ok: true,
@@ -165,9 +163,10 @@ describe("accepting an owner invitation", () => {
     const { invitationId } = await inviteOwner();
     await onboarding.acceptInvitation(ownerAcceptance(invitationId));
 
-    expect(
-      await onboarding.acceptInvitation(ownerAcceptance(invitationId)),
-    ).toEqual({ ok: false, error: "unavailable" });
+    expect(await onboarding.acceptInvitation(ownerAcceptance(invitationId))).toEqual({
+      ok: false,
+      error: "unavailable",
+    });
   });
 
   test("an expired invitation cannot be accepted", async () => {
@@ -178,15 +177,17 @@ describe("accepting an owner invitation", () => {
       canAccept: false,
     });
 
-    expect(
-      await onboarding.acceptInvitation(ownerAcceptance(invitationId)),
-    ).toEqual({ ok: false, error: "unavailable" });
+    expect(await onboarding.acceptInvitation(ownerAcceptance(invitationId))).toEqual({
+      ok: false,
+      error: "unavailable",
+    });
   });
 
   test("an unknown invitation cannot be accepted", async () => {
-    expect(
-      await onboarding.acceptInvitation(ownerAcceptance("missing-invitation")),
-    ).toEqual({ ok: false, error: "unavailable" });
+    expect(await onboarding.acceptInvitation(ownerAcceptance("missing-invitation"))).toEqual({
+      ok: false,
+      error: "unavailable",
+    });
   });
 
   test("rejects a password shorter than eight characters for a new account", async () => {
@@ -215,8 +216,9 @@ describe("accepting an owner invitation", () => {
       }),
     ).toEqual({ ok: false, error: "wrong_password" });
 
-    expect(
-      await onboarding.acceptInvitation(ownerAcceptance(second.invitationId)),
-    ).toMatchObject({ ok: true, tenantId: second.tenantId });
+    expect(await onboarding.acceptInvitation(ownerAcceptance(second.invitationId))).toMatchObject({
+      ok: true,
+      tenantId: second.tenantId,
+    });
   });
 });

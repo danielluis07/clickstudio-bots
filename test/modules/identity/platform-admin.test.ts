@@ -1,9 +1,5 @@
 import { describe, expect, onTestFinished, test } from "bun:test";
-import {
-  createPlatformAdmin,
-  createUserRepository,
-  isPlatformAdmin,
-} from "@/modules/identity";
+import { createPlatformAdmin, createUserRepository, isPlatformAdmin } from "@/modules/identity";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 
 describe("platform administrator check", () => {

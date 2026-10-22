@@ -11,7 +11,10 @@ export const metadata: Metadata = {
 
 export default async function ConversationsPage({ searchParams }: PageProps<"/painel/conversas">) {
   const scope = await requireTenantScope();
-  const [{ busca, conversa }, channel] = await Promise.all([searchParams, channelService.getChannel(scope)]);
+  const [{ busca, conversa }, channel] = await Promise.all([
+    searchParams,
+    channelService.getChannel(scope),
+  ]);
 
   return (
     <PrefetchedInbox

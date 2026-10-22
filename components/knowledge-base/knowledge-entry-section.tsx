@@ -14,14 +14,23 @@ type KnowledgeEntrySectionProps = {
   canEdit: boolean;
 };
 
-export function KnowledgeEntrySection({ kind, entries, used, cap, titleMaxLength, canEdit }: KnowledgeEntrySectionProps) {
+export function KnowledgeEntrySection({
+  kind,
+  entries,
+  used,
+  cap,
+  titleMaxLength,
+  canEdit,
+}: KnowledgeEntrySectionProps) {
   const labels = knowledgeEntryLabels[kind];
   const headingId = `base-${kind}`;
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h2 id={headingId} className="text-xl font-semibold">{labels.heading}</h2>
+        <h2 id={headingId} className="text-xl font-semibold">
+          {labels.heading}
+        </h2>
         <p className="text-muted-foreground">{labels.description}</p>
       </div>
       {entries.length === 0 ? (
@@ -31,7 +40,13 @@ export function KnowledgeEntrySection({ kind, entries, used, cap, titleMaxLength
           {entries.map((entry) => (
             <li key={entry.id} className="px-4 py-3">
               {canEdit ? (
-                <EditableKnowledgeEntry kind={kind} entry={entry} used={used} cap={cap} titleMaxLength={titleMaxLength} />
+                <EditableKnowledgeEntry
+                  kind={kind}
+                  entry={entry}
+                  used={used}
+                  cap={cap}
+                  titleMaxLength={titleMaxLength}
+                />
               ) : (
                 <KnowledgeEntryView entry={entry} />
               )}
@@ -42,7 +57,12 @@ export function KnowledgeEntrySection({ kind, entries, used, cap, titleMaxLength
       {canEdit && (
         <div className="flex max-w-2xl flex-col gap-3">
           <h3 className="font-medium">{labels.add}</h3>
-          <KnowledgeEntryForm kind={kind} otherEntriesSize={used} cap={cap} titleMaxLength={titleMaxLength} />
+          <KnowledgeEntryForm
+            kind={kind}
+            otherEntriesSize={used}
+            cap={cap}
+            titleMaxLength={titleMaxLength}
+          />
         </div>
       )}
     </section>

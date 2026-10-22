@@ -24,7 +24,8 @@ export function RemoveMemberButton({ memberId, memberName }: RemoveMemberButtonP
             "O acesso ao painel termina na hora e a pessoa é desconectada. A conta e os dados de acesso são excluídos, a menos que ela faça parte de outro negócio.",
           action: () => removeMemberAction(memberId),
         })
-      }>
+      }
+    >
       Remover
     </Button>
   );

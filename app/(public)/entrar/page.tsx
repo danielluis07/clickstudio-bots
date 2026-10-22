@@ -11,7 +11,10 @@ export const metadata: Metadata = {
 
 export default function SignInPage() {
   return (
-    <AuthCard title="Entrar" description="Acesse o painel com o e-mail e a senha definidos ao aceitar o convite.">
+    <AuthCard
+      title="Entrar"
+      description="Acesse o painel com o e-mail e a senha definidos ao aceitar o convite."
+    >
       {/* The form reads the return path from the URL, which is request data. */}
       <Suspense fallback={<ContentSkeleton />}>
         <SignInForm />

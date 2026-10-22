@@ -28,7 +28,13 @@ export function SignInForm() {
         </Field>
         <Field>
           <FieldLabel htmlFor="password">Senha</FieldLabel>
-          <Input id="password" name="password" type="password" autoComplete="current-password" required />
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+          />
           <ForgotPasswordLink />
         </Field>
         <FormMessage state={state} />

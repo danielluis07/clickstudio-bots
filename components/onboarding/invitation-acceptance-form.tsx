@@ -13,7 +13,10 @@ type InvitationAcceptanceFormProps = {
   children: ReactNode;
 };
 
-export function InvitationAcceptanceForm({ invitationId, children }: InvitationAcceptanceFormProps) {
+export function InvitationAcceptanceForm({
+  invitationId,
+  children,
+}: InvitationAcceptanceFormProps) {
   const [state, formAction, pending] = useActionState(
     acceptInvitationAction.bind(null, invitationId),
     idleFormState,

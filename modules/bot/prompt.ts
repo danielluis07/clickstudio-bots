@@ -25,30 +25,33 @@ const policy = `You are the Bot of the business described below. You reply to it
 
 const line = (label: string, value: string) => (value.trim() ? `${label}: ${value.trim()}` : null);
 
-const joinPresent = (lines: (string | null)[]) => lines.filter((value) => value !== null).join("\n");
+const joinPresent = (lines: (string | null)[]) =>
+  lines.filter((value) => value !== null).join("\n");
 
-export const renderInstructions = (behaviour: BehaviourSettings) => joinPresent([
-  policy,
-  "",
-  "# Style",
-  `Tone: ${tones[behaviour.tone]}.`,
-  behaviour.emoji ? "Emoji: allowed, sparingly." : "Emoji: never use them.",
-  line("Greeting to use when a Contact first writes", behaviour.greeting),
-  "",
-  "# Business profile",
-  line("Name", behaviour.businessName),
-  line("Offer", behaviour.offer),
-  line("Hours", behaviour.hours),
-  line("Address", behaviour.address),
-  "",
-  "# Business rules",
-  behaviour.rules.trim() || "None.",
-  line("Refused topics", behaviour.refusedTopics.join("; ")),
-  line("Topics handed to the team", behaviour.handoffTopics.join("; ")),
-]);
+export const renderInstructions = (behaviour: BehaviourSettings) =>
+  joinPresent([
+    policy,
+    "",
+    "# Style",
+    `Tone: ${tones[behaviour.tone]}.`,
+    behaviour.emoji ? "Emoji: allowed, sparingly." : "Emoji: never use them.",
+    line("Greeting to use when a Contact first writes", behaviour.greeting),
+    "",
+    "# Business profile",
+    line("Name", behaviour.businessName),
+    line("Offer", behaviour.offer),
+    line("Hours", behaviour.hours),
+    line("Address", behaviour.address),
+    "",
+    "# Business rules",
+    behaviour.rules.trim() || "None.",
+    line("Refused topics", behaviour.refusedTopics.join("; ")),
+    line("Topics handed to the team", behaviour.handoffTopics.join("; ")),
+  ]);
 
-export const renderKnowledgeBase = ({ faqs, sections }: KnowledgeBase) => [
-  "# Knowledge base",
-  ...faqs.map(({ question, answer }) => `## Question: ${question.trim()}\n${answer.trim()}`),
-  ...sections.map(({ title, body }) => `## ${title.trim()}\n${body.trim()}`),
-].join("\n\n");
+export const renderKnowledgeBase = ({ faqs, sections }: KnowledgeBase) =>
+  [
+    "# Knowledge base",
+    ...faqs.map(({ question, answer }) => `## Question: ${question.trim()}\n${answer.trim()}`),
+    ...sections.map(({ title, body }) => `## ${title.trim()}\n${body.trim()}`),
+  ].join("\n\n");

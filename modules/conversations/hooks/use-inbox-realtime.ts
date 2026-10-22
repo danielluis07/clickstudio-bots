@@ -10,8 +10,14 @@ export const useInboxRealtime = () => {
   const queryClient = useQueryClient();
   const { mutateAsync: issueToken } = useMutation(trpc.realtime.token.mutationOptions());
 
-  useEffect(() => startInboxRealtime({
-    issueToken,
-    invalidate: (ping) => { void invalidateInbox(queryClient, trpc, ping); },
-  }), [issueToken, queryClient, trpc]);
+  useEffect(
+    () =>
+      startInboxRealtime({
+        issueToken,
+        invalidate: (ping) => {
+          void invalidateInbox(queryClient, trpc, ping);
+        },
+      }),
+    [issueToken, queryClient, trpc],
+  );
 };

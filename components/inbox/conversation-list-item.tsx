@@ -9,7 +9,11 @@ type ConversationListItemProps = {
   onSelect: (conversationId: string) => void;
 };
 
-export function ConversationListItem({ conversation, selected, onSelect }: ConversationListItemProps) {
+export function ConversationListItem({
+  conversation,
+  selected,
+  onSelect,
+}: ConversationListItemProps) {
   return (
     <button
       type="button"
@@ -18,9 +22,13 @@ export function ConversationListItem({ conversation, selected, onSelect }: Conve
       className={cn(
         "flex w-full flex-col gap-1 px-4 py-3 text-left transition-colors outline-none hover:bg-muted focus-visible:bg-muted",
         selected && "bg-muted",
-      )}>
+      )}
+    >
       <span className="truncate font-medium">{contactDisplayName(conversation.contact)}</span>
-      <time dateTime={conversation.lastMessageAt.toISOString()} className="text-xs text-muted-foreground">
+      <time
+        dateTime={conversation.lastMessageAt.toISOString()}
+        className="text-xs text-muted-foreground"
+      >
         {formatShortDateTime(conversation.lastMessageAt)}
       </time>
     </button>

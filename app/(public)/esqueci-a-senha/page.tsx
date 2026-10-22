@@ -9,7 +9,10 @@ export const metadata: Metadata = {
 
 export default function ForgotPasswordPage() {
   return (
-    <AuthCard title="Esqueci minha senha" description="Informe o e-mail da sua conta. Enviaremos um link para você criar uma nova senha.">
+    <AuthCard
+      title="Esqueci minha senha"
+      description="Informe o e-mail da sua conta. Enviaremos um link para você criar uma nova senha."
+    >
       <ForgotPasswordForm />
     </AuthCard>
   );

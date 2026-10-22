@@ -1,12 +1,20 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { ChannelRoute } from "@/modules/channels";
 import { createBotCore, type BotTurn, type ContextMessage } from "@/modules/bot";
-import { createTestBotRepository, createTestUsageMeter, type TestBotRepository, type TestUsageMeter } from "@/test/support/bot";
+import {
+  createTestBotRepository,
+  createTestUsageMeter,
+  type TestBotRepository,
+  type TestUsageMeter,
+} from "@/test/support/bot";
 import { createTestClock } from "@/test/support/clock";
 import { createTestModel, type TestModel } from "@/test/support/model";
 
 // The proof a live turn carries; resolveChannelPhoneNumber makes the real one.
-const turn: BotTurn = { scope: { channelId: "channel-a", tenantId: "tenant-a" } as ChannelRoute, conversationId: "conversation-a" };
+const turn: BotTurn = {
+  scope: { channelId: "channel-a", tenantId: "tenant-a" } as ChannelRoute,
+  conversationId: "conversation-a",
+};
 const start = new Date("2026-03-10T12:00:00.000Z");
 const clock = createTestClock(start);
 let model: TestModel;
@@ -14,7 +22,11 @@ let repository: TestBotRepository;
 let meter: TestUsageMeter;
 
 const minutesAgo = (minutes: number) => new Date(clock.now().getTime() - minutes * 60_000);
-const fromContact = (text: string, sentAt = minutesAgo(1)): ContextMessage => ({ author: "contact", text, sentAt });
+const fromContact = (text: string, sentAt = minutesAgo(1)): ContextMessage => ({
+  author: "contact",
+  text,
+  sentAt,
+});
 
 const core = (options: Partial<Parameters<typeof createBotCore>[0]> = {}) =>
   createBotCore({ model, repository, meter, clock, ...options });
@@ -56,7 +68,10 @@ describe("cached prompt prefix", () => {
     clock.advance(60_000);
     repository.messages = [...repository.messages, fromContact("E a barba?")];
     await core().respond(turn);
-    repository.knowledgeBase = { ...repository.knowledgeBase, faqs: [{ question: "Quanto custa o corte?", answer: "O corte custa R$ 90." }] };
+    repository.knowledgeBase = {
+      ...repository.knowledgeBase,
+      faqs: [{ question: "Quanto custa o corte?", answer: "O corte custa R$ 90." }],
+    };
     await core().respond(turn);
 
     expect(prefix(1)).toEqual(prefix(0));
@@ -65,8 +80,11 @@ describe("cached prompt prefix", () => {
   });
 });
 
-const handoffCall = (reason: string, input: Record<string, unknown> = {}) =>
-  ({ id: "call-1", name: "handoff", input: { reason, ...input } });
+const handoffCall = (reason: string, input: Record<string, unknown> = {}) => ({
+  id: "call-1",
+  name: "handoff",
+  input: { reason, ...input },
+});
 
 describe("Handoff", () => {
   test("unknown information hands off as sem_resposta with a short closing line", async () => {
@@ -89,9 +107,11 @@ describe("Handoff", () => {
       sections: [],
     };
     repository.messages = [fromContact("Quanto custa a barba?")];
-    model.script((request) => request.knowledgeBase.includes("R$ 40") && request.knowledgeBase.includes("R$ 50")
-      ? { toolCalls: [handoffCall("sem_resposta")] }
-      : { text: "A barba custa R$ 40." });
+    model.script((request) =>
+      request.knowledgeBase.includes("R$ 40") && request.knowledgeBase.includes("R$ 50")
+        ? { toolCalls: [handoffCall("sem_resposta")] }
+        : { text: "A barba custa R$ 40." },
+    );
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
@@ -135,9 +155,11 @@ describe("Handoff", () => {
 
   test("a Tenant Handoff topic hands off as regra_do_negocio", async () => {
     repository.messages = [fromContact("Quero fazer uma reclamação")];
-    model.script((request) => request.instructions.includes("reclamações")
-      ? { toolCalls: [handoffCall("regra_do_negocio")] }
-      : { text: "Pode falar!" });
+    model.script((request) =>
+      request.instructions.includes("reclamações")
+        ? { toolCalls: [handoffCall("regra_do_negocio")] }
+        : { text: "Pode falar!" },
+    );
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
@@ -161,8 +183,15 @@ describe("tool call validation", () => {
     });
     const retry = model.requests[1];
     expect(retry.messages.slice(0, -2)).toEqual(model.requests[0].messages);
-    expect(retry.messages.at(-2)).toEqual({ role: "assistant", text: "Um momento.", toolCalls: [handoffCall("talvez")] });
-    expect(retry.messages.at(-1)).toMatchObject({ role: "tool", results: [{ callId: "call-1", name: "handoff" }] });
+    expect(retry.messages.at(-2)).toEqual({
+      role: "assistant",
+      text: "Um momento.",
+      toolCalls: [handoffCall("talvez")],
+    });
+    expect(retry.messages.at(-1)).toMatchObject({
+      role: "tool",
+      results: [{ callId: "call-1", name: "handoff" }],
+    });
   });
 
   test("a second invalid call hands off without a third request", async () => {
@@ -185,25 +214,43 @@ describe("tool call validation", () => {
       { toolCalls: [{ id: "call-2", name: "capture_contact", input: { name: "Ana" } }] },
     );
 
-    expect(await core().respond(turn)).toMatchObject({ kind: "handoff", reason: "bot_indisponivel" });
-    expect(model.requests[1].messages.at(-1)).toMatchObject({ role: "tool", results: [{ callId: "call-1", name: "send_payment" }] });
+    expect(await core().respond(turn)).toMatchObject({
+      kind: "handoff",
+      reason: "bot_indisponivel",
+    });
+    expect(model.requests[1].messages.at(-1)).toMatchObject({
+      role: "tool",
+      results: [{ callId: "call-1", name: "send_payment" }],
+    });
   });
 
   test("every call in a response with an invalid one is refused, valid ones included", async () => {
     model.script(
-      { toolCalls: [handoffCall("sem_resposta"), { id: "call-2", name: "send_payment", input: {} }] },
+      {
+        toolCalls: [handoffCall("sem_resposta"), { id: "call-2", name: "send_payment", input: {} }],
+      },
       { text: "O corte custa R$ 80." },
     );
 
     expect(await core().respond(turn)).toEqual({ kind: "answer", reply: "O corte custa R$ 80." });
     expect(model.requests[1].messages.at(-1)).toMatchObject({
       role: "tool",
-      results: [{ callId: "call-1", name: "handoff" }, { callId: "call-2", name: "send_payment" }],
+      results: [
+        { callId: "call-1", name: "handoff" },
+        { callId: "call-2", name: "send_payment" },
+      ],
     });
   });
 
   test("Tenant and Conversation ids from the model are ignored; the turn's scope applies", async () => {
-    model.script({ toolCalls: [handoffCall("pedido_do_contato", { tenantId: "tenant-b", conversationId: "conversation-b" })] });
+    model.script({
+      toolCalls: [
+        handoffCall("pedido_do_contato", {
+          tenantId: "tenant-b",
+          conversationId: "conversation-b",
+        }),
+      ],
+    });
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
@@ -221,14 +268,22 @@ describe("provider failures", () => {
   test("a provider error hands off as bot_indisponivel, with no other provider tried", async () => {
     model.script(new Error("529 overloaded"));
 
-    expect(await core().respond(turn)).toEqual({ kind: "handoff", reason: "bot_indisponivel", reply: unavailable });
+    expect(await core().respond(turn)).toEqual({
+      kind: "handoff",
+      reason: "bot_indisponivel",
+      reply: unavailable,
+    });
     expect(model.requests).toHaveLength(1);
   });
 
   test("a provider timeout hands off as bot_indisponivel", async () => {
     model.script(new DOMException("The operation timed out.", "TimeoutError"));
 
-    expect(await core().respond(turn)).toEqual({ kind: "handoff", reason: "bot_indisponivel", reply: unavailable });
+    expect(await core().respond(turn)).toEqual({
+      kind: "handoff",
+      reason: "bot_indisponivel",
+      reply: unavailable,
+    });
   });
 
   test("a provider error during the retry hands off and still meters the first request", async () => {
@@ -237,14 +292,28 @@ describe("provider failures", () => {
       new Error("500"),
     );
 
-    expect(await core().respond(turn)).toEqual({ kind: "handoff", reason: "bot_indisponivel", reply: unavailable });
-    expect(meter.records[0].usage).toEqual({ inputTokens: 30, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0, toolRoundTrips: 1 });
+    expect(await core().respond(turn)).toEqual({
+      kind: "handoff",
+      reason: "bot_indisponivel",
+      reply: unavailable,
+    });
+    expect(meter.records[0].usage).toEqual({
+      inputTokens: 30,
+      outputTokens: 5,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      toolRoundTrips: 1,
+    });
   });
 
   test("an empty response hands off rather than send nothing", async () => {
     model.script({ text: "  " });
 
-    expect(await core().respond(turn)).toEqual({ kind: "handoff", reason: "bot_indisponivel", reply: unavailable });
+    expect(await core().respond(turn)).toEqual({
+      kind: "handoff",
+      reason: "bot_indisponivel",
+      reply: unavailable,
+    });
   });
 });
 
@@ -254,13 +323,17 @@ describe("Conversation context", () => {
   test("replays at most the last 20 messages from the last 7 days", async () => {
     repository.messages = [
       fromContact("Mensagem antiga", minutesAgo(8 * day)),
-      ...Array.from({ length: 25 }, (_, index) => fromContact(`Mensagem ${index + 1}`, minutesAgo(25 - index))),
+      ...Array.from({ length: 25 }, (_, index) =>
+        fromContact(`Mensagem ${index + 1}`, minutesAgo(25 - index)),
+      ),
     ];
     model.script({ text: "Oi!" });
 
     await core().respond(turn);
 
-    const texts = model.requests[0].messages.map((message) => message.role === "user" && message.text);
+    const texts = model.requests[0].messages.map(
+      (message) => message.role === "user" && message.text,
+    );
     expect(texts).toEqual(Array.from({ length: 20 }, (_, index) => `Mensagem ${index + 6}`));
   });
 
@@ -287,7 +360,10 @@ describe("Conversation context", () => {
 
     await core({ context: { maxMessages: 2, maxAgeDays: 1 } }).respond(turn);
 
-    expect(model.requests[0].messages).toEqual([{ role: "user", text: "Segunda" }, { role: "user", text: "Terceira" }]);
+    expect(model.requests[0].messages).toEqual([
+      { role: "user", text: "Segunda" },
+      { role: "user", text: "Terceira" },
+    ]);
   });
 
   test("asks the repository for the capped window only", async () => {
@@ -336,7 +412,10 @@ describe("Conversation context", () => {
   });
 
   test("with no unanswered Contact message there is nothing to answer and no request", async () => {
-    repository.messages = [fromContact("Oi", minutesAgo(3)), { author: "bot", text: "Olá!", sentAt: minutesAgo(2) }];
+    repository.messages = [
+      fromContact("Oi", minutesAgo(3)),
+      { author: "bot", text: "Olá!", sentAt: minutesAgo(2) },
+    ];
 
     expect(await core().respond(turn)).toEqual({ kind: "nothing_to_answer" });
     expect(model.requests).toHaveLength(0);
@@ -346,7 +425,9 @@ describe("Conversation context", () => {
   test("forwards only author and text, so a Contact phone number never reaches the model", async () => {
     const phone = "5511988887777";
     // As if an adapter returned more of the row than the port declares.
-    repository.messages = [{ ...fromContact("Oi"), phone, contactId: "contact-a" } as ContextMessage];
+    repository.messages = [
+      { ...fromContact("Oi"), phone, contactId: "contact-a" } as ContextMessage,
+    ];
     model.script({ text: "Oi!" });
 
     await core().respond(turn);
@@ -359,17 +440,31 @@ describe("Conversation context", () => {
 describe("usage metering", () => {
   test("records tokens, cache and tool round trips per Tenant, summed over the turn", async () => {
     model.script(
-      { toolCalls: [handoffCall("talvez")], usage: { inputTokens: 40, outputTokens: 12, cacheReadTokens: 0, cacheWriteTokens: 9000 } },
-      { text: "O corte custa R$ 80.", usage: { inputTokens: 60, outputTokens: 20, cacheReadTokens: 9000, cacheWriteTokens: 0 } },
+      {
+        toolCalls: [handoffCall("talvez")],
+        usage: { inputTokens: 40, outputTokens: 12, cacheReadTokens: 0, cacheWriteTokens: 9000 },
+      },
+      {
+        text: "O corte custa R$ 80.",
+        usage: { inputTokens: 60, outputTokens: 20, cacheReadTokens: 9000, cacheWriteTokens: 0 },
+      },
     );
 
     await core().respond(turn);
 
-    expect(meter.records).toEqual([{
-      tenantId: "tenant-a",
-      at: clock.now(),
-      usage: { inputTokens: 100, outputTokens: 32, cacheReadTokens: 9000, cacheWriteTokens: 9000, toolRoundTrips: 1 },
-    }]);
+    expect(meter.records).toEqual([
+      {
+        tenantId: "tenant-a",
+        at: clock.now(),
+        usage: {
+          inputTokens: 100,
+          outputTokens: 32,
+          cacheReadTokens: 9000,
+          cacheWriteTokens: 9000,
+          toolRoundTrips: 1,
+        },
+      },
+    ]);
   });
 
   test("records no message content", async () => {

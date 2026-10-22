@@ -1,7 +1,11 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { entryTitleMaxLength, knowledgeBaseCharacterCap, type KnowledgeEntryKind } from "@/modules/knowledge-base";
+import {
+  entryTitleMaxLength,
+  knowledgeBaseCharacterCap,
+  type KnowledgeEntryKind,
+} from "@/modules/knowledge-base";
 import { formatCount } from "@/lib/format";
 import { formText, type FormState } from "@/server/actions/form-state";
 import { requireTenantScope } from "@/server/auth/guards";
@@ -16,10 +20,13 @@ const saveErrorMessages = {
   not_found: "Este item não existe mais. Atualize a página.",
 } as const;
 
-type SaveResult = Awaited<ReturnType<typeof knowledgeBaseEditor.addEntry | typeof knowledgeBaseEditor.editEntry>>;
+type SaveResult = Awaited<
+  ReturnType<typeof knowledgeBaseEditor.addEntry | typeof knowledgeBaseEditor.editEntry>
+>;
 
 const saveMessage = (result: SaveResult): FormState => {
-  if (result.ok) return { status: "success", message: "Salvo. O Bot já usa esta versão na próxima resposta." };
+  if (result.ok)
+    return { status: "success", message: "Salvo. O Bot já usa esta versão na próxima resposta." };
   if (result.error === "over_cap") {
     return {
       status: "error",
@@ -41,10 +48,10 @@ export async function saveKnowledgeEntryAction(
   const result = entryId
     ? await knowledgeBaseEditor.editEntry(scope, entryId, text)
     : await knowledgeBaseEditor.addEntry(scope, {
-      ...text,
-      // The module refuses any other kind.
-      kind: formText(formData, "kind") as KnowledgeEntryKind,
-    });
+        ...text,
+        // The module refuses any other kind.
+        kind: formText(formData, "kind") as KnowledgeEntryKind,
+      });
   if (result.ok) refresh();
   return saveMessage(result);
 }

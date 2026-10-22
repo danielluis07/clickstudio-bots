@@ -1,6 +1,19 @@
-import type { BehaviourSettings, ContextMessage, HandoffReason, KnowledgeBase, ModelResponse, ModelToolCall, TurnOutcome, TurnUsage } from "@/modules/bot";
+import type {
+  BehaviourSettings,
+  ContextMessage,
+  HandoffReason,
+  KnowledgeBase,
+  ModelResponse,
+  ModelToolCall,
+  TurnOutcome,
+  TurnUsage,
+} from "@/modules/bot";
 
-export type EvaluationTenant = { id: string; behaviour: BehaviourSettings; knowledgeBase: KnowledgeBase };
+export type EvaluationTenant = {
+  id: string;
+  behaviour: BehaviourSettings;
+  knowledgeBase: KnowledgeBase;
+};
 export type EvaluationCase = {
   id: string;
   tenantId: string;
@@ -49,4 +62,9 @@ export type HumanReview = {
   naturalPtBr: boolean;
   notes: string;
 };
-export type GateScore = { value: number | null; pass: boolean | null; threshold: string; samples: number };
+export type GateScore = {
+  value: number | null;
+  pass: boolean | null;
+  threshold: string;
+  samples: number;
+};

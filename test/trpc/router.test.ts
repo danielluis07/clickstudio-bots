@@ -17,13 +17,19 @@ let conversationOfB: string;
 let contactOfB: string;
 const notifier = createTestNotifier();
 
-const callerFor = (session: TRPCContext["session"]) => appRouter.createCaller({
-  db,
-  session,
-  realtime: createAblyRealtime({ apiKey: "test.key:private-test-secret" }),
-  notifier,
-  replies: createReplyService({ db, clock: createTestClock(), notifier: createTestNotifier(), getSender: createTestWhatsAppSender }),
-});
+const callerFor = (session: TRPCContext["session"]) =>
+  appRouter.createCaller({
+    db,
+    session,
+    realtime: createAblyRealtime({ apiKey: "test.key:private-test-secret" }),
+    notifier,
+    replies: createReplyService({
+      db,
+      clock: createTestClock(),
+      notifier: createTestNotifier(),
+      getSender: createTestWhatsAppSender,
+    }),
+  });
 const ownerA = { userId: "owner-a", activeTenantId: "tenant-a" };
 
 const codeOf = async (call: Promise<unknown>) => {
@@ -37,7 +43,13 @@ const codeOf = async (call: Promise<unknown>) => {
 
 // Calls a procedure by its dotted path, e.g. "conversations.list".
 const callByPath = (caller: ReturnType<typeof callerFor>, path: string, input: unknown) =>
-  (path.split(".").reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], caller) as (input: unknown) => Promise<unknown>)(input);
+  (
+    path
+      .split(".")
+      .reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], caller) as (
+      input: unknown,
+    ) => Promise<unknown>
+  )(input);
 
 afterAll(() => closeTestDatabase(db));
 
@@ -59,13 +71,24 @@ beforeAll(async () => {
     { organizationId: "tenant-b", userId: "attendant", role: "member" },
   ]);
   await db.insert(channel).values({
-    id: "channel-b", tenantId: "tenant-b", wabaId: "201", phoneNumberId: "301", displayPhoneNumber: "+55 11 99999-0001",
-    credential: { keyVersion: "v1", iv: "", ciphertext: "", tag: "" }, subscriptionFields: [],
+    id: "channel-b",
+    tenantId: "tenant-b",
+    wabaId: "201",
+    phoneNumberId: "301",
+    displayPhoneNumber: "+55 11 99999-0001",
+    credential: { keyVersion: "v1", iv: "", ciphertext: "", tag: "" },
+    subscriptionFields: [],
   });
   await recordInboundTextMessage(db, (await resolveChannelPhoneNumber(db, "301"))!, {
-    wamid: "wamid.B1", from: "5511900000001", profileName: "Ana", text: "Oi", sentAt: new Date("2026-10-20T09:00:00Z"),
+    wamid: "wamid.B1",
+    from: "5511900000001",
+    profileName: "Ana",
+    text: "Oi",
+    sentAt: new Date("2026-10-20T09:00:00Z"),
   });
-  const { conversations: [found] } = await callerFor({ userId: "owner-b", activeTenantId: null }).conversations.list({});
+  const {
+    conversations: [found],
+  } = await callerFor({ userId: "owner-b", activeTenantId: null }).conversations.list({});
   conversationOfB = found.id;
   contactOfB = found.contact.id;
 });
@@ -73,19 +96,25 @@ beforeAll(async () => {
 describe("tRPC router", () => {
   test("the sidebar reads only the authorized Tenant, including the first-membership fallback", async () => {
     expect(await callerFor(ownerA).tenancy.current()).toEqual({ id: "tenant-a", name: "Tenant A" });
-    expect(await callerFor({ ...ownerA, activeTenantId: null }).tenancy.current())
-      .toEqual({ id: "tenant-a", name: "Tenant A" });
-    expect(await codeOf(callerFor({ ...ownerA, activeTenantId: "tenant-b" }).tenancy.current()))
-      .toBe("FORBIDDEN");
-    expect(await codeOf(callByPath(callerFor(ownerA), "tenancy.current", { tenantId: "tenant-b" })))
-      .toBe("BAD_REQUEST");
+    expect(await callerFor({ ...ownerA, activeTenantId: null }).tenancy.current()).toEqual({
+      id: "tenant-a",
+      name: "Tenant A",
+    });
+    expect(
+      await codeOf(callerFor({ ...ownerA, activeTenantId: "tenant-b" }).tenancy.current()),
+    ).toBe("FORBIDDEN");
+    expect(
+      await codeOf(callByPath(callerFor(ownerA), "tenancy.current", { tenantId: "tenant-b" })),
+    ).toBe("BAD_REQUEST");
   });
 
   test("realtime tokens grant only subscribe access to the Member's Tenant channel", async () => {
     const { channel, tokenRequest } = await callerFor(ownerA).realtime.token();
 
     expect(channel).toBe("tenant:tenant-a:inbox");
-    expect(JSON.parse(tokenRequest.capability!)).toEqual({ "tenant:tenant-a:inbox": ["subscribe"] });
+    expect(JSON.parse(tokenRequest.capability!)).toEqual({
+      "tenant:tenant-a:inbox": ["subscribe"],
+    });
     expect(tokenRequest.clientId).toBeString();
     expect(tokenRequest.ttl).toBe(5 * 60 * 1000);
     expect(tokenRequest.mac).toBeString();
@@ -95,8 +124,14 @@ describe("tRPC router", () => {
   test("realtime refuses another Tenant and caller-supplied capabilities", async () => {
     const claimingB = callerFor({ userId: "owner-a", activeTenantId: "tenant-b" });
     expect(await codeOf(claimingB.realtime.token())).toBe("FORBIDDEN");
-    for (const input of [{ tenantId: "tenant-b" }, { channel: "tenant:tenant-b:inbox" }, { capability: { "*": ["publish"] } }]) {
-      expect(await codeOf(callByPath(callerFor(ownerA), "realtime.token", input))).toBe("BAD_REQUEST");
+    for (const input of [
+      { tenantId: "tenant-b" },
+      { channel: "tenant:tenant-b:inbox" },
+      { capability: { "*": ["publish"] } },
+    ]) {
+      expect(await codeOf(callByPath(callerFor(ownerA), "realtime.token", input))).toBe(
+        "BAD_REQUEST",
+      );
     }
   });
 
@@ -105,8 +140,14 @@ describe("tRPC router", () => {
     expect(paths.length).toBeGreaterThan(0);
 
     for (const path of paths) {
-      expect([path, await codeOf(callByPath(callerFor(null), path, {}))]).toEqual([path, "UNAUTHORIZED"]);
-      expect([path, await codeOf(callByPath(callerFor({ userId: "outsider", activeTenantId: null }), path, {}))]).toEqual([path, "FORBIDDEN"]);
+      expect([path, await codeOf(callByPath(callerFor(null), path, {}))]).toEqual([
+        path,
+        "UNAUTHORIZED",
+      ]);
+      expect([
+        path,
+        await codeOf(callByPath(callerFor({ userId: "outsider", activeTenantId: null }), path, {})),
+      ]).toEqual([path, "FORBIDDEN"]);
     }
   });
 
@@ -120,30 +161,54 @@ describe("tRPC router", () => {
     const caller = callerFor(ownerA);
 
     expect(await caller.conversations.list({})).toEqual({ conversations: [], nextCursor: null });
-    expect(await codeOf(caller.conversations.get({ conversationId: conversationOfB }))).toBe("NOT_FOUND");
-    expect(await codeOf(caller.conversations.messages({ conversationId: conversationOfB }))).toBe("NOT_FOUND");
-    expect(await codeOf(caller.contacts.rename({ contactId: contactOfB, name: "Invasor" }))).toBe("NOT_FOUND");
-    expect(await codeOf(caller.replies.send({ conversationId: conversationOfB, text: "Invasão" }))).toBe("NOT_FOUND");
+    expect(await codeOf(caller.conversations.get({ conversationId: conversationOfB }))).toBe(
+      "NOT_FOUND",
+    );
+    expect(await codeOf(caller.conversations.messages({ conversationId: conversationOfB }))).toBe(
+      "NOT_FOUND",
+    );
+    expect(await codeOf(caller.contacts.rename({ contactId: contactOfB, name: "Invasor" }))).toBe(
+      "NOT_FOUND",
+    );
+    expect(
+      await codeOf(caller.replies.send({ conversationId: conversationOfB, text: "Invasão" })),
+    ).toBe("NOT_FOUND");
   });
 
   test("a Member reads and renames their own Tenant's Contacts", async () => {
     const caller = callerFor({ userId: "owner-b", activeTenantId: "tenant-b" });
     notifier.pings.length = 0;
 
-    expect((await caller.conversations.messages({ conversationId: conversationOfB })).messages.map(({ text }) => text)).toEqual(["Oi"]);
-    expect((await caller.contacts.rename({ contactId: contactOfB, name: "Ana Souza" })).name).toBe("Ana Souza");
-    expect((await caller.conversations.get({ conversationId: conversationOfB })).contact.name).toBe("Ana Souza");
+    expect(
+      (await caller.conversations.messages({ conversationId: conversationOfB })).messages.map(
+        ({ text }) => text,
+      ),
+    ).toEqual(["Oi"]);
+    expect((await caller.contacts.rename({ contactId: contactOfB, name: "Ana Souza" })).name).toBe(
+      "Ana Souza",
+    );
+    expect((await caller.conversations.get({ conversationId: conversationOfB })).contact.name).toBe(
+      "Ana Souza",
+    );
     expect(notifier.pings).toEqual([{ tenantId: "tenant-b", ping: { contactId: contactOfB } }]);
   });
 
   test("Contact deletion refuses non-owners and foreign Contacts, and authorizes the owner", async () => {
     const input = { contactId: contactOfB };
-    expect(await codeOf(callerFor({ userId: "attendant", activeTenantId: "tenant-b" }).contacts.delete(input))).toBe("FORBIDDEN");
+    expect(
+      await codeOf(
+        callerFor({ userId: "attendant", activeTenantId: "tenant-b" }).contacts.delete(input),
+      ),
+    ).toBe("FORBIDDEN");
     expect(await codeOf(callerFor(ownerA).contacts.delete(input))).toBe("NOT_FOUND");
     const ownerB = callerFor({ userId: "owner-b", activeTenantId: "tenant-b" });
     expect(await codeOf(ownerB.conversations.get({ conversationId: conversationOfB }))).toBe("OK");
     expect(await codeOf(ownerB.contacts.delete(input))).toBe("OK");
-    expect(await codeOf(ownerB.conversations.get({ conversationId: conversationOfB }))).toBe("NOT_FOUND");
-    expect(await codeOf(ownerB.conversations.messages({ conversationId: conversationOfB }))).toBe("NOT_FOUND");
+    expect(await codeOf(ownerB.conversations.get({ conversationId: conversationOfB }))).toBe(
+      "NOT_FOUND",
+    );
+    expect(await codeOf(ownerB.conversations.messages({ conversationId: conversationOfB }))).toBe(
+      "NOT_FOUND",
+    );
   });
 });

@@ -4,10 +4,7 @@ import { nextCookies } from "better-auth/next-js";
 import { organization } from "better-auth/plugins";
 import type { Database } from "@/db/database";
 import * as schema from "@/db/schema";
-import {
-  passwordResetEmail,
-  passwordResetLifetimeMinutes,
-} from "@/modules/identity";
+import { passwordResetEmail, passwordResetLifetimeMinutes } from "@/modules/identity";
 import type { Mailer } from "@/platform/mailer";
 
 type AuthOptions = {
@@ -35,13 +32,7 @@ const disabledAuthPaths = [
   ),
 ];
 
-export const createAuth = ({
-  db,
-  baseURL,
-  secret,
-  mailer,
-  runInBackground,
-}: AuthOptions) =>
+export const createAuth = ({ db, baseURL, secret, mailer, runInBackground }: AuthOptions) =>
   betterAuth({
     baseURL,
     secret,

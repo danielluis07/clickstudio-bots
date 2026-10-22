@@ -39,7 +39,10 @@ const post = (path: string, body: unknown, cookie?: string) =>
 const signIn = async (email: string, password: string) => {
   const response = await post("/sign-in/email", { email, password });
   expect(response.status).toBe(200);
-  return response.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+  return response.headers
+    .getSetCookie()
+    .map((c) => c.split(";")[0])
+    .join("; ");
 };
 
 const sessionUser = async (cookie: string) => {
@@ -137,9 +140,7 @@ describe("auth routes", () => {
     });
 
     expect(response.ok).toBe(false);
-    expect(
-      await createUserRepository(db).findByEmail("intrusa@example.com"),
-    ).toBeNull();
+    expect(await createUserRepository(db).findByEmail("intrusa@example.com")).toBeNull();
   });
 
   test("an owner who accepted an invitation signs in with the password they set", async () => {
@@ -170,10 +171,7 @@ describe("auth routes", () => {
     for (const [path, body] of [
       ["/organization/create", { name: "Atalho", slug: "atalho" }],
       ["/organization/accept-invitation", { invitationId: pendingInvitationId }],
-      [
-        "/organization/invite-member",
-        { email: "novo@example.com", role: "member" },
-      ],
+      ["/organization/invite-member", { email: "novo@example.com", role: "member" }],
     ] as const) {
       const response = await post(path, body, cookie);
       expect({ path, status: response.status }).toEqual({ path, status: 404 });
@@ -183,10 +181,7 @@ describe("auth routes", () => {
   test("Tenant data is not reachable through Better Auth's organization routes", async () => {
     const cookie = await signIn("dona@sorriso.example", "senha-segura-123");
 
-    for (const path of [
-      "/organization/get-full-organization",
-      "/organization/list-members",
-    ]) {
+    for (const path of ["/organization/get-full-organization", "/organization/list-members"]) {
       const response = await auth.handler(
         new Request(`${baseURL}/api/auth${path}`, { headers: { cookie } }),
       );
@@ -203,8 +198,7 @@ describe("auth routes", () => {
 });
 
 describe("password reset", () => {
-  const requestReset = (email: string) =>
-    post("/request-password-reset", { email });
+  const requestReset = (email: string) => post("/request-password-reset", { email });
 
   test("a Member resets a forgotten password through the pt-BR email", async () => {
     await joinAsMember(ownerScope, "ana@sorriso.example");
@@ -242,18 +236,16 @@ describe("password reset", () => {
   test("a reset link works only once", async () => {
     mailer.sent.length = 0;
     await requestReset("dona@sorriso.example");
-    const token = new URL(
-      mailer.sent[0].text.match(/https?:\/\/\S+/)?.[0] ?? "",
-    ).searchParams.get("token");
+    const token = new URL(mailer.sent[0].text.match(/https?:\/\/\S+/)?.[0] ?? "").searchParams.get(
+      "token",
+    );
 
-    expect(
-      (await post("/reset-password", { token, newPassword: "senha-segura-123" }))
-        .status,
-    ).toBe(200);
-    expect(
-      (await post("/reset-password", { token, newPassword: "outra-senha-789" }))
-        .ok,
-    ).toBe(false);
+    expect((await post("/reset-password", { token, newPassword: "senha-segura-123" })).status).toBe(
+      200,
+    );
+    expect((await post("/reset-password", { token, newPassword: "outra-senha-789" })).ok).toBe(
+      false,
+    );
   });
 
   test("an unknown email gets the same answer and no email", async () => {

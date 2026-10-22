@@ -6,9 +6,7 @@ export const id = () =>
     .$defaultFn(() => Bun.randomUUIDv7());
 
 export const timestamps = () => ({
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .$onUpdate(() => new Date())

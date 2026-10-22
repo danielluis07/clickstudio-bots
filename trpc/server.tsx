@@ -27,11 +27,7 @@ export const trpc = createTRPCOptionsProxy({
 
 export function HydrateClient(props: { children: React.ReactNode }) {
   const queryClient = getQueryClient();
-  return (
-    <HydrationBoundary state={dehydrate(queryClient)}>
-      {props.children}
-    </HydrationBoundary>
-  );
+  return <HydrationBoundary state={dehydrate(queryClient)}>{props.children}</HydrationBoundary>;
 }
 
 // Awaited, unlike tRPC's streaming example: under Cache Components a pending
@@ -44,9 +40,13 @@ export async function prefetch<TQueryFnData, TError, TData, TQueryData, TQueryKe
   await getQueryClient().query(queryOptions).catch(ignoreError);
 }
 
-export async function prefetchInfinite<TQueryFnData, TError, TData, TQueryKey extends QueryKey, TPageParam>(
-  queryOptions: InfiniteQueryExecuteOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam>,
-) {
+export async function prefetchInfinite<
+  TQueryFnData,
+  TError,
+  TData,
+  TQueryKey extends QueryKey,
+  TPageParam,
+>(queryOptions: InfiniteQueryExecuteOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam>) {
   await getQueryClient().infiniteQuery(queryOptions).catch(ignoreError);
 }
 

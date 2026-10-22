@@ -15,10 +15,7 @@ export const createUserRepository = (db: Database) => {
 
     // A user who signs in with email and password, stored the way Better Auth
     // expects. Build the repository on a transaction to commit with other writes.
-    async createWithPassword({
-      passwordHash,
-      ...values
-    }: NewUser & { passwordHash: string }) {
+    async createWithPassword({ passwordHash, ...values }: NewUser & { passwordHash: string }) {
       const created = await create(values);
       await db.insert(account).values({
         userId: created.id,
@@ -30,11 +27,7 @@ export const createUserRepository = (db: Database) => {
     },
 
     async findByEmail(email: string) {
-      const [found] = await db
-        .select()
-        .from(user)
-        .where(eq(user.email, email))
-        .limit(1);
+      const [found] = await db.select().from(user).where(eq(user.email, email)).limit(1);
       return found ?? null;
     },
 

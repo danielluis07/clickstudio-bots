@@ -1,6 +1,10 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { createConversationRepository, deleteContact, renameContact } from "@/modules/conversations";
+import {
+  createConversationRepository,
+  deleteContact,
+  renameContact,
+} from "@/modules/conversations";
 import { systemClock } from "@/platform/clock";
 import { createTRPCRouter, tenantProcedure } from "@/trpc/init";
 
@@ -11,24 +15,39 @@ const orNotFound = <T>(value: T | null): T => {
 
 export const conversationsRouter = createTRPCRouter({
   list: tenantProcedure
-    .input(z.object({
-      search: z.string().max(100).optional(),
-      cursor: z.object({ lastMessageAt: z.date(), id: z.string() }).nullish(),
-    }))
-    .query(({ ctx, input }) => createConversationRepository(ctx.db, ctx.scope).listConversations(input)),
+    .input(
+      z.object({
+        search: z.string().max(100).optional(),
+        cursor: z.object({ lastMessageAt: z.date(), id: z.string() }).nullish(),
+      }),
+    )
+    .query(({ ctx, input }) =>
+      createConversationRepository(ctx.db, ctx.scope).listConversations(input),
+    ),
 
   get: tenantProcedure
     .input(z.object({ conversationId: z.string() }))
     .query(async ({ ctx, input }) =>
-      orNotFound(await createConversationRepository(ctx.db, ctx.scope).getConversation(input.conversationId))),
+      orNotFound(
+        await createConversationRepository(ctx.db, ctx.scope).getConversation(input.conversationId),
+      ),
+    ),
 
   messages: tenantProcedure
-    .input(z.object({
-      conversationId: z.string(),
-      cursor: z.object({ sentAt: z.date(), id: z.string() }).nullish(),
-    }))
+    .input(
+      z.object({
+        conversationId: z.string(),
+        cursor: z.object({ sentAt: z.date(), id: z.string() }).nullish(),
+      }),
+    )
     .query(async ({ ctx, input }) =>
-      orNotFound(await createConversationRepository(ctx.db, ctx.scope).listMessages(input.conversationId, input))),
+      orNotFound(
+        await createConversationRepository(ctx.db, ctx.scope).listMessages(
+          input.conversationId,
+          input,
+        ),
+      ),
+    ),
 });
 
 // Each refusal of the reply service as the browser sees it.
@@ -45,7 +64,8 @@ export const repliesRouter = createTRPCRouter({
     .input(z.object({ conversationId: z.string(), text: z.string().max(4096) }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.replies.sendReply(ctx.scope, input);
-      if (!result.ok) throw new TRPCError({ code: replyErrors[result.error], message: result.error });
+      if (!result.ok)
+        throw new TRPCError({ code: replyErrors[result.error], message: result.error });
     }),
 });
 
@@ -53,12 +73,22 @@ export const contactsRouter = createTRPCRouter({
   delete: tenantProcedure
     .input(z.object({ contactId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      const result = await deleteContact({ db: ctx.db, scope: ctx.scope, notifier: ctx.notifier, clock: systemClock, ...input });
-      if (!result.ok) throw new TRPCError({ code: result.error === "forbidden" ? "FORBIDDEN" : "NOT_FOUND" });
+      const result = await deleteContact({
+        db: ctx.db,
+        scope: ctx.scope,
+        notifier: ctx.notifier,
+        clock: systemClock,
+        ...input,
+      });
+      if (!result.ok)
+        throw new TRPCError({ code: result.error === "forbidden" ? "FORBIDDEN" : "NOT_FOUND" });
     }),
 
   rename: tenantProcedure
     .input(z.object({ contactId: z.string(), name: z.string().max(100) }))
     .mutation(async ({ ctx, input }) =>
-      orNotFound(await renameContact({ db: ctx.db, scope: ctx.scope, notifier: ctx.notifier, ...input }))),
+      orNotFound(
+        await renameContact({ db: ctx.db, scope: ctx.scope, notifier: ctx.notifier, ...input }),
+      ),
+    ),
 });

@@ -5,29 +5,26 @@ import { readFileSync } from "node:fs";
 // "file -> import" pairs so a failure says exactly what to change.
 
 const sourceFiles = [
-  ...new Bun.Glob("{app,components,db,hooks,lib,modules,platform,providers,scripts,server,test,trpc}/**/*.{ts,tsx}").scanSync(),
+  ...new Bun.Glob(
+    "{app,components,db,hooks,lib,modules,platform,providers,scripts,server,test,trpc}/**/*.{ts,tsx}",
+  ).scanSync(),
   ...new Bun.Glob("*.ts").scanSync(),
 ].map((path) => path.replaceAll("\\", "/"));
 
-const importPattern = /(?:import|export)[^"']*?from\s*["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)/g;
+const importPattern =
+  /(?:import|export)[^"']*?from\s*["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)/g;
 
 const importsOf = (path: string) =>
-  [...readFileSync(path, "utf8").matchAll(importPattern)].map(
-    (match) => match[1] ?? match[2],
-  );
+  [...readFileSync(path, "utf8").matchAll(importPattern)].map((match) => match[1] ?? match[2]);
 
-const violations = (
-  files: string[],
-  isForbidden: (specifier: string, file: string) => boolean,
-) =>
+const violations = (files: string[], isForbidden: (specifier: string, file: string) => boolean) =>
   files.flatMap((file) =>
     importsOf(file)
       .filter((specifier) => isForbidden(specifier, file))
       .map((specifier) => `${file} -> ${specifier}`),
   );
 
-const under = (folder: string) =>
-  sourceFiles.filter((path) => path.startsWith(`${folder}/`));
+const under = (folder: string) => sourceFiles.filter((path) => path.startsWith(`${folder}/`));
 
 const moduleOf = (path: string) => path.match(/^modules\/([^/]+)\//)?.[1];
 const isModuleHook = (path: string) => /^modules\/[^/]+\/hooks\//.test(path);
@@ -35,8 +32,9 @@ const isModuleHook = (path: string) => /^modules\/[^/]+\/hooks\//.test(path);
 describe("architecture", () => {
   test("components contain only TSX files", () => {
     expect(
-      [...new Bun.Glob("components/**/*").scanSync({ onlyFiles: true })]
-        .filter((path) => !path.endsWith(".tsx")),
+      [...new Bun.Glob("components/**/*").scanSync({ onlyFiles: true })].filter(
+        (path) => !path.endsWith(".tsx"),
+      ),
     ).toEqual([]);
   });
 
@@ -53,20 +51,23 @@ describe("architecture", () => {
       /^@\/modules\/[^/]+\/hooks(\/|$)/,
     ];
     expect(
-      violations(under("modules").filter((file) => !isModuleHook(file)), (specifier) =>
-        forbidden.some((pattern) => pattern.test(specifier)),
+      violations(
+        under("modules").filter((file) => !isModuleHook(file)),
+        (specifier) => forbidden.some((pattern) => pattern.test(specifier)),
       ),
     ).toEqual([]);
   });
 
   test("module hooks stay browser-safe and receive server operations as dependencies", () => {
     expect(
-      violations(under("modules").filter(isModuleHook), (specifier) =>
-        /^next(\/|$)/.test(specifier) ||
-        /^@\/(app|components|server|db)(\/|$)/.test(specifier) ||
-        // Only tRPC's browser entry, never the router or the server caller.
-        /^@\/trpc\/(?!client$)/.test(specifier) ||
-        specifier === "@/platform/env",
+      violations(
+        under("modules").filter(isModuleHook),
+        (specifier) =>
+          /^next(\/|$)/.test(specifier) ||
+          /^@\/(app|components|server|db)(\/|$)/.test(specifier) ||
+          // Only tRPC's browser entry, never the router or the server caller.
+          /^@\/trpc\/(?!client$)/.test(specifier) ||
+          specifier === "@/platform/env",
       ),
     ).toEqual([]);
   });
@@ -82,9 +83,11 @@ describe("architecture", () => {
 
   test("a module's own files import each other directly, not through its index", () => {
     expect(
-      violations(under("modules"), (specifier, file) =>
-        specifier === `@/modules/${moduleOf(file)}` ||
-        (isModuleHook(file) && specifier === `@/modules/${moduleOf(file)}/hooks`),
+      violations(
+        under("modules"),
+        (specifier, file) =>
+          specifier === `@/modules/${moduleOf(file)}` ||
+          (isModuleHook(file) && specifier === `@/modules/${moduleOf(file)}/hooks`),
       ),
     ).toEqual([]);
   });
@@ -98,10 +101,13 @@ describe("architecture", () => {
   });
 
   test("tRPC's browser entry imports the router only as a type", () => {
-    const valueImport = /^import\s+(?!type\b)[^;]*?from\s*["'](@\/(?:server|db|modules|platform)[^"']*|@\/trpc\/(?!query-client)[^"']+)["']/gm;
+    const valueImport =
+      /^import\s+(?!type\b)[^;]*?from\s*["'](@\/(?:server|db|modules|platform)[^"']*|@\/trpc\/(?!query-client)[^"']+)["']/gm;
     expect(
       ["trpc/client.tsx", "trpc/query-client.ts"].flatMap((file) =>
-        [...readFileSync(file, "utf8").matchAll(valueImport)].map((match) => `${file} -> ${match[1]}`),
+        [...readFileSync(file, "utf8").matchAll(valueImport)].map(
+          (match) => `${file} -> ${match[1]}`,
+        ),
       ),
     ).toEqual([]);
   });

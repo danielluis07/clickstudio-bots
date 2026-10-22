@@ -13,8 +13,20 @@ let channelA: ChannelRoute;
 let channelB: ChannelRoute;
 let sequence = 0;
 
-const receive = (route: ChannelRoute, from: string, text: string, sentAt: string, profileName: string | null = null) =>
-  recordInboundTextMessage(db, route, { wamid: `wamid.${++sequence}`, from, profileName, text, sentAt: new Date(sentAt) });
+const receive = (
+  route: ChannelRoute,
+  from: string,
+  text: string,
+  sentAt: string,
+  profileName: string | null = null,
+) =>
+  recordInboundTextMessage(db, route, {
+    wamid: `wamid.${++sequence}`,
+    from,
+    profileName,
+    text,
+    sentAt: new Date(sentAt),
+  });
 
 const inboxOf = (scope: TenantScope) => createConversationRepository(db, scope);
 
@@ -36,8 +48,24 @@ beforeAll(async () => {
   ]);
   const credential = { keyVersion: "v1", iv: "", ciphertext: "", tag: "" };
   await db.insert(channel).values([
-    { id: "channel-a", tenantId: "tenant-a", wabaId: "200", phoneNumberId: "300", displayPhoneNumber: "+55 11 99999-0000", credential, subscriptionFields: [] },
-    { id: "channel-b", tenantId: "tenant-b", wabaId: "201", phoneNumberId: "301", displayPhoneNumber: "+55 11 99999-0001", credential, subscriptionFields: [] },
+    {
+      id: "channel-a",
+      tenantId: "tenant-a",
+      wabaId: "200",
+      phoneNumberId: "300",
+      displayPhoneNumber: "+55 11 99999-0000",
+      credential,
+      subscriptionFields: [],
+    },
+    {
+      id: "channel-b",
+      tenantId: "tenant-b",
+      wabaId: "201",
+      phoneNumberId: "301",
+      displayPhoneNumber: "+55 11 99999-0001",
+      credential,
+      subscriptionFields: [],
+    },
   ]);
   tenantA = (await resolveTenantScope(db, { userId: "owner-a" }))!;
   tenantB = (await resolveTenantScope(db, { userId: "owner-b" }))!;
@@ -64,13 +92,25 @@ describe("Inbox Conversation list", () => {
       {
         id: expect.any(String),
         channelId: "channel-a",
-        contact: { id: expect.any(String), phone: "5511900000001", profileName: "Ana", appName: null, name: null },
+        contact: {
+          id: expect.any(String),
+          phone: "5511900000001",
+          profileName: "Ana",
+          appName: null,
+          name: null,
+        },
         lastMessageAt: new Date("2026-10-20T11:00:00Z"),
       },
       {
         id: expect.any(String),
         channelId: "channel-a",
-        contact: { id: expect.any(String), phone: "5511900000002", profileName: "Bruno", appName: null, name: null },
+        contact: {
+          id: expect.any(String),
+          phone: "5511900000002",
+          profileName: "Bruno",
+          appName: null,
+          name: null,
+        },
         lastMessageAt: new Date("2026-10-20T10:00:00Z"),
       },
     ]);
@@ -83,7 +123,9 @@ describe("Inbox Conversation list", () => {
     await receive(channelB, "5511900000004", "Oi", "2026-10-20T12:00:00Z", "Ana Lima");
 
     const phonesFor = async (search: string) =>
-      (await inboxOf(tenantA).listConversations({ search })).conversations.map(({ contact }) => contact.phone);
+      (await inboxOf(tenantA).listConversations({ search })).conversations.map(
+        ({ contact }) => contact.phone,
+      );
 
     expect(await phonesFor("souza")).toEqual(["5511900000001"]);
     expect(await phonesFor("ana")).toEqual(["5511900000001"]);
@@ -98,8 +140,19 @@ describe("Inbox Conversation list", () => {
   });
 
   test("pages through the list with a cursor, without skipping Conversations active at the same time", async () => {
-    for (const phone of ["5511900000001", "5511900000002", "5511900000003", "5511900000004", "5511900000005"]) {
-      await receive(channelA, phone, "Oi", phone === "5511900000005" ? "2026-10-20T10:00:00Z" : "2026-10-20T09:00:00Z");
+    for (const phone of [
+      "5511900000001",
+      "5511900000002",
+      "5511900000003",
+      "5511900000004",
+      "5511900000005",
+    ]) {
+      await receive(
+        channelA,
+        phone,
+        "Oi",
+        phone === "5511900000005" ? "2026-10-20T10:00:00Z" : "2026-10-20T09:00:00Z",
+      );
     }
 
     const inbox = inboxOf(tenantA);
@@ -107,7 +160,9 @@ describe("Inbox Conversation list", () => {
     const second = await inbox.listConversations({ limit: 2, cursor: first.nextCursor });
     const third = await inbox.listConversations({ limit: 2, cursor: second.nextCursor });
 
-    expect([first, second, third].map(({ conversations }) => conversations.length)).toEqual([2, 2, 1]);
+    expect([first, second, third].map(({ conversations }) => conversations.length)).toEqual([
+      2, 2, 1,
+    ]);
     expect(third.nextCursor).toBeNull();
     const paged = [first, second, third].flatMap(({ conversations }) => conversations);
     expect(paged.map(({ contact }) => contact.phone)[0]).toBe("5511900000005");
@@ -127,26 +182,66 @@ describe("Conversation view", () => {
     expect(await inbox.getConversation(id)).toEqual({
       id,
       channelId: "channel-a",
-      contact: { id: expect.any(String), phone: "5511900000001", profileName: "Ana", appName: null, name: null },
+      contact: {
+        id: expect.any(String),
+        phone: "5511900000001",
+        profileName: "Ana",
+        appName: null,
+        name: null,
+      },
       serviceWindowClosesAt: new Date("2026-10-21T09:05:00Z"),
     });
     expect(await inbox.listMessages(id)).toEqual({
       messages: [
-        { id: expect.any(String), wamid: expect.any(String), direction: "inbound", origin: "contact", authorName: null, status: null, type: "text", text: "Primeira", sentAt: new Date("2026-10-20T09:00:00Z"), imported: false, editedAt: null, revokedAt: null },
-        { id: expect.any(String), wamid: expect.any(String), direction: "inbound", origin: "contact", authorName: null, status: null, type: "text", text: "Segunda", sentAt: new Date("2026-10-20T09:05:00Z"), imported: false, editedAt: null, revokedAt: null },
+        {
+          id: expect.any(String),
+          wamid: expect.any(String),
+          direction: "inbound",
+          origin: "contact",
+          authorName: null,
+          status: null,
+          type: "text",
+          text: "Primeira",
+          sentAt: new Date("2026-10-20T09:00:00Z"),
+          imported: false,
+          editedAt: null,
+          revokedAt: null,
+        },
+        {
+          id: expect.any(String),
+          wamid: expect.any(String),
+          direction: "inbound",
+          origin: "contact",
+          authorName: null,
+          status: null,
+          type: "text",
+          text: "Segunda",
+          sentAt: new Date("2026-10-20T09:05:00Z"),
+          imported: false,
+          editedAt: null,
+          revokedAt: null,
+        },
       ],
       nextCursor: null,
     });
-    expect((await inbox.listConversations()).conversations[0].lastMessageAt).toEqual(new Date("2026-10-20T09:05:00Z"));
+    expect((await inbox.listConversations()).conversations[0].lastMessageAt).toEqual(
+      new Date("2026-10-20T09:05:00Z"),
+    );
   });
 
   test("shows the latest messages first and pages back to older ones", async () => {
     for (const minute of [1, 2, 3, 4, 5]) {
-      await receive(channelA, "5511900000001", `Mensagem ${minute}`, `2026-10-20T09:0${minute}:00Z`);
+      await receive(
+        channelA,
+        "5511900000001",
+        `Mensagem ${minute}`,
+        `2026-10-20T09:0${minute}:00Z`,
+      );
     }
     const inbox = inboxOf(tenantA);
     const [{ id }] = (await inbox.listConversations()).conversations;
-    const textsOf = (page: Awaited<ReturnType<typeof inbox.listMessages>>) => page?.messages.map(({ text }) => text);
+    const textsOf = (page: Awaited<ReturnType<typeof inbox.listMessages>>) =>
+      page?.messages.map(({ text }) => text);
 
     const latest = await inbox.listMessages(id, { limit: 2 });
     const older = await inbox.listMessages(id, { limit: 2, cursor: latest!.nextCursor });
@@ -171,23 +266,44 @@ describe("Contact panel", () => {
   test("a Member renames a Contact; the name survives new messages and is searchable", async () => {
     await receive(channelA, "5511900000001", "Oi", "2026-10-20T09:00:00Z", "Ana");
     const inbox = inboxOf(tenantA);
-    const [{ id, contact: { id: contactId } }] = (await inbox.listConversations()).conversations;
+    const [
+      {
+        id,
+        contact: { id: contactId },
+      },
+    ] = (await inbox.listConversations()).conversations;
 
     expect(await inbox.renameContact(contactId, "  Ana Souza (Loja Centro)  ")).toEqual({
-      id: contactId, phone: "5511900000001", profileName: "Ana", appName: null, name: "Ana Souza (Loja Centro)",
+      id: contactId,
+      phone: "5511900000001",
+      profileName: "Ana",
+      appName: null,
+      name: "Ana Souza (Loja Centro)",
     });
     await receive(channelA, "5511900000001", "Tudo bem?", "2026-10-20T09:05:00Z", "Ana WhatsApp");
 
     expect((await inbox.getConversation(id))?.contact).toEqual({
-      id: contactId, phone: "5511900000001", profileName: "Ana WhatsApp", appName: null, name: "Ana Souza (Loja Centro)",
+      id: contactId,
+      phone: "5511900000001",
+      profileName: "Ana WhatsApp",
+      appName: null,
+      name: "Ana Souza (Loja Centro)",
     });
-    expect((await inbox.listConversations({ search: "loja centro" })).conversations.map((found) => found.id)).toEqual([id]);
+    expect(
+      (await inbox.listConversations({ search: "loja centro" })).conversations.map(
+        (found) => found.id,
+      ),
+    ).toEqual([id]);
   });
 
   test("clearing the name falls back to the WhatsApp profile name", async () => {
     await receive(channelA, "5511900000001", "Oi", "2026-10-20T09:00:00Z", "Ana");
     const inbox = inboxOf(tenantA);
-    const [{ contact: { id: contactId } }] = (await inbox.listConversations()).conversations;
+    const [
+      {
+        contact: { id: contactId },
+      },
+    ] = (await inbox.listConversations()).conversations;
     await inbox.renameContact(contactId, "Ana Souza");
 
     expect((await inbox.renameContact(contactId, "   "))?.name).toBeNull();
@@ -195,7 +311,12 @@ describe("Contact panel", () => {
 
   test("refuses to rename another Tenant's Contact", async () => {
     await receive(channelB, "5511900000001", "Oi", "2026-10-20T09:00:00Z", "Ana");
-    const [{ id, contact: { id: contactId } }] = (await inboxOf(tenantB).listConversations()).conversations;
+    const [
+      {
+        id,
+        contact: { id: contactId },
+      },
+    ] = (await inboxOf(tenantB).listConversations()).conversations;
 
     expect(await inboxOf(tenantA).renameContact(contactId, "Invasor")).toBeNull();
     expect((await inboxOf(tenantB).getConversation(id))?.contact.name).toBeNull();

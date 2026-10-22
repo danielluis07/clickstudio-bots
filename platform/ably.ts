@@ -10,9 +10,10 @@ export const createAblyRealtime = ({ apiKey }: { apiKey: string }) => {
     async publish(tenantId, ping) {
       // Project the payload explicitly so extra runtime properties cannot
       // accidentally send message text or phone numbers to Ably.
-      const data = "conversationId" in ping
-        ? { conversationId: ping.conversationId }
-        : { contactId: ping.contactId };
+      const data =
+        "conversationId" in ping
+          ? { conversationId: ping.conversationId }
+          : { contactId: ping.contactId };
       await client.channels.get(tenantInboxChannel(tenantId)).publish("invalidate", data);
     },
     async issueToken(tenantId: string, memberId: string) {

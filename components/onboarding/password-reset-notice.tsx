@@ -9,6 +9,8 @@ export function PasswordResetNotice() {
   if (!useSearchParams().has(passwordResetDoneParam)) return null;
 
   return (
-    <FormMessage state={{ status: "success", message: "Senha redefinida. Entre com a nova senha." }} />
+    <FormMessage
+      state={{ status: "success", message: "Senha redefinida. Entre com a nova senha." }}
+    />
   );
 }

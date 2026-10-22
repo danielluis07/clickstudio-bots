@@ -21,7 +21,9 @@ export function CreateTenantForm() {
         <Field>
           <FieldLabel htmlFor="ownerEmail">E-mail do responsável</FieldLabel>
           <Input id="ownerEmail" name="ownerEmail" type="email" required />
-          <FieldDescription>O responsável recebe o convite por e-mail e aceita os Termos e o DPA ao entrar.</FieldDescription>
+          <FieldDescription>
+            O responsável recebe o convite por e-mail e aceita os Termos e o DPA ao entrar.
+          </FieldDescription>
         </Field>
         <FormMessage state={state} />
         <SubmitButton pending={pending}>Criar negócio e enviar convite</SubmitButton>

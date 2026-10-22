@@ -34,10 +34,14 @@ const lockWamid = (tx: Transaction, tenantId: string, wamid: string) =>
 export const recordSentWamid = (db: Database, tenantId: string, messageId: string, wamid: string) =>
   db.transaction(async (tx) => {
     await lockWamid(tx, tenantId, wamid);
-    const [echoed] = await tx.delete(message)
-      .where(and(eq(message.tenantId, tenantId), eq(message.wamid, wamid), eq(message.origin, "app")))
+    const [echoed] = await tx
+      .delete(message)
+      .where(
+        and(eq(message.tenantId, tenantId), eq(message.wamid, wamid), eq(message.origin, "app")),
+      )
       .returning({ status: message.status });
-    await tx.update(message)
+    await tx
+      .update(message)
       .set(echoed?.status ? { wamid, status: echoed.status } : { wamid })
       .where(and(eq(message.id, messageId), eq(message.tenantId, tenantId)));
   });
@@ -53,7 +57,8 @@ const classify = (stored: { origin: string; conversationId: string }): EchoClass
 export const recordMessageEcho = (db: Database, route: ChannelRoute, echo: MessageEcho) =>
   db.transaction(async (tx): Promise<EchoClassification | null> => {
     const findStored = async () => {
-      const [stored] = await tx.select({ origin: message.origin, conversationId: message.conversationId })
+      const [stored] = await tx
+        .select({ origin: message.origin, conversationId: message.conversationId })
         .from(message)
         .where(and(eq(message.tenantId, route.tenantId), eq(message.wamid, echo.wamid)));
       return stored;
@@ -63,22 +68,28 @@ export const recordMessageEcho = (db: Database, route: ChannelRoute, echo: Messa
     if (stored) return classify(stored);
 
     const conversationId = await fileConversation(tx, route, {
-      phone: echo.to, profileName: null, sentAt: echo.sentAt, receivedAt: echo.receivedAt,
+      phone: echo.to,
+      profileName: null,
+      sentAt: echo.sentAt,
+      receivedAt: echo.receivedAt,
     });
     if (!conversationId) return null;
-    const [inserted] = await tx.insert(message).values({
-      tenantId: route.tenantId,
-      conversationId,
-      wamid: echo.wamid,
-      direction: "outbound",
-      origin: "app",
-      // Echoed means sent; later statuses move it forward.
-      status: "sent",
-      type: "text",
-      text: echo.text,
-      sentAt: echo.sentAt,
-    }).onConflictDoNothing({ target: [message.tenantId, message.wamid] })
+    const [inserted] = await tx
+      .insert(message)
+      .values({
+        tenantId: route.tenantId,
+        conversationId,
+        wamid: echo.wamid,
+        direction: "outbound",
+        origin: "app",
+        // Echoed means sent; later statuses move it forward.
+        status: "sent",
+        type: "text",
+        text: echo.text,
+        sentAt: echo.sentAt,
+      })
+      .onConflictDoNothing({ target: [message.tenantId, message.wamid] })
       .returning({ origin: message.origin, conversationId: message.conversationId });
     // A concurrent job stored the same wamid first.
-    return classify(inserted ?? await findStored());
+    return classify(inserted ?? (await findStored()));
   });

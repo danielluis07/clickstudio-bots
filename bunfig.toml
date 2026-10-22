@@ -1,0 +1,10 @@
+[fmt]
+printWidth = 100
+tabWidth = 2
+semi = true
+singleQuote = false
+# Keep generated migration history and documentation outside the code baseline.
+ignorePatterns = ["drizzle/**", "**/*.md"]
+
+[fmt.sortTailwindcss]
+stylesheet = "./app/globals.css"

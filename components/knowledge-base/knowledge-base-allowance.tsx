@@ -4,8 +4,12 @@ export function KnowledgeBaseAllowance({ used, cap }: { used: number; cap: numbe
   return (
     <div className="flex flex-col gap-2">
       <p className="text-sm">
-        <span className="font-medium">{formatCount(used)} / {formatCount(cap)}</span>{" "}
-        <span className="text-muted-foreground">caracteres usados, somando títulos, perguntas, respostas e textos.</span>
+        <span className="font-medium">
+          {formatCount(used)} / {formatCount(cap)}
+        </span>{" "}
+        <span className="text-muted-foreground">
+          caracteres usados, somando títulos, perguntas, respostas e textos.
+        </span>
       </p>
       <progress
         value={Math.min(used, cap)}

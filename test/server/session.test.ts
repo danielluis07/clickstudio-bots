@@ -2,10 +2,13 @@ import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 
 test("sign-in goes directly to the correct sidebar and preserves safe return paths", async () => {
-  const process = Bun.spawn([Bun.which("bun")!, fileURLToPath(new URL("../support/sign-in-action.ts", import.meta.url))], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const process = Bun.spawn(
+    [Bun.which("bun")!, fileURLToPath(new URL("../support/sign-in-action.ts", import.meta.url))],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(process.stdout).text(),
     new Response(process.stderr).text(),

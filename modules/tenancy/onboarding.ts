@@ -2,14 +2,7 @@ import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq, gt } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
-import {
-  account,
-  invitation,
-  legalAcceptance,
-  member,
-  organization,
-  user,
-} from "@/db/schema";
+import { account, invitation, legalAcceptance, member, organization, user } from "@/db/schema";
 import { createUserRepository, isPlatformAdmin } from "@/modules/identity";
 import { termsVersion } from "@/modules/legal";
 import { tenantOwnerInvitationEmail } from "@/modules/tenancy/invitation-email";
@@ -53,10 +46,7 @@ const findUserWithPassword = async (db: Database, email: string) => {
   const [found] = await db
     .select({ id: user.id, passwordHash: account.password })
     .from(user)
-    .leftJoin(
-      account,
-      and(eq(account.userId, user.id), eq(account.providerId, "credential")),
-    )
+    .leftJoin(account, and(eq(account.userId, user.id), eq(account.providerId, "credential")))
     .where(eq(user.email, email))
     .limit(1);
   return found ?? null;

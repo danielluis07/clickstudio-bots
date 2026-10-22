@@ -5,12 +5,14 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { formText, type FormState } from "@/server/actions/form-state";
 import { auth } from "@/server/auth/auth";
-import { returnToParam, safeReturnPath, signedInHomePath, signInPath } from "@/server/auth/redirects";
+import {
+  returnToParam,
+  safeReturnPath,
+  signedInHomePath,
+  signInPath,
+} from "@/server/auth/redirects";
 
-export async function signInAction(
-  _previous: FormState,
-  formData: FormData,
-): Promise<FormState> {
+export async function signInAction(_previous: FormState, formData: FormData): Promise<FormState> {
   let destination = signedInHomePath;
   try {
     const { user } = await auth.api.signInEmail({

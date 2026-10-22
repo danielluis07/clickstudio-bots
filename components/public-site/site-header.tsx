@@ -9,7 +9,9 @@ export function SiteHeader() {
           ClickStudio <span className="font-normal">Bots</span>
         </Link>
         <nav aria-label="Navegação principal" className="flex items-center gap-5 text-sm">
-          <Link href="/#plano" className="site-link">Plano e preço</Link>
+          <Link href="/#plano" className="site-link">
+            Plano e preço
+          </Link>
           <Link href="/#convites" className={buttonVariants({ variant: "outline" })}>
             Acesso por convite
           </Link>

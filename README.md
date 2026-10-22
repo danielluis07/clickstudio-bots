@@ -2,6 +2,9 @@
 
 Next.js app (Bun runtime) with Better Auth and Drizzle on Postgres (Neon).
 
+Use Bun 1.4.4, matching `package.json`. CI reads that version from the manifest,
+restores Bun's dependency cache, and installs with the frozen lockfile.
+
 ## Setup
 
 ```bash
@@ -43,13 +46,38 @@ To enable live inbox updates, set the server-only `ABLY_API_KEY` as described in
 | --------------------- | --------------------------------------------------------------- |
 | `bun run dev`         | Next.js dev server                                              |
 | `bun run lint`        | ESLint                                                          |
-| `bun run typecheck`   | Generate Next.js route types, then `tsc --noEmit`               |
+| `bun run format`      | Format code and configuration with Bun, including Tailwind class order |
+| `bun run format:check` | Check formatting without changing files                       |
+| `bun run typecheck`   | Generate Next.js route types, then check with native TypeScript 7 |
+| `bun run typecheck:fast` | Generate Next.js route types, then check with Bun            |
 | `bun run test`        | Bun test runner (PGlite suites included)                        |
 | `bun run evaluate:provider --help` | Manual provider evaluation and offline human scoring ([guide](docs/evaluation/README.md)) |
 | `bun run db:generate` | Generate a migration in `drizzle/` from `db/schema`             |
 | `bun run db:migrate`  | Apply pending migrations to `DATABASE_URL`                      |
 | `bun run admin:create` | Create a platform administrator (see below)                    |
 | `bun run db:seed`     | Recreate the demo Tenant on the dev database (see below)        |
+
+## TypeScript and formatting
+
+The `@typescript/native` dependency aliases stable TypeScript 7 and provides `tsc`
+for `bun run typecheck`. The `typescript` dependency aliases Microsoft's TypeScript
+6 compatibility package so ESLint and other tools can still import the JavaScript
+compiler API. Keep both dependencies: replacing the compatibility alias with
+TypeScript 7 would break those tools. See [Microsoft's compatibility setup](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6-0).
+
+Next.js 16.4.2 resolves the `typescript` package directly, so its build check uses
+compatibility TypeScript 6. Run `bun run typecheck` to validate with TypeScript 7;
+CI runs this command. `bun run typecheck:fast` is an additional local check using
+Bun's bundled checker. Both commands generate Next route types first.
+
+Editor TypeScript support is configured separately. Use the editor's native
+TypeScript 7 language server for native diagnostics; the compatibility package is
+retained for tools and the existing Next.js language-service plugin.
+
+Formatting options live in `bunfig.toml`. Run `bun run format` before committing;
+CI enforces `bun run format:check`. Generated migrations and Markdown documents
+are excluded. Import order is preserved, and Tailwind classes are sorted using
+`app/globals.css`.
 
 ## Platform administrators and Tenants
 
@@ -85,6 +113,6 @@ Layout and import rules are in [docs/CONVENTIONS.md](docs/CONVENTIONS.md#layout)
 
 Tests are `*.test.ts` files under `test/`, organised like the code they exercise (`test/modules/tenancy/…`, `test/server/…`), and run by `bun test`. `test/architecture.test.ts` enforces the import rules. Repository tests build their database with `createTestDatabase()` from `@/test/support/database`: an in-memory PGlite with all migrations applied. Code that depends on time takes a `Clock` (`@/platform/clock`); tests pass `createTestClock()` from `@/test/support/clock` and move it with `set` or `advance`.
 
-CI (`.github/workflows/ci.yml`) runs lint, typecheck, the migration drift check and the tests on every push and pull request.
+CI (`.github/workflows/ci.yml`) checks formatting, lint, TypeScript 7 types, migration drift and tests on every push and pull request.
 
 Paid provider evaluation runs separately with the [81-case synthetic pt-BR corpus](docs/evaluation/README.md). Routine tests use a fake Model; the manual runner refuses CI.

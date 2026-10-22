@@ -1,4 +1,9 @@
-type ContactNames = { name: string | null; appName: string | null; profileName: string | null; phone: string };
+type ContactNames = {
+  name: string | null;
+  appName: string | null;
+  profileName: string | null;
+  phone: string;
+};
 
 // A Brazilian wa_id is 55, a two-digit area code, then 8 or 9 digits.
 export const formatContactPhone = (phone: string) => {

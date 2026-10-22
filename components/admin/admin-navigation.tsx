@@ -3,7 +3,13 @@
 import { Building2Icon, CircleAlertIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
+import {
+  SidebarGroup,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from "@/components/ui/sidebar";
 
 export function AdminNavigation() {
   const pathname = usePathname();
@@ -22,7 +28,8 @@ export function AdminNavigation() {
               aria-current={isActive ? "page" : undefined}
               aria-label="Negócios"
               tooltip="Negócios"
-              onClick={closeMobileSidebar}>
+              onClick={closeMobileSidebar}
+            >
               <Building2Icon aria-hidden="true" />
               <span>Negócios</span>
             </SidebarMenuButton>
@@ -34,7 +41,8 @@ export function AdminNavigation() {
               aria-current={pathname === "/admin/eventos" ? "page" : undefined}
               aria-label="Eventos com falha"
               tooltip="Eventos com falha"
-              onClick={closeMobileSidebar}>
+              onClick={closeMobileSidebar}
+            >
               <CircleAlertIcon aria-hidden="true" />
               <span>Eventos com falha</span>
             </SidebarMenuButton>

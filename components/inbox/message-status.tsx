@@ -4,7 +4,13 @@ import { messageStatusLabels } from "@/modules/conversations/hooks";
 
 type Status = keyof typeof messageStatusLabels;
 
-const icons = { pending: Clock, sent: Check, delivered: CheckCheck, read: CheckCheck, failed: CircleAlert };
+const icons = {
+  pending: Clock,
+  sent: Check,
+  delivered: CheckCheck,
+  read: CheckCheck,
+  failed: CircleAlert,
+};
 
 export function MessageStatus({ status }: { status: Status }) {
   const Icon = icons[status];
@@ -18,7 +24,8 @@ export function MessageStatus({ status }: { status: Status }) {
         "inline-flex items-center gap-1",
         status === "read" && "text-sky-600 dark:text-sky-400",
         status === "failed" && "text-destructive",
-      )}>
+      )}
+    >
       <Icon className="size-3.5" aria-hidden="true" />
       {status === "failed" && messageStatusLabels.failed}
     </span>

@@ -4,7 +4,11 @@ import { classifyError } from "@/platform/diagnostics";
 
 type DailyTask = { name: string; run(): Promise<unknown> };
 
-export const createDailyCronRoute = ({ secret, tasks, diagnostics }: {
+export const createDailyCronRoute = ({
+  secret,
+  tasks,
+  diagnostics,
+}: {
   secret: string | null;
   tasks: readonly DailyTask[];
   diagnostics?: Pick<InboxDiagnostics, "log">;

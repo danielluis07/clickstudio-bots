@@ -1,6 +1,11 @@
 "use client";
 
-import { useMutation, useQueryClient, type InfiniteData, type QueryKey } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueryClient,
+  type InfiniteData,
+  type QueryKey,
+} from "@tanstack/react-query";
 import type { inferOutput } from "@trpc/tanstack-react-query";
 import { useState, type FormEvent } from "react";
 import { useTRPC } from "@/trpc/client";
@@ -16,25 +21,41 @@ export const useRenameContact = () => {
   const queryClient = useQueryClient();
   const affected = [trpc.conversations.get.pathFilter(), trpc.conversations.list.pathFilter()];
 
-  return useMutation(trpc.contacts.rename.mutationOptions({
-    onMutate: async ({ contactId, name }) => {
-      await Promise.all(affected.map((filter) => queryClient.cancelQueries(filter)));
-      const previous = affected.flatMap((filter) => queryClient.getQueriesData(filter));
-      const rename = <T extends { contact: { id: string; name: string | null } }>(found: T): T =>
-        found.contact.id === contactId ? { ...found, contact: { ...found.contact, name: name.trim() || null } } : found;
+  return useMutation(
+    trpc.contacts.rename.mutationOptions({
+      onMutate: async ({ contactId, name }) => {
+        await Promise.all(affected.map((filter) => queryClient.cancelQueries(filter)));
+        const previous = affected.flatMap((filter) => queryClient.getQueriesData(filter));
+        const rename = <T extends { contact: { id: string; name: string | null } }>(found: T): T =>
+          found.contact.id === contactId
+            ? { ...found, contact: { ...found.contact, name: name.trim() || null } }
+            : found;
 
-      queryClient.setQueriesData<Conversation>(trpc.conversations.get.pathFilter(), (found) => found && rename(found));
-      queryClient.setQueriesData<ConversationList>(trpc.conversations.list.pathFilter(), (list) => list && {
-        ...list,
-        pages: list.pages.map((page) => ({ ...page, conversations: page.conversations.map(rename) })),
-      });
-      return { previous };
-    },
-    onError: (_error, _input, context) => {
-      context?.previous.forEach(([queryKey, data]: [QueryKey, unknown]) => queryClient.setQueryData(queryKey, data));
-    },
-    onSettled: () => Promise.all(affected.map((filter) => queryClient.invalidateQueries(filter))),
-  }));
+        queryClient.setQueriesData<Conversation>(
+          trpc.conversations.get.pathFilter(),
+          (found) => found && rename(found),
+        );
+        queryClient.setQueriesData<ConversationList>(
+          trpc.conversations.list.pathFilter(),
+          (list) =>
+            list && {
+              ...list,
+              pages: list.pages.map((page) => ({
+                ...page,
+                conversations: page.conversations.map(rename),
+              })),
+            },
+        );
+        return { previous };
+      },
+      onError: (_error, _input, context) => {
+        context?.previous.forEach(([queryKey, data]: [QueryKey, unknown]) =>
+          queryClient.setQueryData(queryKey, data),
+        );
+      },
+      onSettled: () => Promise.all(affected.map((filter) => queryClient.invalidateQueries(filter))),
+    }),
+  );
 };
 
 export const useContactNameForm = (contact: { id: string; name: string | null }) => {
@@ -52,5 +73,12 @@ export const useContactNameForm = (contact: { id: string; name: string | null })
     rename.mutate({ contactId: contact.id, name });
   };
 
-  return { name, changeName, submit, saving: rename.isPending, failed: rename.isError, saved: rename.isSuccess };
+  return {
+    name,
+    changeName,
+    submit,
+    saving: rename.isPending,
+    failed: rename.isError,
+    saved: rename.isSuccess,
+  };
 };

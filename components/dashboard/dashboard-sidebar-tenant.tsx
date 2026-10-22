@@ -13,7 +13,8 @@ export function DashboardSidebarTenant() {
       className="flex h-12 min-w-0 items-center gap-2 overflow-hidden px-2"
       aria-busy={isPending}
       aria-label={isPending ? "Carregando negócio" : undefined}
-      title={isPending ? undefined : tenantName}>
+      title={isPending ? undefined : tenantName}
+    >
       <Building2Icon className="size-4 shrink-0" aria-hidden="true" />
       <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
         {isPending ? (

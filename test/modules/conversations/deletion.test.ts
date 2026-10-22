@@ -1,7 +1,21 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
-import { channel, contact, conversation, inboxEvent, member, message, messageChange, organization, user } from "@/db/schema";
-import { createConversationRepository, deleteContact, recordInboundTextMessage } from "@/modules/conversations";
+import {
+  channel,
+  contact,
+  conversation,
+  inboxEvent,
+  member,
+  message,
+  messageChange,
+  organization,
+  user,
+} from "@/db/schema";
+import {
+  createConversationRepository,
+  deleteContact,
+  recordInboundTextMessage,
+} from "@/modules/conversations";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { createWebhookInbox, pruneInboxEvents } from "@/modules/webhook-inbox";
@@ -9,7 +23,16 @@ import { createTestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
-import { contactSyncChange, historyChange, messageEchoChange, metaAppSecret, metaDelivery, referencingChange, signMetaDelivery, textMessageChange } from "@/test/support/meta-webhook";
+import {
+  contactSyncChange,
+  historyChange,
+  messageEchoChange,
+  metaAppSecret,
+  metaDelivery,
+  referencingChange,
+  signMetaDelivery,
+  textMessageChange,
+} from "@/test/support/meta-webhook";
 
 let db: Database;
 let owner: TenantScope;
@@ -23,11 +46,16 @@ let inbox: ReturnType<typeof createWebhookInbox>;
 let sequence = 0;
 const phone = "5511988887777";
 const repository = () => createConversationRepository(db, owner);
-const remove = (contactId: string, scope = owner) => deleteContact({ db, scope, clock, notifier, contactId });
-const receive = () => recordInboundTextMessage(db, route, {
-  wamid: `wamid.delete.${++sequence}`, from: phone, profileName: "Ana", text: "Meus dados",
-  sentAt: new Date(clock.now().getTime() - 60 * 60 * 1000),
-});
+const remove = (contactId: string, scope = owner) =>
+  deleteContact({ db, scope, clock, notifier, contactId });
+const receive = () =>
+  recordInboundTextMessage(db, route, {
+    wamid: `wamid.delete.${++sequence}`,
+    from: phone,
+    profileName: "Ana",
+    text: "Meus dados",
+    sentAt: new Date(clock.now().getTime() - 60 * 60 * 1000),
+  });
 const deliver = async (...changes: Parameters<typeof metaDelivery>) => {
   const body = metaDelivery(...changes);
   await inbox.receive({ body, signature: signMetaDelivery(body) });
@@ -53,8 +81,13 @@ beforeAll(async () => {
     { organizationId: "other", userId: "other", role: "owner" },
   ]);
   await db.insert(channel).values({
-    id: "channel", tenantId: "tenant", wabaId: "200", phoneNumberId: "300", displayPhoneNumber: "+5511999990000",
-    credential: { keyVersion: "v1", iv: "", ciphertext: "", tag: "" }, subscriptionFields: [],
+    id: "channel",
+    tenantId: "tenant",
+    wabaId: "200",
+    phoneNumberId: "300",
+    displayPhoneNumber: "+5511999990000",
+    credential: { keyVersion: "v1", iv: "", ciphertext: "", tag: "" },
+    subscriptionFields: [],
   });
   owner = (await resolveTenantScope(db, { userId: "owner" }))!;
   attendant = (await resolveTenantScope(db, { userId: "attendant" }))!;
@@ -89,7 +122,13 @@ test("only an owner can delete a Contact in their Tenant", async () => {
 test("a retained pre-deletion inbox event cannot recreate a Contact, including dead-letter replay", async () => {
   const conversationId = await receive();
   const found = (await repository().getConversation(conversationId!))!;
-  const body = metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.retained", timestamp: String(clock.now().getTime() / 1000 - 60) }));
+  const body = metaDelivery(
+    textMessageChange({
+      phoneNumberId: "300",
+      wamid: "wamid.retained",
+      timestamp: String(clock.now().getTime() / 1000 - 60),
+    }),
+  );
   await inbox.receive({ body, signature: signMetaDelivery(body) });
   const [job] = queue.take();
   await inbox.fail(job.inboxEventId, "failed-job");
@@ -107,31 +146,67 @@ test("a new message creates a fresh Contact while late history and echoes cannot
   clock.advance(1000);
   await deliver(
     messageEchoChange({ phoneNumberId: "300", wamid: "wamid.old-echo", timestamp: oldTime }),
-    historyChange({ phoneNumberId: "300", threads: [{ id: phone, messages: [
-      { wamid: "wamid.old-history", from: phone, timestamp: oldTime },
-    ] }] }),
+    historyChange({
+      phoneNumberId: "300",
+      threads: [
+        { id: phone, messages: [{ wamid: "wamid.old-history", from: phone, timestamp: oldTime }] },
+      ],
+    }),
   );
   expect((await repository().listConversations()).conversations).toEqual([]);
-  await deliver(textMessageChange({ phoneNumberId: "300", wamid: "wamid.new", timestamp: String(clock.now().getTime() / 1000), body: "Novo contato" }));
-  const { conversations: [fresh] } = await repository().listConversations();
+  await deliver(
+    textMessageChange({
+      phoneNumberId: "300",
+      wamid: "wamid.new",
+      timestamp: String(clock.now().getTime() / 1000),
+      body: "Novo contato",
+    }),
+  );
+  const {
+    conversations: [fresh],
+  } = await repository().listConversations();
   expect(fresh.contact.id).not.toBe(found.contact.id);
   expect(fresh.id).not.toBe(conversationId);
-  await deliver(historyChange({ phoneNumberId: "300", chunkOrder: 2, threads: [{ id: phone, messages: [
-    { wamid: "wamid.mixed-old", from: phone, timestamp: oldTime },
-    { wamid: "wamid.new", from: phone, timestamp: String(clock.now().getTime() / 1000) },
-  ] }] }));
-  expect((await repository().listMessages(fresh.id))!.messages.map(({ text }) => text)).toEqual(["Novo contato"]);
-  await deliver(contactSyncChange({ phoneNumberId: "300", contacts: [{ phone, fullName: "Nome excluído", timestamp: oldTime }] }));
+  await deliver(
+    historyChange({
+      phoneNumberId: "300",
+      chunkOrder: 2,
+      threads: [
+        {
+          id: phone,
+          messages: [
+            { wamid: "wamid.mixed-old", from: phone, timestamp: oldTime },
+            { wamid: "wamid.new", from: phone, timestamp: String(clock.now().getTime() / 1000) },
+          ],
+        },
+      ],
+    }),
+  );
+  expect((await repository().listMessages(fresh.id))!.messages.map(({ text }) => text)).toEqual([
+    "Novo contato",
+  ]);
+  await deliver(
+    contactSyncChange({
+      phoneNumberId: "300",
+      contacts: [{ phone, fullName: "Nome excluído", timestamp: oldTime }],
+    }),
+  );
   expect((await repository().getConversation(fresh.id))!.contact.appName).toBeNull();
 });
 
 test("deletion erases all Contact rows and edits, even edits whose original has not arrived", async () => {
   const conversationId = await receive();
   const found = (await repository().getConversation(conversationId!))!;
-  const body = metaDelivery(referencingChange({
-    phoneNumberId: "300", wamid: "wamid.orphan-edit", originalWamid: "wamid.not-arrived", type: "edit",
-    timestamp: String(clock.now().getTime() / 1000 - 10), body: "Dados pessoais editados",
-  }));
+  const body = metaDelivery(
+    referencingChange({
+      phoneNumberId: "300",
+      wamid: "wamid.orphan-edit",
+      originalWamid: "wamid.not-arrived",
+      type: "edit",
+      timestamp: String(clock.now().getTime() / 1000 - 10),
+      body: "Dados pessoais editados",
+    }),
+  );
   await inbox.receive({ body, signature: signMetaDelivery(body) });
   const [job] = queue.take();
   await inbox.process(job.inboxEventId);
@@ -146,9 +221,13 @@ test("deletion erases all Contact rows and edits, even edits whose original has 
 test("an event received before deletion stays suppressed even with a later message timestamp, and raw inbox data expires", async () => {
   const conversationId = await receive();
   const found = (await repository().getConversation(conversationId!))!;
-  const body = metaDelivery(textMessageChange({
-    phoneNumberId: "300", wamid: "wamid.future-timestamp", timestamp: String(clock.now().getTime() / 1000 + 60),
-  }));
+  const body = metaDelivery(
+    textMessageChange({
+      phoneNumberId: "300",
+      wamid: "wamid.future-timestamp",
+      timestamp: String(clock.now().getTime() / 1000 + 60),
+    }),
+  );
   await inbox.receive({ body, signature: signMetaDelivery(body) });
   const [job] = queue.take();
   clock.advance(1000);
@@ -166,10 +245,24 @@ test("ambiguous deletion-second messages are suppressed; a message in the next s
   const found = (await repository().getConversation(conversationId!))!;
   expect(await remove(found.contact.id)).toEqual({ ok: true });
   clock.advance(700);
-  await deliver(textMessageChange({ phoneNumberId: "300", wamid: "wamid.ambiguous-second", timestamp: String(Math.floor(clock.now().getTime() / 1000)) }));
+  await deliver(
+    textMessageChange({
+      phoneNumberId: "300",
+      wamid: "wamid.ambiguous-second",
+      timestamp: String(Math.floor(clock.now().getTime() / 1000)),
+    }),
+  );
   expect((await repository().listConversations()).conversations).toEqual([]);
   clock.advance(201);
-  await deliver(textMessageChange({ phoneNumberId: "300", wamid: "wamid.next-second", timestamp: String(Math.floor(clock.now().getTime() / 1000)) }));
-  const { conversations: [fresh] } = await repository().listConversations();
+  await deliver(
+    textMessageChange({
+      phoneNumberId: "300",
+      wamid: "wamid.next-second",
+      timestamp: String(Math.floor(clock.now().getTime() / 1000)),
+    }),
+  );
+  const {
+    conversations: [fresh],
+  } = await repository().listConversations();
   expect(fresh.contact.id).not.toBe(found.contact.id);
 });

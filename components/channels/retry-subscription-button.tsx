@@ -12,7 +12,9 @@ export function RetrySubscriptionButton() {
   const [state, action, pending] = useActionState(retryWhatsAppSubscriptionAction, initialState);
   return (
     <form action={action} className="flex flex-col items-start gap-3">
-      <SubmitButton pending={pending}>{pending ? "Verificando…" : "Tentar receber eventos novamente"}</SubmitButton>
+      <SubmitButton pending={pending}>
+        {pending ? "Verificando…" : "Tentar receber eventos novamente"}
+      </SubmitButton>
       <FormMessage state={state} />
     </form>
   );

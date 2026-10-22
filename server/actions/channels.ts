@@ -10,8 +10,10 @@ const connectErrors = {
   forbidden: "Apenas o responsável pelo negócio pode conectar o Canal.",
   invalid: "Não foi possível validar a conexão. Inicie novamente pelo botão abaixo.",
   already_connected: "Este negócio já possui um Canal conectado.",
-  channel_conflict: "O Canal já está conectado. Atualize a página ou entre em contato com o suporte.",
-  signup_failed: "Não foi possível concluir a conexão com a Meta. Verifique as permissões e tente novamente.",
+  channel_conflict:
+    "O Canal já está conectado. Atualize a página ou entre em contato com o suporte.",
+  signup_failed:
+    "Não foi possível concluir a conexão com a Meta. Verifique as permissões e tente novamente.",
 } as const;
 
 export async function connectWhatsAppAction(input: ChannelSignup): Promise<FormState> {
@@ -25,15 +27,24 @@ export async function connectWhatsAppAction(input: ChannelSignup): Promise<FormS
 export async function retryWhatsAppSubscriptionAction(): Promise<FormState> {
   const scope = await requireTenantScope();
   const result = await channelService.retrySubscription(scope);
-  if (!result.ok) return {
-    status: "error",
-    message: result.error === "forbidden"
-      ? "Apenas o responsável pelo negócio pode tentar novamente."
-      : "Nenhum Canal conectado foi encontrado.",
-  };
+  if (!result.ok)
+    return {
+      status: "error",
+      message:
+        result.error === "forbidden"
+          ? "Apenas o responsável pelo negócio pode tentar novamente."
+          : "Nenhum Canal conectado foi encontrado.",
+    };
   refresh();
   const connected = await channelService.getChannel(scope);
   return connected?.subscriptionStatus === "subscribed"
-    ? { status: "success", message: "Recebimento de eventos do WhatsApp confirmado. O Bot continua desligado." }
-    : { status: "error", message: "Não foi possível confirmar o recebimento de eventos. Tente novamente ou entre em contato com o suporte." };
+    ? {
+        status: "success",
+        message: "Recebimento de eventos do WhatsApp confirmado. O Bot continua desligado.",
+      }
+    : {
+        status: "error",
+        message:
+          "Não foi possível confirmar o recebimento de eventos. Tente novamente ou entre em contato com o suporte.",
+      };
 }

@@ -10,7 +10,8 @@ export function FormMessage({ state }: { state: FormState }) {
         state.status === "error"
           ? "text-sm wrap-break-word text-destructive"
           : "text-sm wrap-break-word text-primary"
-      }>
+      }
+    >
       {state.message}
     </p>
   );

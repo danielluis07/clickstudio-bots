@@ -22,13 +22,15 @@ export const createWhatsAppTokenCipher = (
   activeKeyVersion: string,
   encryptionKeys: Record<string, string>,
 ) => {
-  const keys = new Map(Object.entries(encryptionKeys).map(([version, value]) => {
-    const key = Buffer.from(value, "base64");
-    if (key.length !== 32 || key.toString("base64") !== value) {
-      throw new Error("Invalid WhatsApp encryption key configuration");
-    }
-    return [version, key] as const;
-  }));
+  const keys = new Map(
+    Object.entries(encryptionKeys).map(([version, value]) => {
+      const key = Buffer.from(value, "base64");
+      if (key.length !== 32 || key.toString("base64") !== value) {
+        throw new Error("Invalid WhatsApp encryption key configuration");
+      }
+      return [version, key] as const;
+    }),
+  );
   if (!keys.has(activeKeyVersion)) {
     throw new Error("Missing active WhatsApp encryption key");
   }

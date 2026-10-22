@@ -13,12 +13,21 @@ type ConversationListProps = {
 };
 
 export function ConversationList({ search, selectedId, onSelect }: ConversationListProps) {
-  const { conversations, isPending, isError, hasMore, loadMore, isLoadingMore } = useConversationList(search);
+  const { conversations, isPending, isError, hasMore, loadMore, isLoadingMore } =
+    useConversationList(search);
 
-  if (isPending) return <Skeleton className="m-3 h-16" aria-busy="true" aria-label="Carregando conversas" />;
-  if (isError) return <InboxNotice alert>Não foi possível carregar as conversas. Atualize a página.</InboxNotice>;
+  if (isPending)
+    return <Skeleton className="m-3 h-16" aria-busy="true" aria-label="Carregando conversas" />;
+  if (isError)
+    return (
+      <InboxNotice alert>Não foi possível carregar as conversas. Atualize a página.</InboxNotice>
+    );
   if (conversations.length === 0) {
-    return <InboxNotice>{search ? "Nenhuma conversa encontrada." : "Nenhuma conversa ainda."}</InboxNotice>;
+    return (
+      <InboxNotice>
+        {search ? "Nenhuma conversa encontrada." : "Nenhuma conversa ainda."}
+      </InboxNotice>
+    );
   }
 
   return (

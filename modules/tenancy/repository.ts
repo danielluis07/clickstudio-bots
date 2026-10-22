@@ -1,12 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import type { Database } from "@/db/database";
-import {
-  invitation,
-  legalAcceptance,
-  member,
-  organization,
-  user,
-} from "@/db/schema";
+import { invitation, legalAcceptance, member, organization, user } from "@/db/schema";
 import type { TenantScope } from "@/modules/tenancy/scope";
 
 // The single entry point to Tenant-owned data for Members: every query is
@@ -43,9 +37,7 @@ export const createTenantRepository = (db: Database, scope: TenantScope) => {
         .select(memberColumns)
         .from(member)
         .innerJoin(user, eq(user.id, member.userId))
-        .where(
-          and(eq(member.id, memberId), eq(member.organizationId, scope.tenantId)),
-        )
+        .where(and(eq(member.id, memberId), eq(member.organizationId, scope.tenantId)))
         .limit(1);
       return found ?? null;
     },

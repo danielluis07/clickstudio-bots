@@ -15,7 +15,13 @@ type EditableKnowledgeEntryProps = {
   titleMaxLength: number;
 };
 
-export function EditableKnowledgeEntry({ kind, entry, used, cap, titleMaxLength }: EditableKnowledgeEntryProps) {
+export function EditableKnowledgeEntry({
+  kind,
+  entry,
+  used,
+  cap,
+  titleMaxLength,
+}: EditableKnowledgeEntryProps) {
   const [editing, setEditing] = useState(false);
   const stopEditing = () => setEditing(false);
 
@@ -38,7 +44,9 @@ export function EditableKnowledgeEntry({ kind, entry, used, cap, titleMaxLength 
       entry={entry}
       actions={
         <>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(true)}>Editar</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(true)}>
+            Editar
+          </Button>
           <DeleteKnowledgeEntryButton entryId={entry.id} entryTitle={entry.title} />
         </>
       }

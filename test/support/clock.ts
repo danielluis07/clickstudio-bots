@@ -5,9 +5,7 @@ export type TestClock = Clock & {
   advance(milliseconds: number): void;
 };
 
-export const createTestClock = (
-  start = new Date("2026-01-01T12:00:00.000Z"),
-): TestClock => {
+export const createTestClock = (start = new Date("2026-01-01T12:00:00.000Z")): TestClock => {
   let current = start.getTime();
 
   return {

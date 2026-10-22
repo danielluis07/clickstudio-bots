@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { parseSignupSession, type EmbeddedSignupConfig } from "@/modules/channels/hooks/embedded-signup";
+import {
+  parseSignupSession,
+  type EmbeddedSignupConfig,
+} from "@/modules/channels/hooks/embedded-signup";
 import type { ChannelSignup } from "@/modules/channels/service";
 
 type SignupState =
@@ -33,31 +36,48 @@ export const useEmbeddedSignup = (config: EmbeddedSignupConfig, completeSignup: 
     setState({ status: "error", message });
   }, []);
 
-  const submitWhenReady = useCallback((attempt: SignupAttempt) => {
-    if (active.current !== attempt || attempt.submitted) return;
-    if (!attempt.code || !attempt.wabaId) {
-      // Do not time out while the owner is still navigating Meta's popup.
-      // Only bound the wait for the complementary result after completion.
-      attempt.timer ??= setTimeout(() => fail("A Meta não confirmou todos os dados da conexão. Atualize a página e tente novamente."), 60_000);
-      return;
-    }
-    attempt.submitted = true;
-    clearTimeout(attempt.timer);
-    // Only the short-lived code crosses to the server. The SDK is configured
-    // to return a code; business tokens are never obtained in the browser.
-    const input = { code: attempt.code, wabaId: attempt.wabaId, phoneNumberId: attempt.phoneNumberId };
-    attempt.code = undefined;
-    startTransition(async () => {
-      try {
-        setState(await completeSignup(input));
-      } catch {
-        setState({ status: "error", message: "Não foi possível confirmar a conexão. Atualize a página antes de tentar novamente." });
-      } finally {
-        active.current = null;
-        setBusy(false);
+  const submitWhenReady = useCallback(
+    (attempt: SignupAttempt) => {
+      if (active.current !== attempt || attempt.submitted) return;
+      if (!attempt.code || !attempt.wabaId) {
+        // Do not time out while the owner is still navigating Meta's popup.
+        // Only bound the wait for the complementary result after completion.
+        attempt.timer ??= setTimeout(
+          () =>
+            fail(
+              "A Meta não confirmou todos os dados da conexão. Atualize a página e tente novamente.",
+            ),
+          60_000,
+        );
+        return;
       }
-    });
-  }, [completeSignup, fail]);
+      attempt.submitted = true;
+      clearTimeout(attempt.timer);
+      // Only the short-lived code crosses to the server. The SDK is configured
+      // to return a code; business tokens are never obtained in the browser.
+      const input = {
+        code: attempt.code,
+        wabaId: attempt.wabaId,
+        phoneNumberId: attempt.phoneNumberId,
+      };
+      attempt.code = undefined;
+      startTransition(async () => {
+        try {
+          setState(await completeSignup(input));
+        } catch {
+          setState({
+            status: "error",
+            message:
+              "Não foi possível confirmar a conexão. Atualize a página antes de tentar novamente.",
+          });
+        } finally {
+          active.current = null;
+          setBusy(false);
+        }
+      });
+    },
+    [completeSignup, fail],
+  );
 
   useEffect(() => {
     const receiveSession = (event: MessageEvent) => {
@@ -67,7 +87,10 @@ export const useEmbeddedSignup = (config: EmbeddedSignupConfig, completeSignup: 
       if (!session) return;
       if (session.event === "CANCEL" || session.event === "ERROR") {
         fail("A conexão não foi concluída na Meta. Você pode tentar novamente.");
-      } else if (session.event === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING" && session.data?.waba_id) {
+      } else if (
+        session.event === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING" &&
+        session.data?.waba_id
+      ) {
         attempt.wabaId = session.data.waba_id;
         attempt.phoneNumberId = session.data.phone_number_id;
         submitWhenReady(attempt);
@@ -85,7 +108,12 @@ export const useEmbeddedSignup = (config: EmbeddedSignupConfig, completeSignup: 
 
   const initialize = () => {
     if (!window.FB) return;
-    window.FB.init({ appId: config.appId, version: config.graphVersion, autoLogAppEvents: false, xfbml: false });
+    window.FB.init({
+      appId: config.appId,
+      version: config.graphVersion,
+      autoLogAppEvents: false,
+      xfbml: false,
+    });
     setReady(true);
   };
 
@@ -97,22 +125,39 @@ export const useEmbeddedSignup = (config: EmbeddedSignupConfig, completeSignup: 
     active.current = attempt;
     try {
       // Remains synchronous with the click so browsers allow the Meta popup.
-      window.FB.login((response) => {
-        if (active.current !== attempt || attempt.submitted) return;
-        const code = response.authResponse?.code;
-        if (!code) return fail("A conexão não foi autorizada. Você pode tentar novamente.");
-        attempt.code = code;
-        submitWhenReady(attempt);
-      }, {
-        config_id: config.configId,
-        response_type: "code",
-        override_default_response_type: true,
-        extras: { setup: {}, featureType: "whatsapp_business_app_onboarding", sessionInfoVersion: "3" },
-      });
+      window.FB.login(
+        (response) => {
+          if (active.current !== attempt || attempt.submitted) return;
+          const code = response.authResponse?.code;
+          if (!code) return fail("A conexão não foi autorizada. Você pode tentar novamente.");
+          attempt.code = code;
+          submitWhenReady(attempt);
+        },
+        {
+          config_id: config.configId,
+          response_type: "code",
+          override_default_response_type: true,
+          extras: {
+            setup: {},
+            featureType: "whatsapp_business_app_onboarding",
+            sessionInfoVersion: "3",
+          },
+        },
+      );
     } catch {
-      fail("Não foi possível abrir a conexão com a Meta. Verifique se o navegador permite pop-ups e tente novamente.");
+      fail(
+        "Não foi possível abrir a conexão com a Meta. Verifique se o navegador permite pop-ups e tente novamente.",
+      );
     }
   };
 
-  return { ready, busy, state, initialize, launch, scriptFailed: () => fail("Não foi possível carregar a Meta. Atualize a página e tente novamente.") };
+  return {
+    ready,
+    busy,
+    state,
+    initialize,
+    launch,
+    scriptFailed: () =>
+      fail("Não foi possível carregar a Meta. Atualize a página e tente novamente."),
+  };
 };

@@ -11,9 +11,15 @@ export const contactAddressHash = (tenantId: string, phone: string) =>
 // or read the committed barrier before it can file anything.
 export const lockContact = async (tx: Transaction, tenantId: string, phone: string) => {
   const addressHash = contactAddressHash(tenantId, phone);
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`contact:${addressHash}`}, 0))`);
-  const [marker] = await tx.select({ deletedAt: contactDeletion.deletedAt }).from(contactDeletion)
-    .where(and(eq(contactDeletion.tenantId, tenantId), eq(contactDeletion.addressHash, addressHash)));
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`contact:${addressHash}`}, 0))`,
+  );
+  const [marker] = await tx
+    .select({ deletedAt: contactDeletion.deletedAt })
+    .from(contactDeletion)
+    .where(
+      and(eq(contactDeletion.tenantId, tenantId), eq(contactDeletion.addressHash, addressHash)),
+    );
   return marker?.deletedAt ?? null;
 };
 
@@ -21,4 +27,5 @@ export const lockContact = async (tx: Transaction, tenantId: string, phone: stri
 // second as well: a delayed old message is indistinguishable from a fresh
 // one within that second, and must never restore erased data.
 export const predatesDeletion = (deletedAt: Date | null, occurredAt: Date, receivedAt?: Date) =>
-  deletedAt !== null && (occurredAt <= deletedAt || (receivedAt !== undefined && receivedAt <= deletedAt));
+  deletedAt !== null &&
+  (occurredAt <= deletedAt || (receivedAt !== undefined && receivedAt <= deletedAt));

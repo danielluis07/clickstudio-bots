@@ -22,7 +22,11 @@ const cases: { role: string; returnTo?: string; expected: string }[] = [
   { role: "admin", returnTo: "https://evil.example", expected: "/admin" },
   { role: "admin", returnTo: "//evil.example", expected: "/admin" },
   { role: "user", expected: "/painel" },
-  { role: "user", returnTo: "/painel/conversas?conversa=123", expected: "/painel/conversas?conversa=123" },
+  {
+    role: "user",
+    returnTo: "/painel/conversas?conversa=123",
+    expected: "/painel/conversas?conversa=123",
+  },
   { role: "user", returnTo: "https://evil.example", expected: "/painel" },
 ];
 
@@ -41,7 +45,9 @@ for (const scenario of cases) {
     destination = getURLFromRedirectError(error);
   }
   if (destination !== scenario.expected) {
-    throw new Error(`${role} login (voltar=${scenario.returnTo ?? "empty"}): expected first destination ${scenario.expected}, received ${destination}`);
+    throw new Error(
+      `${role} login (voltar=${scenario.returnTo ?? "empty"}): expected first destination ${scenario.expected}, received ${destination}`,
+    );
   }
 }
 

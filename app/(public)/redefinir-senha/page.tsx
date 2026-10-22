@@ -11,7 +11,10 @@ export const metadata: Metadata = {
 
 export default function ResetPasswordPage() {
   return (
-    <AuthCard title="Redefinir senha" description="Crie uma nova senha para entrar no painel. Por segurança, você será desconectado(a) dos outros dispositivos.">
+    <AuthCard
+      title="Redefinir senha"
+      description="Crie uma nova senha para entrar no painel. Por segurança, você será desconectado(a) dos outros dispositivos."
+    >
       {/* The form reads the reset token from the URL, which is request data. */}
       <Suspense fallback={<ContentSkeleton />}>
         <ResetPasswordForm />

@@ -93,27 +93,28 @@ export const ConfirmProvider = ({
             // A dismissal mid-action would leave the act running behind a
             // closed dialog, so the dialog only closes on its own terms.
             if (!open && !isPending) handleCancel();
-          }}>
+          }}
+        >
           <DialogContent className={cn(className, "font-admin")}>
             <DialogHeader>
               <DialogTitle className="font-admin">{options.title}</DialogTitle>
-              <DialogDescription className="font-admin">
-                {options.message}
-              </DialogDescription>
+              <DialogDescription className="font-admin">{options.message}</DialogDescription>
             </DialogHeader>
             <DialogFooter className="pt-2">
               <Button
                 onClick={handleCancel}
                 variant="outline"
                 disabled={isPending}
-                className="font-admin">
+                className="font-admin"
+              >
                 Cancelar
               </Button>
               <Button
                 onClick={handleConfirm}
                 variant="destructive"
                 disabled={isPending}
-                className="font-admin">
+                className="font-admin"
+              >
                 {isPending ? <Spinner className="mx-7" /> : "Confirmar"}
               </Button>
             </DialogFooter>

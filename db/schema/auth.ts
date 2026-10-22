@@ -1,12 +1,4 @@
-import {
-  boolean,
-  index,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-} from "drizzle-orm/pg-core";
+import { boolean, index, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { id, timestamps } from "@/db/columns";
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
@@ -63,10 +55,7 @@ export const account = pgTable(
     ...timestamps(),
   },
   (t) => [
-    uniqueIndex("account_provider_id_account_id_unique").on(
-      t.providerId,
-      t.accountId,
-    ),
+    uniqueIndex("account_provider_id_account_id_unique").on(t.providerId, t.accountId),
     index("account_user_id_idx").on(t.userId),
   ],
 );

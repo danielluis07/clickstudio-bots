@@ -79,9 +79,7 @@ export const createMemberManagement = ({
       if (!isOwner(scope)) {
         return { ok: false as const, error: "forbidden" as const };
       }
-      const canceled = await createTenantRepository(db, scope).cancelInvitation(
-        invitationId,
-      );
+      const canceled = await createTenantRepository(db, scope).cancelInvitation(invitationId);
       if (!canceled) return { ok: false as const, error: "not_found" as const };
       return { ok: true as const };
     },
@@ -110,9 +108,7 @@ export const createMemberManagement = ({
           .select({ id: member.id })
           .from(member)
           .innerJoin(user, eq(user.id, member.userId))
-          .where(
-            and(eq(member.organizationId, scope.tenantId), eq(user.email, email)),
-          )
+          .where(and(eq(member.organizationId, scope.tenantId), eq(user.email, email)))
           .limit(1);
         if (existingMember) return { error: "already_member" as const };
 

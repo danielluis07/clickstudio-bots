@@ -16,13 +16,22 @@ export async function KnowledgeBaseEditor({ scope }: { scope: TenantScope }) {
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-semibold tracking-tight">Base de conhecimento</h1>
           <p className="text-muted-foreground">
-            O Bot responde aos Contatos somente com o que estiver aqui. As alterações salvas valem a partir da próxima resposta, inclusive nas conversas em andamento.
+            O Bot responde aos Contatos somente com o que estiver aqui. As alterações salvas valem a
+            partir da próxima resposta, inclusive nas conversas em andamento.
           </p>
         </div>
         <KnowledgeBaseAllowance used={used} cap={cap} />
       </div>
-      <KnowledgeEntrySection kind="faq" entries={entries.filter(({ kind }) => kind === "faq")} {...sectionProps} />
-      <KnowledgeEntrySection kind="section" entries={entries.filter(({ kind }) => kind === "section")} {...sectionProps} />
+      <KnowledgeEntrySection
+        kind="faq"
+        entries={entries.filter(({ kind }) => kind === "faq")}
+        {...sectionProps}
+      />
+      <KnowledgeEntrySection
+        kind="section"
+        entries={entries.filter(({ kind }) => kind === "section")}
+        {...sectionProps}
+      />
     </div>
   );
 }

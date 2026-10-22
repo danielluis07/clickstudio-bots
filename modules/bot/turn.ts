@@ -1,4 +1,9 @@
-import { contextWindow, defaultContextLimits, replayContext, type ContextLimits } from "@/modules/bot/context";
+import {
+  contextWindow,
+  defaultContextLimits,
+  replayContext,
+  type ContextLimits,
+} from "@/modules/bot/context";
 import type { Model, ModelMessage, ModelRequest, ModelResponse } from "@/modules/bot/model";
 import { renderInstructions, renderKnowledgeBase } from "@/modules/bot/prompt";
 import type { BotRepository, BotTurn } from "@/modules/bot/repository";
@@ -15,12 +20,21 @@ export type TurnOutcome =
 
 const tokenKeys = ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens"] as const;
 
-const handoff = (reason: HandoffReason, answered = ""): TurnOutcome =>
-  ({ kind: "handoff", reason, reply: handoffReply(reason, answered) });
+const handoff = (reason: HandoffReason, answered = ""): TurnOutcome => ({
+  kind: "handoff",
+  reason,
+  reply: handoffReply(reason, answered),
+});
 
 // Decides one Bot reply for a Conversation: a grounded answer or a Handoff.
 // It sends nothing; the caller delivers the reply.
-export const createBotCore = ({ model, repository, meter, clock, context = defaultContextLimits }: {
+export const createBotCore = ({
+  model,
+  repository,
+  meter,
+  clock,
+  context = defaultContextLimits,
+}: {
   model: Model;
   repository: BotRepository;
   meter: UsageMeter;
@@ -42,7 +56,13 @@ export const createBotCore = ({ model, repository, meter, clock, context = defau
       knowledgeBase: renderKnowledgeBase(knowledgeBase),
       messages,
     };
-    const usage: TurnUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, toolRoundTrips: 0 };
+    const usage: TurnUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      toolRoundTrips: 0,
+    };
     const generate = async (messages: ModelMessage[]) => {
       const response = await model.generate({ ...request, messages });
       for (const key of tokenKeys) usage[key] += response.usage[key];
@@ -72,7 +92,8 @@ export const createBotCore = ({ model, repository, meter, clock, context = defau
     // A timeout or provider error never falls back to another provider.
     const outcome = await decide().catch(() => handoff("bot_indisponivel"));
     // Metering must not lose a reply the model already produced.
-    await meter.record(turn.scope, clock.now(), usage)
+    await meter
+      .record(turn.scope, clock.now(), usage)
       .catch(() => console.error("Bot usage metering failed"));
     return outcome;
   },

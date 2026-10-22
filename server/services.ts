@@ -9,7 +9,11 @@ import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import { createWhatsAppGateway } from "@/server/whatsapp";
 import { createWebhookInbox, pruneInboxEvents } from "@/modules/webhook-inbox";
 import { createQStashJobQueue, createQStashJobVerifier, qstashJobUrl } from "@/platform/qstash";
-import { createInboxFailureRoute, createInboxJobRoute, createWhatsAppWebhookRoute } from "@/server/webhook-routes";
+import {
+  createInboxFailureRoute,
+  createInboxJobRoute,
+  createWhatsAppWebhookRoute,
+} from "@/server/webhook-routes";
 import { createAblyRealtime } from "@/platform/ably";
 import type { Notifier } from "@/platform/notifier";
 import { createDiagnostics } from "@/platform/sentry";
@@ -52,16 +56,21 @@ export const replyService = createReplyService({
   getSender: createWhatsAppGateway,
 });
 
-export const webhookInbox = env.META_APP_SECRET && env.QSTASH_TOKEN
-  ? createWebhookInbox({
-    db,
-    clock: systemClock,
-    notifier,
-    diagnostics,
-    appSecret: env.META_APP_SECRET,
-    queue: createQStashJobQueue({ token: env.QSTASH_TOKEN, baseUrl: env.QSTASH_URL, appUrl: env.APP_URL }),
-  })
-  : null;
+export const webhookInbox =
+  env.META_APP_SECRET && env.QSTASH_TOKEN
+    ? createWebhookInbox({
+        db,
+        clock: systemClock,
+        notifier,
+        diagnostics,
+        appSecret: env.META_APP_SECRET,
+        queue: createQStashJobQueue({
+          token: env.QSTASH_TOKEN,
+          baseUrl: env.QSTASH_URL,
+          appUrl: env.APP_URL,
+        }),
+      })
+    : null;
 
 // Unconfigured, both routes refuse requests rather than drop events.
 export const whatsAppWebhookRoute = createWhatsAppWebhookRoute({
@@ -72,13 +81,13 @@ export const whatsAppWebhookRoute = createWhatsAppWebhookRoute({
 export const inboxJobRoute = createInboxJobRoute(
   webhookInbox && env.QSTASH_CURRENT_SIGNING_KEY && env.QSTASH_NEXT_SIGNING_KEY
     ? {
-      inbox: webhookInbox,
-      verifier: createQStashJobVerifier({
-        currentSigningKey: env.QSTASH_CURRENT_SIGNING_KEY,
-        nextSigningKey: env.QSTASH_NEXT_SIGNING_KEY,
-      }),
-      url: qstashJobUrl(env.APP_URL, "process-inbox-event"),
-    }
+        inbox: webhookInbox,
+        verifier: createQStashJobVerifier({
+          currentSigningKey: env.QSTASH_CURRENT_SIGNING_KEY,
+          nextSigningKey: env.QSTASH_NEXT_SIGNING_KEY,
+        }),
+        url: qstashJobUrl(env.APP_URL, "process-inbox-event"),
+      }
     : null,
   diagnostics,
 );
@@ -86,14 +95,14 @@ export const inboxJobRoute = createInboxJobRoute(
 export const inboxFailureRoute = createInboxFailureRoute(
   webhookInbox && env.QSTASH_CURRENT_SIGNING_KEY && env.QSTASH_NEXT_SIGNING_KEY
     ? {
-      inbox: webhookInbox,
-      verifier: createQStashJobVerifier({
-        currentSigningKey: env.QSTASH_CURRENT_SIGNING_KEY,
-        nextSigningKey: env.QSTASH_NEXT_SIGNING_KEY,
-      }),
-      url: qstashJobUrl(env.APP_URL, "inbox-event-failed"),
-      sourceUrl: qstashJobUrl(env.APP_URL, "process-inbox-event"),
-    }
+        inbox: webhookInbox,
+        verifier: createQStashJobVerifier({
+          currentSigningKey: env.QSTASH_CURRENT_SIGNING_KEY,
+          nextSigningKey: env.QSTASH_NEXT_SIGNING_KEY,
+        }),
+        url: qstashJobUrl(env.APP_URL, "inbox-event-failed"),
+        sourceUrl: qstashJobUrl(env.APP_URL, "process-inbox-event"),
+      }
     : null,
 );
 

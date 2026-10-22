@@ -32,10 +32,19 @@ export async function InvitationAcceptance({ params }: InvitationAcceptanceProps
     <AuthCard
       title={`Convite para ${invitation.tenantName}`}
       description={
-        isOwner
-          ? <>Você vai administrar este negócio no ClickStudio Bots com o e-mail <strong>{invitation.email}</strong>.</>
-          : <>Você vai fazer parte da equipe deste negócio no ClickStudio Bots com o e-mail <strong>{invitation.email}</strong>.</>
-      }>
+        isOwner ? (
+          <>
+            Você vai administrar este negócio no ClickStudio Bots com o e-mail{" "}
+            <strong>{invitation.email}</strong>.
+          </>
+        ) : (
+          <>
+            Você vai fazer parte da equipe deste negócio no ClickStudio Bots com o e-mail{" "}
+            <strong>{invitation.email}</strong>.
+          </>
+        )
+      }
+    >
       <InvitationAcceptanceForm invitationId={invitation.id}>
         {invitation.hasAccount ? <ExistingAccountFields /> : <NewAccountFields />}
         {isOwner && <LegalAcceptanceField />}

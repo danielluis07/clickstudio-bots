@@ -93,21 +93,22 @@ describe("joining as an invited Member", () => {
 
     expect(accepted).toMatchObject({ ok: true, tenantId: ownerScope.tenantId });
     if (!accepted.ok) return;
-    expect(
-      await resolveTenantScope(db, { userId: accepted.userId }),
-    ).toMatchObject({ tenantId: ownerScope.tenantId, role: "member" });
+    expect(await resolveTenantScope(db, { userId: accepted.userId })).toMatchObject({
+      tenantId: ownerScope.tenantId,
+      role: "member",
+    });
     expect(
       await resolveTenantScope(db, {
         userId: accepted.userId,
         activeTenantId: otherScope.tenantId,
       }),
     ).toBeNull();
-    expect(
-      await createTenantRepository(db, otherScope).listMembers(),
-    ).not.toContainEqual(expect.objectContaining({ email: "ana@sorriso.example" }));
-    expect(
-      await createTenantRepository(db, ownerScope).listLegalAcceptances(),
-    ).toEqual([expect.objectContaining({ memberName: "Dono Clínica Sorriso" })]);
+    expect(await createTenantRepository(db, otherScope).listMembers()).not.toContainEqual(
+      expect.objectContaining({ email: "ana@sorriso.example" }),
+    );
+    expect(await createTenantRepository(db, ownerScope).listLegalAcceptances()).toEqual([
+      expect.objectContaining({ memberName: "Dono Clínica Sorriso" }),
+    ]);
   });
 });
 
@@ -123,9 +124,7 @@ describe("inviting Members", () => {
       emailSent: true,
     });
     if (!result.ok) return;
-    expect(result.invitationUrl).toBe(
-      `${appUrl}/convite/${result.invitationId}`,
-    );
+    expect(result.invitationUrl).toBe(`${appUrl}/convite/${result.invitationId}`);
 
     expect(mailer.sent).toHaveLength(1);
     const [email] = mailer.sent;
@@ -160,9 +159,10 @@ describe("inviting Members", () => {
     const memberScope = await joinAsMember(ownerScope, "ana@sorriso.example");
     mailer.sent.length = 0;
 
-    expect(
-      await members.inviteMember(memberScope, { email: "bia@sorriso.example" }),
-    ).toEqual({ ok: false, error: "forbidden" });
+    expect(await members.inviteMember(memberScope, { email: "bia@sorriso.example" })).toEqual({
+      ok: false,
+      error: "forbidden",
+    });
     expect(mailer.sent).toHaveLength(0);
   });
 
@@ -175,9 +175,10 @@ describe("inviting Members", () => {
     }
     mailer.sent.length = 0;
 
-    expect(
-      await members.inviteMember(ownerScope, { email: "juca@sorriso.example" }),
-    ).toEqual({ ok: false, error: "allowance_reached" });
+    expect(await members.inviteMember(ownerScope, { email: "juca@sorriso.example" })).toEqual({
+      ok: false,
+      error: "allowance_reached",
+    });
     expect(mailer.sent).toHaveLength(0);
   });
 
@@ -240,15 +241,13 @@ describe("removing Members", () => {
     });
 
     expect(await resolveTenantScope(db, { userId: ana.userId })).toBeNull();
-    expect(
-      await createTenantRepository(db, ownerScope).listMembers(),
-    ).not.toContainEqual(expect.objectContaining({ email: "ana@sorriso.example" }));
-    expect(
-      await createUserRepository(db).findByEmail("ana@sorriso.example"),
-    ).toBeNull();
-    expect(
-      await onboarding.findInvitation(await invite("ana@sorriso.example")),
-    ).toMatchObject({ hasAccount: false });
+    expect(await createTenantRepository(db, ownerScope).listMembers()).not.toContainEqual(
+      expect.objectContaining({ email: "ana@sorriso.example" }),
+    );
+    expect(await createUserRepository(db).findByEmail("ana@sorriso.example")).toBeNull();
+    expect(await onboarding.findInvitation(await invite("ana@sorriso.example"))).toMatchObject({
+      hasAccount: false,
+    });
   });
 
   test("keeps the identity of a Member who still belongs to another Tenant", async () => {
@@ -269,9 +268,9 @@ describe("removing Members", () => {
     expect(await resolveTenantScope(db, { userId: ana.userId })).toMatchObject({
       tenantId: otherScope.tenantId,
     });
-    expect(
-      await createUserRepository(db).findByEmail("ana@sorriso.example"),
-    ).toMatchObject({ id: ana.userId });
+    expect(await createUserRepository(db).findByEmail("ana@sorriso.example")).toMatchObject({
+      id: ana.userId,
+    });
   });
 
   test("keeps the identity of the platform administrator", async () => {
@@ -287,9 +286,9 @@ describe("removing Members", () => {
       ok: true,
     });
 
-    expect(
-      await createUserRepository(db).findByEmail("admin@clickstudio.example"),
-    ).toMatchObject({ id: adminId });
+    expect(await createUserRepository(db).findByEmail("admin@clickstudio.example")).toMatchObject({
+      id: adminId,
+    });
   });
 
   test("only the owner removes Members, and the owner cannot be removed", async () => {
@@ -300,9 +299,10 @@ describe("removing Members", () => {
       ok: false,
       error: "forbidden",
     });
-    expect(await members.removeMember(ownerScope, ownerScope.memberId)).toEqual(
-      { ok: false, error: "not_found" },
-    );
+    expect(await members.removeMember(ownerScope, ownerScope.memberId)).toEqual({
+      ok: false,
+      error: "not_found",
+    });
     expect(await createTenantRepository(db, ownerScope).listMembers()).toHaveLength(3);
   });
 
@@ -314,9 +314,9 @@ describe("removing Members", () => {
       ok: false,
       error: "not_found",
     });
-    expect(
-      await createTenantRepository(db, otherScope).findMember(bruno.memberId),
-    ).toMatchObject({ email: "bruno@outra.example" });
+    expect(await createTenantRepository(db, otherScope).findMember(bruno.memberId)).toMatchObject({
+      email: "bruno@outra.example",
+    });
   });
 });
 
@@ -333,9 +333,7 @@ describe("pending invitations", () => {
       {
         id: live,
         email: "ana@sorriso.example",
-        expiresAt: new Date(
-          clock.now().getTime() + invitationLifetimeDays * 24 * 60 * 60 * 1000,
-        ),
+        expiresAt: new Date(clock.now().getTime() + invitationLifetimeDays * 24 * 60 * 60 * 1000),
       },
     ]);
   });

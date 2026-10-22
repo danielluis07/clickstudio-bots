@@ -5,14 +5,23 @@ import type { RouterOutput } from "@/trpc/routers/_app";
 
 type Contact = RouterOutput["conversations"]["get"]["contact"];
 
-export function ContactPanel({ contact, canDeleteContacts, onDeleted }: {
+export function ContactPanel({
+  contact,
+  canDeleteContacts,
+  onDeleted,
+}: {
   contact: Contact;
   canDeleteContacts: boolean;
   onDeleted: () => void;
 }) {
   return (
-    <aside aria-labelledby="contato" className="flex min-h-0 flex-col gap-6 overflow-y-auto border-l border-border p-4">
-      <h2 id="contato" className="font-semibold">Contato</h2>
+    <aside
+      aria-labelledby="contato"
+      className="flex min-h-0 flex-col gap-6 overflow-y-auto border-l border-border p-4"
+    >
+      <h2 id="contato" className="font-semibold">
+        Contato
+      </h2>
       <dl className="flex flex-col gap-3 text-sm">
         <div>
           <dt className="text-muted-foreground">Telefone</dt>
@@ -20,7 +29,9 @@ export function ContactPanel({ contact, canDeleteContacts, onDeleted }: {
         </div>
       </dl>
       <ContactNameForm key={contact.id} contact={contact} />
-      {canDeleteContacts && <DeleteContactButton key={contact.id} contact={contact} onDeleted={onDeleted} />}
+      {canDeleteContacts && (
+        <DeleteContactButton key={contact.id} contact={contact} onDeleted={onDeleted} />
+      )}
     </aside>
   );
 }

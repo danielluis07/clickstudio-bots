@@ -3,7 +3,13 @@
 import { Input } from "@/components/ui/input";
 import { useDebouncedInput } from "@/hooks/use-debounced-input";
 
-export function ConversationSearch({ search, onSearch }: { search: string; onSearch: (search: string) => void }) {
+export function ConversationSearch({
+  search,
+  onSearch,
+}: {
+  search: string;
+  onSearch: (search: string) => void;
+}) {
   const input = useDebouncedInput(search, onSearch);
 
   return (

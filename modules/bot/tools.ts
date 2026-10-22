@@ -25,20 +25,24 @@ export const handoffReply = (reason: HandoffReason, answered: string) => {
 };
 
 const handoffInput = z.object({
-  reason: z.enum(modelHandoffReasons).describe(
-    "sem_resposta: the Knowledge base lacks the answer or contradicts itself. " +
-    "pedido_do_contato: the Contact asked for a person. " +
-    "regra_do_negocio: a topic the business hands to its team.",
-  ),
+  reason: z
+    .enum(modelHandoffReasons)
+    .describe(
+      "sem_resposta: the Knowledge base lacks the answer or contradicts itself. " +
+        "pedido_do_contato: the Contact asked for a person. " +
+        "regra_do_negocio: a topic the business hands to its team.",
+    ),
 });
 
 // The catalog tools this Bot offers; a call to any other name is refused.
 // Inputs carry no Tenant or Conversation: the core applies the turn's own.
-const offeredTools = [{
-  name: "handoff",
-  description: "Pass the Conversation to the business's team, who will reply to the Contact.",
-  input: handoffInput,
-}];
+const offeredTools = [
+  {
+    name: "handoff",
+    description: "Pass the Conversation to the business's team, who will reply to the Contact.",
+    input: handoffInput,
+  },
+];
 
 export const modelTools: ModelTool[] = offeredTools.map(({ name, description, input }) => ({
   name,
@@ -53,14 +57,16 @@ export type CheckedCalls =
 // Validates calls server-side whatever the provider checked. A response with
 // any invalid call is refused whole, so a valid call beside it does not run.
 export const checkToolCalls = (calls: ModelToolCall[]): CheckedCalls => {
-  const checked = calls.map((call): { call: ModelToolCall; input?: z.output<typeof handoffInput>; error?: string } => {
-    const tool = offeredTools.find(({ name }) => name === call.name);
-    if (!tool) return { call, error: `Tool "${call.name}" is not available.` };
-    const parsed = tool.input.safeParse(call.input);
-    return parsed.success
-      ? { call, input: parsed.data }
-      : { call, error: `Invalid input: ${z.prettifyError(parsed.error)}` };
-  });
+  const checked = calls.map(
+    (call): { call: ModelToolCall; input?: z.output<typeof handoffInput>; error?: string } => {
+      const tool = offeredTools.find(({ name }) => name === call.name);
+      if (!tool) return { call, error: `Tool "${call.name}" is not available.` };
+      const parsed = tool.input.safeParse(call.input);
+      return parsed.success
+        ? { call, input: parsed.data }
+        : { call, error: `Invalid input: ${z.prettifyError(parsed.error)}` };
+    },
+  );
   if (checked.every((result) => !result.error)) {
     return { valid: true, handoff: checked[0]?.input ?? null };
   }

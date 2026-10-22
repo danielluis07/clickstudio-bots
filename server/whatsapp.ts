@@ -3,8 +3,14 @@ import { env } from "@/platform/env";
 import { createWhatsAppAdapter } from "@/platform/whatsapp";
 
 export const getWhatsAppSignupConfig = () => {
-  if (!env.META_APP_ID || !env.META_APP_SECRET || !env.META_WHATSAPP_SIGNUP_CONFIG_ID ||
-      !env.WHATSAPP_TOKEN_KEY_VERSION || !env.WHATSAPP_TOKEN_KEYS) return null;
+  if (
+    !env.META_APP_ID ||
+    !env.META_APP_SECRET ||
+    !env.META_WHATSAPP_SIGNUP_CONFIG_ID ||
+    !env.WHATSAPP_TOKEN_KEY_VERSION ||
+    !env.WHATSAPP_TOKEN_KEYS
+  )
+    return null;
   // Only these public identifiers may enter the client component's props.
   return {
     appId: env.META_APP_ID,

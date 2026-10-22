@@ -12,10 +12,7 @@ export function proxy(request: NextRequest) {
   if (getSessionCookie(request)) return NextResponse.next();
 
   const signInUrl = new URL(signInPath, request.url);
-  signInUrl.searchParams.set(
-    returnToParam,
-    request.nextUrl.pathname + request.nextUrl.search,
-  );
+  signInUrl.searchParams.set(returnToParam, request.nextUrl.pathname + request.nextUrl.search);
   return NextResponse.redirect(signInUrl);
 }
 

@@ -18,7 +18,10 @@ export const env = createEnv({
     META_APP_ID: z.string().regex(/^\d+$/).optional(),
     META_APP_SECRET: z.string().min(1).optional(),
     META_WHATSAPP_SIGNUP_CONFIG_ID: z.string().regex(/^\d+$/).optional(),
-    META_GRAPH_API_VERSION: z.string().regex(/^v\d+\.\d+$/).default("v26.0"),
+    META_GRAPH_API_VERSION: z
+      .string()
+      .regex(/^v\d+\.\d+$/)
+      .default("v26.0"),
     WHATSAPP_TOKEN_KEY_VERSION: z.string().min(1).optional(),
     WHATSAPP_TOKEN_KEYS: z.string().min(1).optional(),
     // The token Meta echoes in the webhook verification handshake.

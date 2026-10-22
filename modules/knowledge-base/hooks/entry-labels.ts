@@ -1,14 +1,17 @@
 import type { KnowledgeEntryKind } from "@/modules/knowledge-base/kinds";
 
 // What the editor calls each kind of entry and its two fields.
-export const knowledgeEntryLabels: Record<KnowledgeEntryKind, {
-  heading: string;
-  description: string;
-  title: string;
-  body: string;
-  add: string;
-  empty: string;
-}> = {
+export const knowledgeEntryLabels: Record<
+  KnowledgeEntryKind,
+  {
+    heading: string;
+    description: string;
+    title: string;
+    body: string;
+    add: string;
+    empty: string;
+  }
+> = {
   faq: {
     heading: "Perguntas frequentes",
     description: "Perguntas que os Contatos costumam fazer, com a resposta que o Bot deve dar.",

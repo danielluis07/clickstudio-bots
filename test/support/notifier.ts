@@ -5,7 +5,9 @@ export const createTestNotifier = () => {
   let shouldFail = false;
   return {
     pings,
-    failNext: () => { shouldFail = true; },
+    failNext: () => {
+      shouldFail = true;
+    },
     async publish(tenantId, ping) {
       if (shouldFail) {
         shouldFail = false;

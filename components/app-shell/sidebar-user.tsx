@@ -13,7 +13,8 @@ export function SidebarUser() {
       className="flex min-w-0 items-center gap-2 overflow-hidden p-2"
       aria-busy={isPending}
       aria-label={isPending ? "Carregando usuário" : undefined}
-      title={user ? `${user.name} (${user.email})` : undefined}>
+      title={user ? `${user.name} (${user.email})` : undefined}
+    >
       <UserRoundIcon className="size-4 shrink-0" aria-hidden="true" />
       <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
         {isPending ? (
@@ -23,7 +24,9 @@ export function SidebarUser() {
           </div>
         ) : (
           <>
-            <span className="truncate text-sm font-medium">{user?.name ?? "Usuário indisponível"}</span>
+            <span className="truncate text-sm font-medium">
+              {user?.name ?? "Usuário indisponível"}
+            </span>
             {user ? (
               <span className="truncate text-xs text-muted-foreground">{user.email}</span>
             ) : null}

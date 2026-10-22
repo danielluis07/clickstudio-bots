@@ -29,7 +29,13 @@ export const createTestModel = (): TestModel => {
       return {
         text: response.text ?? "",
         toolCalls: response.toolCalls ?? [],
-        usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, ...response.usage },
+        usage: {
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          ...response.usage,
+        },
       };
     },
   };

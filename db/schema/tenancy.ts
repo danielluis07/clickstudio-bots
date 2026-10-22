@@ -1,10 +1,4 @@
-import {
-  index,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-} from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { user } from "@/db/schema/auth";
 import { id, timestamps } from "@/db/columns";
 
@@ -32,10 +26,7 @@ export const member = pgTable(
     ...timestamps(),
   },
   (t) => [
-    uniqueIndex("member_organization_id_user_id_unique").on(
-      t.organizationId,
-      t.userId,
-    ),
+    uniqueIndex("member_organization_id_user_id_unique").on(t.organizationId, t.userId),
     index("member_user_id_idx").on(t.userId),
   ],
 );

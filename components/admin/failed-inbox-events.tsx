@@ -2,13 +2,20 @@ import Link from "next/link";
 import { FailedInboxEventRow } from "@/components/admin/failed-inbox-event-row";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { Table, TableBody, TableCaption, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { inboxFailurePage } from "@/server/inbox-administration";
 import { webhookInbox } from "@/server/services";
 
 export async function FailedInboxEvents({ actorId, page }: { actorId: string; page: unknown }) {
   const pageNumber = inboxFailurePage(page);
-  const failures = webhookInbox && await webhookInbox.listFailures(actorId, pageNumber);
+  const failures = webhookInbox && (await webhookInbox.listFailures(actorId, pageNumber));
 
   return (
     <div className="flex flex-col gap-6">
@@ -33,13 +40,19 @@ export async function FailedInboxEvents({ actorId, page }: { actorId: string; pa
                 <TableHead>Ação</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>{failures.events.map((event) => <FailedInboxEventRow key={event.id} event={event} />)}</TableBody>
+            <TableBody>
+              {failures.events.map((event) => (
+                <FailedInboxEventRow key={event.id} event={event} />
+              ))}
+            </TableBody>
           </Table>
         ) : (
           <Empty>
             <EmptyHeader>
               <EmptyTitle>Nenhum evento com falha nesta página</EmptyTitle>
-              <EmptyDescription>Eventos com falha aparecem aqui enquanto aguardam recuperação.</EmptyDescription>
+              <EmptyDescription>
+                Eventos com falha aparecem aqui enquanto aguardam recuperação.
+              </EmptyDescription>
             </EmptyHeader>
           </Empty>
         )
@@ -47,14 +60,32 @@ export async function FailedInboxEvents({ actorId, page }: { actorId: string; pa
         <Empty>
           <EmptyHeader>
             <EmptyTitle>Eventos indisponíveis</EmptyTitle>
-            <EmptyDescription>Verifique seu acesso e a configuração do processamento de eventos.</EmptyDescription>
+            <EmptyDescription>
+              Verifique seu acesso e a configuração do processamento de eventos.
+            </EmptyDescription>
           </EmptyHeader>
         </Empty>
       )}
       <nav aria-label="Páginas de eventos com falha" className="flex flex-wrap gap-2">
-        {pageNumber > 1 && <Button variant="outline" render={<Link href={`/admin/eventos?pagina=${pageNumber - 1}`} />}>Anterior</Button>}
-        <Button variant="outline" render={<a href={`/admin/eventos?pagina=${pageNumber}`} />}>Atualizar</Button>
-        {failures?.ok && failures.hasMore && <Button variant="outline" render={<Link href={`/admin/eventos?pagina=${pageNumber + 1}`} />}>Próxima</Button>}
+        {pageNumber > 1 && (
+          <Button
+            variant="outline"
+            render={<Link href={`/admin/eventos?pagina=${pageNumber - 1}`} />}
+          >
+            Anterior
+          </Button>
+        )}
+        <Button variant="outline" render={<a href={`/admin/eventos?pagina=${pageNumber}`} />}>
+          Atualizar
+        </Button>
+        {failures?.ok && failures.hasMore && (
+          <Button
+            variant="outline"
+            render={<Link href={`/admin/eventos?pagina=${pageNumber + 1}`} />}
+          >
+            Próxima
+          </Button>
+        )}
       </nav>
     </div>
   );

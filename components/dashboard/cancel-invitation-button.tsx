@@ -9,7 +9,10 @@ type CancelInvitationButtonProps = {
   invitationEmail: string;
 };
 
-export function CancelInvitationButton({ invitationId, invitationEmail }: CancelInvitationButtonProps) {
+export function CancelInvitationButton({
+  invitationId,
+  invitationEmail,
+}: CancelInvitationButtonProps) {
   const { confirm } = useConfirm();
 
   function handleCancelInvitation() {
