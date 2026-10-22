@@ -26,6 +26,28 @@ beforeAll(() => {
 afterAll(() => server.stop(true));
 
 describe("QStash job queue", () => {
+  test("Bot turns use per-Conversation flow control with parallelism one", async () => {
+    received = [];
+    await createQStashJobQueue({
+      token: "token",
+      baseUrl: server.url.origin,
+      appUrl: "https://bots.example.com",
+    }).enqueue([
+      { type: "run-bot-turn", conversationId: "conversation-a" },
+      { type: "run-bot-turn", conversationId: "conversation-b" },
+    ]);
+    const jobs = received[0].body as { headers: Record<string, string>; body: string }[];
+    expect(jobs.map(({ headers }) => new Headers(headers).get("upstash-flow-control-key"))).toEqual(
+      ["bot:conversation-a", "bot:conversation-b"],
+    );
+    expect(
+      jobs.map(({ headers }) => new Headers(headers).get("upstash-flow-control-value")),
+    ).toEqual(["parallelism=1", "parallelism=1"]);
+    expect(jobs.map(({ body }) => JSON.parse(body))).toEqual([
+      { conversationId: "conversation-a" },
+      { conversationId: "conversation-b" },
+    ]);
+  });
   test("publishes each job to its route with a body of ids only", async () => {
     received = [];
     const queue = createQStashJobQueue({

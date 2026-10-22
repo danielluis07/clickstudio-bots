@@ -29,6 +29,7 @@ import { classifyError } from "@/platform/diagnostics";
 import type { InboxDiagnostics } from "@/modules/webhook-inbox/diagnostics";
 import type { Clock } from "@/platform/clock";
 import type { Notifier } from "@/platform/notifier";
+import type { LiveBot } from "@/modules/bot";
 
 // The inbox-first delivery contract of ADR 0002: store each signed event once,
 // enqueue it, and only then acknowledge the delivery.
@@ -39,6 +40,7 @@ export const createWebhookInbox = ({
   notifier,
   appSecret,
   diagnostics,
+  bot,
 }: {
   db: Database;
   clock: Clock;
@@ -46,6 +48,7 @@ export const createWebhookInbox = ({
   notifier: Notifier;
   appSecret: string;
   diagnostics?: InboxDiagnostics;
+  bot?: Pick<LiveBot, "enqueue"> | null;
 }) => {
   const repository = createInboxRepository(db);
 
@@ -115,6 +118,10 @@ export const createWebhookInbox = ({
         return { ok: true as const, status: "ignored" as const };
       }
       conversationId = recorded.conversationId ?? undefined;
+      // Enqueue before settling, so a queue failure retries the committed,
+      // idempotent inbound write. History, statuses and echoes never start turns.
+      if (route && conversationId && readInboundTextMessage(event.payload))
+        await bot?.enqueue(route, conversationId);
       // A failed ping retries the idempotent committed write and ping together.
       if (recorded.conversationId)
         await notifier.publish(route!.tenantId, { conversationId: recorded.conversationId });

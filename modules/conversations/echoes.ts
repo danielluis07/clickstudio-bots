@@ -42,9 +42,21 @@ export const recordSentWamid = (db: Database, tenantId: string, messageId: strin
       .returning({ status: message.status });
     await tx
       .update(message)
-      .set(echoed?.status ? { wamid, status: echoed.status } : { wamid })
+      .set({
+        wamid,
+        status:
+          echoed?.status ??
+          sql`case when ${message.origin} = 'bot' then 'sent' else ${message.status} end`,
+      })
       .where(and(eq(message.id, messageId), eq(message.tenantId, tenantId)));
   });
+
+export const recordBotReplySent = (
+  db: Database,
+  route: ChannelRoute,
+  messageId: string,
+  wamid: string,
+) => recordSentWamid(db, route.tenantId, messageId, wamid);
 
 const classify = (stored: { origin: string; conversationId: string }): EchoClassification => ({
   echo: stored.origin === "app" ? "app_reply" : "own_echo",

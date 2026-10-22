@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
-import { botSandboxUsage } from "@/db/schema";
+import { botActivation, botSandboxUsage } from "@/db/schema";
 import type { Model } from "@/modules/bot/model";
 import { botTimeZone } from "@/modules/bot/schedule";
 import { readBehaviour } from "@/modules/bot/settings";
@@ -96,6 +96,20 @@ export const createBotSandbox = ({
         meter: { record: async () => {} },
       });
       const outcome = await core.respond({ scope, conversationId: "sandbox" });
+      if (
+        outcome.kind === "answer" ||
+        (outcome.kind === "handoff" && outcome.reason !== "bot_indisponivel")
+      ) {
+        await db
+          .insert(botActivation)
+          .values({ tenantId: scope.tenantId, testedAt: now })
+          .onConflictDoUpdate({
+            target: botActivation.tenantId,
+            set: {
+              testedAt: sql`greatest(${botActivation.testedAt}, ${now.toISOString()}::timestamptz)`,
+            },
+          });
+      }
       return {
         ok: true as const,
         outcome,

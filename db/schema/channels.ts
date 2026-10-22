@@ -14,6 +14,7 @@ export const channel = pgTable("channel", {
   displayPhoneNumber: text("display_phone_number").notNull(),
   credential: jsonb("credential").$type<EncryptedWhatsAppToken>().notNull(),
   botEnabled: boolean("bot_enabled").notNull().default(false),
+  botPaused: boolean("bot_paused").notNull().default(false),
   subscriptionStatus: text("subscription_status", { enum: ["pending", "subscribed", "failed"] })
     .notNull()
     .default("pending"),

@@ -6,7 +6,7 @@ import { createResendMailer } from "@/platform/resend-mailer";
 import { createChannelService } from "@/modules/channels";
 import { createReplyService } from "@/modules/conversations";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
-import { createBotSandbox, createBotSettingsEditor } from "@/modules/bot";
+import { createBotSandbox, createBotSettingsEditor, createLiveBot } from "@/modules/bot";
 import { createBotModel } from "@/platform/ai-sdk-model";
 import { createWhatsAppGateway } from "@/server/whatsapp";
 import { createWebhookInbox, pruneInboxEvents } from "@/modules/webhook-inbox";
@@ -20,6 +20,7 @@ import { createAblyRealtime } from "@/platform/ably";
 import type { Notifier } from "@/platform/notifier";
 import { createDiagnostics } from "@/platform/sentry";
 import { createDailyCronRoute } from "@/server/daily-cron";
+import { createBotJobRoute } from "@/server/bot-jobs";
 
 const diagnostics = createDiagnostics({ dsn: env.SENTRY_DSN });
 
@@ -53,13 +54,32 @@ export const knowledgeBaseEditor = createKnowledgeBaseEditor({ db, clock: system
 
 export const botSettingsEditor = createBotSettingsEditor({ db, clock: systemClock });
 
+const model = createBotModel({
+  gatewayApiKey: env.AI_GATEWAY_API_KEY,
+  anthropicApiKey: env.ANTHROPIC_API_KEY,
+});
+const queue = env.QSTASH_TOKEN
+  ? createQStashJobQueue({ token: env.QSTASH_TOKEN, baseUrl: env.QSTASH_URL, appUrl: env.APP_URL })
+  : null;
+
+export const liveBot = queue
+  ? createLiveBot({
+      db,
+      clock: systemClock,
+      model,
+      queue,
+      notifier,
+      getSender: createWhatsAppGateway,
+      // Billing and production cost reporting plug into these independent ports.
+      meter: { record: async () => {} },
+      allowance: { canReply: async () => true },
+    })
+  : null;
+
 export const botSandbox = createBotSandbox({
   db,
   clock: systemClock,
-  model: createBotModel({
-    gatewayApiKey: env.AI_GATEWAY_API_KEY,
-    anthropicApiKey: env.ANTHROPIC_API_KEY,
-  }),
+  model,
 });
 
 export const replyService = createReplyService({
@@ -76,12 +96,9 @@ export const webhookInbox =
         clock: systemClock,
         notifier,
         diagnostics,
+        bot: liveBot,
         appSecret: env.META_APP_SECRET,
-        queue: createQStashJobQueue({
-          token: env.QSTASH_TOKEN,
-          baseUrl: env.QSTASH_URL,
-          appUrl: env.APP_URL,
-        }),
+        queue: queue!,
       })
     : null;
 
@@ -122,5 +139,26 @@ export const inboxFailureRoute = createInboxFailureRoute(
 export const dailyCronRoute = createDailyCronRoute({
   secret: env.CRON_SECRET ?? null,
   diagnostics,
-  tasks: [{ name: "prune-inbox", run: () => pruneInboxEvents(db, systemClock) }],
+  tasks: [
+    { name: "prune-inbox", run: () => pruneInboxEvents(db, systemClock) },
+    {
+      name: "recover-bot-turns",
+      run: async () => {
+        await liveBot?.cleanup();
+      },
+    },
+  ],
 });
+
+export const botJobRoute = createBotJobRoute(
+  liveBot && env.QSTASH_CURRENT_SIGNING_KEY && env.QSTASH_NEXT_SIGNING_KEY
+    ? {
+        bot: liveBot,
+        url: qstashJobUrl(env.APP_URL, "run-bot-turn"),
+        verifier: createQStashJobVerifier({
+          currentSigningKey: env.QSTASH_CURRENT_SIGNING_KEY,
+          nextSigningKey: env.QSTASH_NEXT_SIGNING_KEY,
+        }),
+      }
+    : null,
+);

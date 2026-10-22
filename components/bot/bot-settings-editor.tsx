@@ -1,6 +1,7 @@
 import { BotSettingsForm } from "@/components/bot/bot-settings-form";
 import { BotSettingsSavedNote } from "@/components/bot/bot-settings-saved-note";
 import { BotSandboxChat } from "@/components/bot/bot-sandbox-chat";
+import { BotActivation } from "@/components/bot/bot-activation";
 import { botSettingsLimits } from "@/modules/bot";
 import type { TenantScope } from "@/modules/tenancy";
 import { botSettingsEditor } from "@/server/services";
@@ -25,6 +26,7 @@ export async function BotSettingsEditor({ scope }: { scope: TenantScope }) {
           </p>
         )}
       </div>
+      <BotActivation canActivate={canEdit} />
       <BotSettingsForm
         settings={settings}
         savedAt={updatedAt}

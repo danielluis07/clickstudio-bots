@@ -35,6 +35,9 @@ export const createQStashJobQueue = ({
           ...(type === "process-inbox-event"
             ? { failureCallback: qstashJobUrl(appUrl, "inbox-event-failed") }
             : {}),
+          ...(type === "run-bot-turn"
+            ? { flowControl: { key: `bot:${ids.conversationId}`, parallelism: 1 } }
+            : {}),
         })),
       );
       if (published.length !== jobs.length || published.some((result) => !result?.messageId)) {

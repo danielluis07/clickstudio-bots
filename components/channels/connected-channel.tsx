@@ -12,7 +12,9 @@ export function ConnectedChannel({
   return (
     <div className="flex flex-col gap-3">
       <p className="font-medium">WhatsApp Business: {channel.displayPhoneNumber}</p>
-      <p>{channel.botEnabled ? "Bot ligado" : "Bot desligado"}</p>
+      <p>
+        {channel.botEnabled ? (channel.botPaused ? "Bot pausado" : "Bot ligado") : "Bot desligado"}
+      </p>
       {channel.historyNotImported && <HistoryNotImportedNotice />}
       {channel.subscriptionStatus === "subscribed" ? (
         <p className="text-sm text-muted-foreground">

@@ -1,9 +1,10 @@
-import { and, desc, eq, ilike, like, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, like, or, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Database } from "@/db/database";
 import { contact, conversation, member, message, messageChange, user } from "@/db/schema";
 import { recordSentWamid } from "@/modules/conversations/echoes";
 import type { TenantScope } from "@/modules/tenancy";
+import type { ChannelRoute } from "@/modules/channels";
 
 // Matches the Contact name a Member gave, the name saved in the WhatsApp
 // Business app, the WhatsApp profile name, or the phone digits, so
@@ -71,12 +72,14 @@ const toPage = <Row, Cursor>(rows: Row[], limit: number, cursorOf: (row: Row) =>
 
 // What Members see and change in the inbox: every query is bound to the
 // scope's Tenant, whatever Conversation or Contact id the caller passes.
-export const createConversationRepository = (db: Database, scope: TenantScope) => {
+export const createConversationRepository = (db: Database, scope: TenantScope | ChannelRoute) => {
   const getConversation = async (conversationId: string) => {
     const [found] = await db
       .select({
         id: conversation.id,
         channelId: conversation.channelId,
+        owner: conversation.owner,
+        handoffReason: conversation.handoffReason,
         contact: contactFields,
         // Null until the Contact has written; the window never opens otherwise.
         serviceWindowClosesAt: sql`(
@@ -106,6 +109,8 @@ export const createConversationRepository = (db: Database, scope: TenantScope) =
         .select({
           id: conversation.id,
           channelId: conversation.channelId,
+          owner: conversation.owner,
+          handoffReason: conversation.handoffReason,
           contact: contactFields,
           lastMessageAt: conversation.lastMessageAt,
         })
@@ -138,9 +143,11 @@ export const createConversationRepository = (db: Database, scope: TenantScope) =
       {
         cursor = null,
         limit = 50,
+        messageIds,
       }: {
         cursor?: MessageCursor | null;
         limit?: number;
+        messageIds?: string[];
       } = {},
     ) {
       if (!(await getConversation(conversationId))) return null;
@@ -170,6 +177,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope) =
           and(
             eq(message.conversationId, conversationId),
             eq(message.tenantId, scope.tenantId),
+            messageIds ? inArray(message.id, messageIds) : undefined,
             before(message.sentAt, message.id, cursor && { at: cursor.sentAt, id: cursor.id }),
           ),
         )
@@ -188,6 +196,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope) =
       conversationId: string,
       { text, sentAt }: { text: string; sentAt: Date },
     ) {
+      if (!("memberId" in scope)) throw new Error("A dashboard reply requires a Member");
       return db.transaction(async (tx) => {
         const [inserted] = await tx
           .insert(message)
