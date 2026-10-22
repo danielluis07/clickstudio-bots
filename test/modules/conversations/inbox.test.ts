@@ -94,6 +94,7 @@ describe("Inbox Conversation list", () => {
         channelId: "channel-a",
         owner: "bot",
         handoffReason: null,
+        waiting: false,
         contact: {
           id: expect.any(String),
           phone: "5511900000001",
@@ -108,6 +109,7 @@ describe("Inbox Conversation list", () => {
         channelId: "channel-a",
         owner: "bot",
         handoffReason: null,
+        waiting: false,
         contact: {
           id: expect.any(String),
           phone: "5511900000002",
@@ -188,6 +190,7 @@ describe("Conversation view", () => {
       channelId: "channel-a",
       owner: "bot",
       handoffReason: null,
+      waiting: false,
       contact: {
         id: expect.any(String),
         phone: "5511900000001",

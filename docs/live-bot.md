@@ -43,7 +43,8 @@ It inserts a pending Bot message and marks the snapshot's Contact messages
 covered before calling Meta. A Model-requested Handoff is persisted in that same
 reservation, so a crash after sending cannot lose the ownership change.
 Success records the wamid and delivery status in one transaction,
-reconciling an own echo that arrived first. A retry finding pending without a
+reconciling an own echo that arrived first. Member Handoffs, resumption and the
+waiting list are described in [Handoff ownership and controls](handoff.md). A retry finding pending without a
 wamid marks it failed and hands off as **Bot indisponível**; it never resends.
 
 The daily cron's `recover-bot-turns` task fails stuck pending sends once their

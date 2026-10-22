@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PrefetchedInbox } from "@/components/inbox/prefetched-inbox";
 import { searchParamText } from "@/lib/search-params";
+import { isWaitingFilter } from "@/modules/conversations/hooks";
 import { requireTenantScope } from "@/server/auth/guards";
 import { channelService } from "@/server/services";
 
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
 
 export default async function ConversationsPage({ searchParams }: PageProps<"/painel/conversas">) {
   const scope = await requireTenantScope();
-  const [{ busca, conversa }, channel] = await Promise.all([
+  const [{ busca, filtro, conversa }, channel] = await Promise.all([
     searchParams,
     channelService.getChannel(scope),
   ]);
@@ -19,6 +20,7 @@ export default async function ConversationsPage({ searchParams }: PageProps<"/pa
   return (
     <PrefetchedInbox
       search={searchParamText(busca)}
+      waiting={isWaitingFilter(searchParamText(filtro))}
       conversationId={searchParamText(conversa)}
       historyNotImported={channel?.historyNotImported ?? false}
       canDeleteContacts={scope.role === "owner"}

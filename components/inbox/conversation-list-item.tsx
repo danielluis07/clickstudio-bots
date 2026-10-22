@@ -1,3 +1,4 @@
+import { ConversationOwnership } from "@/components/inbox/conversation-ownership";
 import { formatShortDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { contactDisplayName } from "@/modules/conversations/hooks";
@@ -25,6 +26,7 @@ export function ConversationListItem({
       )}
     >
       <span className="truncate font-medium">{contactDisplayName(conversation.contact)}</span>
+      <ConversationOwnership conversation={conversation} />
       <time
         dateTime={conversation.lastMessageAt.toISOString()}
         className="text-xs text-muted-foreground"

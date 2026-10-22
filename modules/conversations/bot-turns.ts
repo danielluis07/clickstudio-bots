@@ -3,11 +3,15 @@ import type { Database } from "@/db/database";
 import { channel, conversation, message } from "@/db/schema";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
 import type { HandoffReason } from "@/modules/bot";
+import { resolveUnresolvedEchoes } from "@/modules/conversations/echoes";
+import {
+  handOffFromBot,
+  handoffFields,
+  type ConversationHandoffReason,
+} from "@/modules/conversations/handoff";
 import { createConversationRepository } from "@/modules/conversations/repository";
 
 export const botLeaseMs = 120_000;
-
-type LiveHandoffReason = HandoffReason | "limite_atingido";
 
 // Only verified jobs and daily maintenance call this resolver. It derives
 // proof from the stored Channel phone-number-id, never a request's Tenant id.
@@ -141,17 +145,17 @@ export const createConversationBotRepository = (db: Database, scope: ChannelRout
           )
           .returning({ id: message.id });
         if (!failed.length) return false;
-        await tx
-          .update(conversation)
-          .set({ owner: "team", handoffReason: "bot_indisponivel" })
-          .where(ownsConversation(conversationId));
+        // A Member's earlier Handoff keeps its reason.
+        await handOffFromBot(tx, scope, conversationId, "bot_indisponivel");
+        // Now with the team, whatever those echoes were.
+        await resolveUnresolvedEchoes(tx, scope.tenantId, conversationId, { handOff: false });
         return true;
       });
     },
-    async handoff(conversationId: string, token: string, reason: LiveHandoffReason) {
+    async handoff(conversationId: string, token: string, reason: ConversationHandoffReason) {
       await db
         .update(conversation)
-        .set({ owner: "team", handoffReason: reason })
+        .set(handoffFields(reason))
         .where(
           and(
             ownsConversation(conversationId),
@@ -185,6 +189,14 @@ export const createConversationBotRepository = (db: Database, scope: ChannelRout
           )
           .returning({ tenantId: conversation.tenantId });
         if (!valid.length) return null;
+        // Resuming after a Handoff settles the backlog, possibly while this
+        // turn generated its reply. A settled snapshot is never answered.
+        const stillUnanswered = await tx
+          .select({ id: message.id })
+          .from(message)
+          .where(and(unanswered(conversationId), inArray(message.id, ids)))
+          .for("update");
+        if (stillUnanswered.length !== ids.length) return null;
         const [pending] = await tx
           .insert(message)
           .values({
@@ -210,7 +222,7 @@ export const createConversationBotRepository = (db: Database, scope: ChannelRout
           .update(conversation)
           .set({
             lastMessageAt: sql`greatest(${conversation.lastMessageAt}, ${now.toISOString()}::timestamptz)`,
-            ...(handoffReason ? { owner: "team" as const, handoffReason } : {}),
+            ...(handoffReason ? handoffFields(handoffReason) : {}),
           })
           .where(ownsConversation(conversationId));
         return pending.id;

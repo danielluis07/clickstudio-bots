@@ -8,13 +8,14 @@ import { useConversationList } from "@/modules/conversations/hooks";
 
 type ConversationListProps = {
   search: string;
+  waiting: boolean;
   selectedId: string;
   onSelect: (conversationId: string) => void;
 };
 
-export function ConversationList({ search, selectedId, onSelect }: ConversationListProps) {
+export function ConversationList({ search, waiting, selectedId, onSelect }: ConversationListProps) {
   const { conversations, isPending, isError, hasMore, loadMore, isLoadingMore } =
-    useConversationList(search);
+    useConversationList(search, waiting);
 
   if (isPending)
     return <Skeleton className="m-3 h-16" aria-busy="true" aria-label="Carregando conversas" />;
@@ -25,7 +26,11 @@ export function ConversationList({ search, selectedId, onSelect }: ConversationL
   if (conversations.length === 0) {
     return (
       <InboxNotice>
-        {search ? "Nenhuma conversa encontrada." : "Nenhuma conversa ainda."}
+        {search
+          ? "Nenhuma conversa encontrada."
+          : waiting
+            ? "Nenhuma conversa aguardando a equipe."
+            : "Nenhuma conversa ainda."}
       </InboxNotice>
     );
   }

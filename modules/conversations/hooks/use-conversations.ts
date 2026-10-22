@@ -4,13 +4,14 @@ import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-qu
 import { nextPageCursor, retryUnlessNotFound } from "@/modules/conversations/hooks/paging";
 import { useTRPC } from "@/trpc/client";
 
-// The Tenant's Conversations, most recent activity first. While a new search
-// loads, the previous results stay on screen.
-export const useConversationList = (search: string) => {
+// The Tenant's Conversations, most recent activity first, optionally only
+// those waiting for the team. While a new search loads, the previous results
+// stay on screen.
+export const useConversationList = (search: string, waiting: boolean) => {
   const trpc = useTRPC();
   const query = useInfiniteQuery(
     trpc.conversations.list.infiniteQueryOptions(
-      { search },
+      { search, waiting },
       { getNextPageParam: nextPageCursor, placeholderData: keepPreviousData },
     ),
   );

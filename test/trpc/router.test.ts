@@ -247,6 +247,35 @@ describe("tRPC router", () => {
     expect(notifier.pings).toEqual([{ tenantId: "tenant-b", ping: { contactId: contactOfB } }]);
   });
 
+  test("any Member uses the Handoff controls, which refuse another Tenant's Conversation", async () => {
+    const input = { conversationId: conversationOfB };
+    for (const path of ["handoff.takeOver", "handoff.returnToBot", "handoff.resolve"])
+      expect([path, await codeOf(callByPath(callerFor(ownerA), path, input))]).toEqual([
+        path,
+        "NOT_FOUND",
+      ]);
+    const attendant = callerFor({ userId: "attendant", activeTenantId: "tenant-b" });
+    const ownerB = callerFor({ userId: "owner-b", activeTenantId: "tenant-b" });
+    const ownership = async () => {
+      const { owner, handoffReason, waiting } = await ownerB.conversations.get(input);
+      return { owner, handoffReason, waiting };
+    };
+
+    await ownerB.handoff.takeOver(input);
+    expect(await ownership()).toEqual({ owner: "team", handoffReason: "assumida", waiting: true });
+    expect(
+      (await attendant.conversations.list({ waiting: true })).conversations.map(({ id }) => id),
+    ).toEqual([conversationOfB]);
+    await attendant.handoff.returnToBot(input);
+    expect(await ownership()).toEqual({ owner: "bot", handoffReason: "assumida", waiting: true });
+    await attendant.handoff.resolve(input);
+    expect(await ownership()).toEqual({ owner: "bot", handoffReason: null, waiting: false });
+    expect(await attendant.conversations.list({ waiting: true })).toEqual({
+      conversations: [],
+      nextCursor: null,
+    });
+  });
+
   test("Contact deletion refuses non-owners and foreign Contacts, and authorizes the owner", async () => {
     const input = { contactId: contactOfB };
     expect(

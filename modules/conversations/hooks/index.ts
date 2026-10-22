@@ -3,6 +3,13 @@ export {
   formatContactPhone,
 } from "@/modules/conversations/hooks/contact-display";
 export {
+  conversationFilters,
+  conversationOwnerLabels,
+  handoffReasonLabels,
+  isWaitingFilter,
+} from "@/modules/conversations/hooks/handoff-display";
+export { useHandoffControls } from "@/modules/conversations/hooks/use-handoff-controls";
+export {
   messageAuthorLabel,
   messageEditedLabel,
   messagePlaceholder,

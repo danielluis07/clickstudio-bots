@@ -6,11 +6,13 @@ import { HydrateClient, prefetch, prefetchInfinite, trpc } from "@/trpc/server";
 // keeps it fresh. Rendered only after the page's guard.
 export async function PrefetchedInbox({
   search,
+  waiting,
   conversationId,
   historyNotImported,
   canDeleteContacts,
 }: {
   search: string;
+  waiting: boolean;
   conversationId: string;
   historyNotImported: boolean;
   canDeleteContacts: boolean;
@@ -18,7 +20,7 @@ export async function PrefetchedInbox({
   await Promise.all([
     prefetchInfinite(
       trpc.conversations.list.infiniteQueryOptions(
-        { search },
+        { search, waiting },
         { getNextPageParam: nextPageCursor },
       ),
     ),

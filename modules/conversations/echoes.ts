@@ -1,8 +1,9 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
-import { message } from "@/db/schema";
+import { conversation, message } from "@/db/schema";
 import type { ChannelRoute } from "@/modules/channels";
 import { withContactAdmission } from "@/modules/conversations/contact-deletion";
+import { handOffFromBot } from "@/modules/conversations/handoff";
 
 // A text a Member sent from the WhatsApp Business app or a companion
 // device, which coexistence echoes to the platform.
@@ -28,12 +29,48 @@ export type EchoClassification = {
 const lockWamid = (tx: Transaction, tenantId: string, wamid: string) =>
   tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${tenantId}:${wamid}`}, 0))`);
 
+// Serialises a Conversation's echo filing with its Bot reply's outcome.
+const lockConversation = (tx: Transaction, tenantId: string, conversationId: string) =>
+  tx
+    .select({ id: conversation.id })
+    .from(conversation)
+    .where(and(eq(conversation.id, conversationId), eq(conversation.tenantId, tenantId)))
+    .for("update");
+
+// Settles the app echoes filed while the Bot's reply awaited its wamid. Those
+// still standing once the reply has its wamid were a Member's app replies.
+export const resolveUnresolvedEchoes = async (
+  tx: Transaction,
+  tenantId: string,
+  conversationId: string,
+  { handOff }: { handOff: boolean },
+) => {
+  const resolved = await tx
+    .update(message)
+    .set({ echoUnresolved: false })
+    .where(
+      and(
+        eq(message.tenantId, tenantId),
+        eq(message.conversationId, conversationId),
+        eq(message.echoUnresolved, true),
+      ),
+    )
+    .returning({ id: message.id });
+  if (handOff && resolved.length)
+    await handOffFromBot(tx, { tenantId }, conversationId, "resposta_no_app");
+};
+
 // Gives the Tenant's sent message the wamid Meta answered with. Its echo may
 // have been filed as an app reply before that answer; it was this message all
 // along, so the echo's row gives way and its delivery status carries over.
 export const recordSentWamid = (db: Database, tenantId: string, messageId: string, wamid: string) =>
   db.transaction(async (tx) => {
     await lockWamid(tx, tenantId, wamid);
+    const [sent] = await tx
+      .select({ origin: message.origin, conversationId: message.conversationId })
+      .from(message)
+      .where(and(eq(message.id, messageId), eq(message.tenantId, tenantId)));
+    if (sent) await lockConversation(tx, tenantId, sent.conversationId);
     const [echoed] = await tx
       .delete(message)
       .where(
@@ -49,6 +86,8 @@ export const recordSentWamid = (db: Database, tenantId: string, messageId: strin
           sql`case when ${message.origin} = 'bot' then 'sent' else ${message.status} end`,
       })
       .where(and(eq(message.id, messageId), eq(message.tenantId, tenantId)));
+    if (sent?.origin === "bot")
+      await resolveUnresolvedEchoes(tx, tenantId, sent.conversationId, { handOff: true });
   });
 
 export const recordBotReplySent = (
@@ -64,8 +103,9 @@ const classify = (stored: { origin: string; conversationId: string }): EchoClass
 });
 
 // Files an echo not matched to the platform's own send as a Member's reply
-// from the app. An echo of an own send changes nothing. Safe to repeat: a
-// repeated echo is classified as it was the first time.
+// from the app, which silences the Bot. An echo of an own send changes
+// nothing. Safe to repeat: a repeated echo is classified as it was the first
+// time, and only the first filing hands off.
 export const recordMessageEcho = (db: Database, route: ChannelRoute, echo: MessageEcho) =>
   db.transaction(async (tx): Promise<EchoClassification | null> => {
     const findStored = async () => {
@@ -90,6 +130,21 @@ export const recordMessageEcho = (db: Database, route: ChannelRoute, echo: Messa
       },
       async ({ tx, fileConversation }) => {
         const conversationId = await fileConversation();
+        await lockConversation(tx, route.tenantId, conversationId);
+        // While the Bot's reply awaits its wamid, this may be that reply's echo.
+        const [botSending] = await tx
+          .select({ id: message.id })
+          .from(message)
+          .where(
+            and(
+              eq(message.tenantId, route.tenantId),
+              eq(message.conversationId, conversationId),
+              eq(message.origin, "bot"),
+              eq(message.status, "pending"),
+              isNull(message.wamid),
+            ),
+          )
+          .limit(1);
         const [inserted] = await tx
           .insert(message)
           .values({
@@ -103,9 +158,12 @@ export const recordMessageEcho = (db: Database, route: ChannelRoute, echo: Messa
             type: "text",
             text: echo.text,
             sentAt: echo.sentAt,
+            echoUnresolved: Boolean(botSending),
           })
           .onConflictDoNothing({ target: [message.tenantId, message.wamid] })
           .returning({ origin: message.origin, conversationId: message.conversationId });
+        if (inserted && !botSending)
+          await handOffFromBot(tx, route, conversationId, "resposta_no_app");
         // A concurrent job stored the same wamid first.
         return classify(inserted ?? (await findStored()));
       },
