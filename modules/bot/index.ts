@@ -37,3 +37,10 @@ export {
 export type { HandoffReason } from "@/modules/bot/tools";
 export { createBotCore, type BotCore, type TurnOutcome } from "@/modules/bot/turn";
 export type { TurnUsage, UsageMeter } from "@/modules/bot/usage";
+export {
+  createBotSandbox,
+  sandboxDailyCap,
+  sandboxInputSchema,
+  type BotSandbox,
+  type SandboxMessage,
+} from "@/modules/bot/sandbox";

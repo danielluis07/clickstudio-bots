@@ -1,4 +1,4 @@
-import { boolean, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, date, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { member, organization } from "@/db/schema/tenancy";
 
 // A Tenant's Bot behaviour settings, saved by its owner. Absent until the
@@ -25,4 +25,13 @@ export const botSettings = pgTable("bot_settings", {
     onDelete: "set null",
   }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
+
+// Separate from production usage. One row per Tenant, with no sandbox content.
+export const botSandboxUsage = pgTable("bot_sandbox_usage", {
+  tenantId: text("tenant_id")
+    .primaryKey()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  day: date("day").notNull(),
+  turns: integer("turns").notNull(),
 });
