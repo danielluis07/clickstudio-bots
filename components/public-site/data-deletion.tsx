@@ -43,10 +43,10 @@ export function DataDeletion() {
           até 15 dias.
         </p>
         <p>
-          A exclusão abrange o contato, suas conversas, transcrições de voz e campos capturados.
-          Eventos brutos recebidos da Meta ainda podem conter texto e telefone por até 30 dias.
-          Backups deixam de conter os dados conforme a janela de recuperação divulgada na Política
-          de Privacidade. Se você enviar uma nova mensagem depois, será criado um novo contato.
+          A exclusão abrange o contato, suas conversas e campos capturados. Eventos brutos recebidos
+          da Meta ainda podem conter texto e telefone por até 30 dias. Backups deixam de conter os
+          dados conforme a janela de recuperação divulgada na Política de Privacidade. Se você
+          enviar uma nova mensagem depois, será criado um novo contato.
         </p>
         <p>
           A exclusão na ClickStudio não apaga a conversa no aplicativo WhatsApp Business do negócio

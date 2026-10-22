@@ -25,7 +25,7 @@ Copy this template into the ignored run directory. Blank means pending, never pa
 | Mean human tone | >=4/5 | | |
 | Unnatural / non-pt-BR phrasing | 0 | | |
 | Complete-reply latency p95, nearest rank, hosting region | <=8,000 ms | | |
-| Model + transcription cost per Tenant / 5,000 replies | <=R$20 | | |
+| Model cost per Tenant / 5,000 text replies | <=R$20 | | |
 
 | Usage and cost | Barber | Bakery | Pet |
 | --- | --- | --- | --- |
@@ -40,17 +40,10 @@ Copy this template into the ignored run directory. Blank means pending, never pa
 | Complete-reply p50 / p95 / max ms | | | |
 | Measured model cost BRL | | | |
 | Model cost projected to 5,000 replies BRL | | | |
-| Authorized audio notes / audio seconds / billable seconds | | | |
-| Transcription cost BRL / assumed voice share | | | |
-| Audio end-answer correctness / human tone | | | |
-| Combined cost at 5,000 replies BRL | | | |
 
 Project model cost from the measured case mix, including retries and cache misses.
-For the combined projection, record the assumed voice share and measured mean
-transcription cost per voice reply: model projection + 5,000 × voice share × mean
-transcription cost. If voice/text model costs differ, weight those separately.
 Report model failures as incomplete cost evidence; zero tokens on failure is not
-evidence of a free request. The text runner's `modelCost` gate excludes audio.
+evidence of a free request. Transcription is deferred and adds no MVP cost gate.
 
 Record per-case human judgments in `reviews.json`, bound to this run id. Review
 the delivered reply against the case's exact Knowledge base, behaviour and rubric.
@@ -59,12 +52,11 @@ minor edits, 5 natural and appropriate. Record any non-Brazilian or translated
 phrasing separately. A keyword match alone cannot establish semantic grounding
 or absence of invented commitments.
 
-Record voice evidence with `voice-notes.template.json`. Keep it local until data
-handling and authorization permit sharing. The 15 slots are pending until actual
-authorized recordings have been evaluated through the production transcription
-and Bot path; transcripts typed by an evaluator are not transcription evidence.
+Voice transcription is [deferred](../voice-notes.md) (#62). The separate
+`voice-notes.template.json` is retained for possible future use and is not
+required for provider acceptance or launch.
 
 Decision, failed case ids, limitations, reviewer and rerun action:
 
-_Pending. A passing text score alone does not establish the audio, provider terms,
-hosting-region or combined-cost launch gates._
+_Pending. A passing text score alone does not establish provider terms or
+hosting-region evidence. Audio review and Groq approval are not launch gates._

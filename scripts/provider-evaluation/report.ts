@@ -63,10 +63,10 @@ export const printEvaluation = (artifact: EvaluationArtifact, reviews: HumanRevi
     `Controlled tool-refusal recovery probes: ${score.recoveryCoverage.completed}/${score.recoveryCoverage.scheduled}; both real calls are metered, the injected call is excluded from provider call scores.`,
   );
   console.log(
-    "Voice notes: PENDING (15 authorized slots); transcription usage/cost is not included in model-only projections.",
+    "Voice notes: DEFERRED (#62); transcription is outside MVP scope and is not a launch gate.",
   );
   console.log(
-    `Text evaluation: ${score.passed && artifact.complete ? "PASS" : "FAIL OR PENDING"}. Hosting-region evidence and audio review remain separate launch evidence.`,
+    `Text evaluation: ${score.passed && artifact.complete ? "PASS" : "FAIL OR PENDING"}. Hosting-region evidence and provider terms remain separate launch evidence.`,
   );
   return score;
 };

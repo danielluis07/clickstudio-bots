@@ -7,6 +7,9 @@ restores Bun's dependency cache, and installs with the frozen lockfile.
 
 ## Setup
 
+Voice transcription is deferred from the MVP. See the [voice-note scope decision](docs/voice-notes.md)
+for unsupported-media handling and the requirements to revisit it in the future.
+
 ```bash
 bun install
 ```
