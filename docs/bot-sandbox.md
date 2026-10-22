@@ -6,6 +6,10 @@ The Tenant owner opens **Painel → Bot → Testar Bot** (`/painel/bot`) and wri
 as a sandbox Contact. No connected Channel or activated Bot is required. Other
 Members cannot use the sandbox; the module and tRPC endpoint both enforce this.
 
+Before trying the UI, run `bun run doctor`; see
+[local readiness](local-development.md) for prerequisites and the optional live
+provider probe.
+
 Each reply calls `createBotCore` with the same `Model` contract, prompt rendering,
 context limits and capability validation used by production and evaluation.
 `readBehaviour` and `readKnowledgeBase` load the current saved data for every turn.
@@ -80,3 +84,23 @@ production-record isolation, failed providers, the daily reset, Tenant separatio
 owner authorization and the pt-BR cap refusal. Production reply counting is not
 implemented yet; isolation is enforced by never supplying its meter or send path
 to the sandbox.
+
+## Code entry points
+
+Start with the public module interface, then follow its exports to the relevant
+implementation. Code outside the module imports its public interface, following
+[the dependency rules](CONVENTIONS.md#layout).
+
+| Work | Start here |
+| --- | --- |
+| Bot public interface | [`modules/bot/index.ts`](../modules/bot/index.ts) |
+| Reply decisions, context and capability validation | [`modules/bot/turn.ts`](../modules/bot/turn.ts) |
+| Saved Behaviour settings and defaults | [`modules/bot/settings.ts`](../modules/bot/settings.ts) |
+| Saved Knowledge base reads | [`modules/knowledge-base/index.ts`](../modules/knowledge-base/index.ts), then its `readKnowledgeBase` export |
+| Sandbox isolation and daily allowance | [`modules/bot/sandbox.ts`](../modules/bot/sandbox.ts) |
+| Provider selection and SDK adapter | [`platform/ai-sdk-model.ts`](../platform/ai-sdk-model.ts), wired by [`server/services.ts`](../server/services.ts) |
+| Authenticated sandbox transport | [`trpc/routers/sandbox.ts`](../trpc/routers/sandbox.ts) |
+| Browser state | [`modules/bot/hooks/index.ts`](../modules/bot/hooks/index.ts), then its `useBotSandbox` export |
+| Dashboard UI | [`components/bot/bot-sandbox-chat.tsx`](../components/bot/bot-sandbox-chat.tsx) |
+| Counter schema and migrations | [`db/schema/bot.ts`](../db/schema/bot.ts), [`drizzle/`](../drizzle/) |
+| Public behaviour tests | [`test/modules/bot/sandbox.test.ts`](../test/modules/bot/sandbox.test.ts), [`test/trpc/router.test.ts`](../test/trpc/router.test.ts) |
