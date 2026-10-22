@@ -24,7 +24,12 @@ export async function BotSettingsEditor({ scope }: { scope: TenantScope }) {
           </p>
         )}
       </div>
-      <BotSettingsForm settings={settings} limits={botSettingsLimits} canEdit={canEdit} />
+      <BotSettingsForm
+        settings={settings}
+        savedAt={updatedAt}
+        limits={botSettingsLimits}
+        canEdit={canEdit}
+      />
     </div>
   );
 }

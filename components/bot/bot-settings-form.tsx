@@ -13,17 +13,24 @@ import { saveBotSettingsAction } from "@/server/actions/bot-settings";
 
 type BotSettingsFormProps = {
   settings: BehaviourSettings;
+  // When the settings were last saved. A save remounts the fields so they
+  // show the settings as saved; their initial values cannot change in place.
+  savedAt: Date | null;
   limits: BotSettingsLimits;
   // Other Members see the settings without being able to change them.
   canEdit: boolean;
 };
 
-export function BotSettingsForm({ settings, limits, canEdit }: BotSettingsFormProps) {
+export function BotSettingsForm({ settings, savedAt, limits, canEdit }: BotSettingsFormProps) {
   const form = useBotSettingsForm(saveBotSettingsAction);
 
   return (
     <form onSubmit={form.submit}>
-      <fieldset disabled={!canEdit || form.pending} className="flex flex-col gap-10">
+      <fieldset
+        key={savedAt?.toISOString()}
+        disabled={!canEdit || form.pending}
+        className="flex flex-col gap-10"
+      >
         <BusinessProfileFields settings={settings} limits={limits} />
         <BusinessHoursFields hours={settings.hours} />
         <BotStyleFields settings={settings} limits={limits} />
