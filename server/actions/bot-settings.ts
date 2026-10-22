@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import {
   botSettingsLimits,
+  linkSettingsLimits,
   weekdays,
   type BehaviourSettings,
   type BusinessHours,
@@ -10,7 +11,7 @@ import {
 } from "@/modules/bot";
 import { formText, type FormState } from "@/server/actions/form-state";
 import { requireTenantScope } from "@/server/auth/guards";
-import { botSettingsEditor, captureSettingsEditor } from "@/server/services";
+import { botSettingsEditor, captureSettingsEditor, linkSettingsEditor } from "@/server/services";
 
 // The bot module re-checks that the actor is the Tenant's owner and that
 // every setting is within its bounds.
@@ -65,6 +66,36 @@ const captureErrorMessages = {
   forbidden: "Apenas o responsável pelo negócio pode alterar a captura de dados.",
   invalid: "Escolha ao menos um dado para capturar, ou desative a captura.",
 } as const;
+
+export async function saveLinkSettingsAction(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const scope = await requireTenantScope();
+  const ids = formData.getAll("linkId");
+  const labels = formData.getAll("linkLabel");
+  const urls = formData.getAll("linkUrl");
+  if (ids.length !== labels.length || ids.length !== urls.length)
+    return { status: "error", message: "Confira o nome e o endereço de cada link." };
+  const result = await linkSettingsEditor.saveLinks(scope, {
+    enabled: formData.has("linksEnabled"),
+    links: ids.map((id, index) => ({ id, label: labels[index], url: urls[index] })) as {
+      id: string;
+      label: string;
+      url: string;
+    }[],
+  });
+  if (!result.ok)
+    return {
+      status: "error",
+      message:
+        result.error === "forbidden"
+          ? "Apenas o responsável pelo negócio pode alterar os links do Bot."
+          : `Cadastre até ${linkSettingsLimits.links} links com nome de até ${linkSettingsLimits.label} caracteres e endereço http:// ou https:// de até ${linkSettingsLimits.url} caracteres, sem usuário ou senha. Para ativar, cadastre ao menos um link.`,
+    };
+  refresh();
+  return { status: "success", message: "Salvo. O Bot já usa estes links na próxima resposta." };
+}
 
 // The module refuses any mode other than off, optional or required.
 const formCaptureMode = (formData: FormData, field: string) =>

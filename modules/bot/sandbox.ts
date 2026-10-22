@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Database } from "@/db/database";
 import { botActivation, botSandboxUsage } from "@/db/schema";
 import { readCapture } from "@/modules/bot/capture";
+import { readLinks } from "@/modules/bot/links";
 import type { Model } from "@/modules/bot/model";
 import { botTimeZone } from "@/modules/bot/schedule";
 import { readBehaviour } from "@/modules/bot/settings";
@@ -110,6 +111,7 @@ export const createBotSandbox = ({
           getBehaviour: (turn) => readBehaviour(db, turn.scope),
           getKnowledgeBase: (turn) => readKnowledgeBase(db, turn.scope),
           getCapture: (turn) => readCapture(db, turn.scope),
+          getLinks: (turn) => readLinks(db, turn.scope),
           getContactDetails: async () => contact,
           saveContactDetails: async (_turn, details) => {
             // As on a production Contact, a capture never replaces a name.

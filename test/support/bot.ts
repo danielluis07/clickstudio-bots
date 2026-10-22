@@ -1,5 +1,7 @@
 import {
   disabledCapture,
+  disabledLinks,
+  type LinkSettings,
   type BehaviourSettings,
   type BotRepository,
   type BotTurn,
@@ -42,6 +44,7 @@ export type TestBotRepository = BotRepository & {
   behaviour: BehaviourSettings;
   knowledgeBase: KnowledgeBase;
   capture: CaptureSettings;
+  links: LinkSettings;
   // The turn's Contact as saved; captured details are merged in.
   contact: ContactDetails;
   // Every capture the core saved, in order.
@@ -58,6 +61,7 @@ export const createTestBotRepository = (): TestBotRepository => {
     behaviour: testBehaviour,
     knowledgeBase: testKnowledgeBase,
     capture: disabledCapture,
+    links: disabledLinks,
     contact: noContactDetails,
     captured: [],
     messages: [],
@@ -68,6 +72,7 @@ export const createTestBotRepository = (): TestBotRepository => {
     },
     getKnowledgeBase: async () => repository.knowledgeBase,
     getCapture: async () => repository.capture,
+    getLinks: async () => repository.links,
     getContactDetails: async () => repository.contact,
     saveContactDetails: async (_turn, details) => {
       repository.captured.push(details);

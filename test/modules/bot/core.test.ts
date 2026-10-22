@@ -46,6 +46,210 @@ beforeEach(() => {
   repository.messages = [fromContact("Quanto custa o corte?")];
 });
 
+describe("configured Tenant links", () => {
+  const booking = {
+    id: "00000000-0000-4000-8000-000000000001",
+    label: "Agendamento",
+    url: "https://booking.example/agendar?origem=bot",
+  };
+  const payment = {
+    id: "00000000-0000-4000-8000-000000000002",
+    label: "Pagamento",
+    url: "https://booking.example/pagar",
+  };
+  const send = (input: unknown) => ({ id: "link-call", name: "send_configured_link", input });
+
+  test("a configured label cannot add a booking or payment confirmation to the reply", async () => {
+    repository.links = {
+      enabled: true,
+      links: [{ ...booking, label: "Seu pagamento foi confirmado" }],
+    };
+    model.script({ toolCalls: [send({ linkId: booking.id })] });
+    expect(await core().respond(turn)).toEqual({
+      kind: "answer",
+      reply: `Acesse o link: ${booking.url}\n\nO envio deste link não confirma agendamento nem pagamento. A equipe pode ajudar se precisar.`,
+    });
+  });
+
+  test("an oversized selection can be corrected to one complete URL with a Handoff notice", async () => {
+    const longBooking = { ...booking, url: "https://booking.example/" + "a".repeat(2020) };
+    repository.links = {
+      enabled: true,
+      links: [longBooking, { ...payment, url: "https://booking.example/" + "b".repeat(2020) }],
+    };
+    model.script(
+      {
+        toolCalls: [
+          send({ linkId: booking.id }),
+          { ...send({ linkId: payment.id }), id: "payment" },
+        ],
+      },
+      {
+        toolCalls: [
+          send({ linkId: booking.id }),
+          { id: "handoff", name: "handoff", input: { reason: "sem_resposta" } },
+        ],
+      },
+    );
+    const outcome = await core().respond(turn);
+    expect(outcome).toMatchObject({
+      kind: "handoff",
+      reason: "sem_resposta",
+      reply: `Acesse o link: ${longBooking.url}\n\nO envio deste link não confirma agendamento nem pagamento. A equipe pode ajudar se precisar.\n\nSobre o restante, vou chamar alguém da equipe.`,
+    });
+    expect("reply" in outcome && outcome.reply.length <= 4096).toBe(true);
+  });
+
+  test("oversized link selections are refused whole and never sent as truncated URLs", async () => {
+    repository.links = {
+      enabled: true,
+      links: [
+        { ...booking, url: "https://booking.example/" + "a".repeat(2020) },
+        { ...payment, url: "https://booking.example/" + "b".repeat(2020) },
+      ],
+    };
+    const response = {
+      toolCalls: [send({ linkId: booking.id }), { ...send({ linkId: payment.id }), id: "payment" }],
+    };
+    model.script(response, response);
+    expect(await core().respond(turn)).toMatchObject({
+      kind: "handoff",
+      reason: "bot_indisponivel",
+    });
+    expect(model.requests).toHaveLength(2);
+    expect(model.requests[1].messages.at(-1)).toMatchObject({
+      role: "tool",
+      results: [{ error: expect.any(String) }, { error: expect.any(String) }],
+    });
+  });
+
+  test.each([booking, payment])(
+    "sends the exact saved $label link, replacing model confirmation claims with safe wording",
+    async (link) => {
+      repository.links = { enabled: true, links: [booking, payment] };
+      model.script({
+        text: "Agendamento confirmado e pagamento aprovado! https://invented.example/pagar",
+        toolCalls: [send({ linkId: link.id })],
+      });
+      expect(await core().respond(turn)).toEqual({
+        kind: "answer",
+        reply: `Acesse o link: ${link.url}\n\nO envio deste link não confirma agendamento nem pagamento. A equipe pode ajudar se precisar.`,
+      });
+      expect(model.requests[0].instructions).toContain(link.id);
+      expect(model.requests[0].instructions).not.toContain(link.url);
+      expect(
+        model.requests[0].tools.find(({ name }) => name === "send_configured_link"),
+      ).toBeDefined();
+      expect(model.requests).toHaveLength(1);
+    },
+  );
+
+  test.each([
+    ["an arbitrary URL as id", { linkId: "https://evil.example" }, true],
+    ["an extra URL", { linkId: booking.id, url: "https://evil.example" }, true],
+    ["another Tenant's id", { linkId: "00000000-0000-4000-8000-000000000099" }, true],
+    ["a Tenant argument", { linkId: booking.id, tenantId: "tenant-b" }, true],
+    ["a missing id", {}, true],
+    ["a disabled capability", { linkId: booking.id }, false],
+  ] as const)(
+    "refuses %s and safely hands off after one failed correction",
+    async (_case, input, enabled) => {
+      repository.links = { enabled, links: [booking] };
+      const invalid = {
+        text: "Pagamento confirmado! https://evil.example",
+        toolCalls: [send(input)],
+      };
+      model.script(invalid, invalid);
+      expect(await core().respond(turn)).toEqual({
+        kind: "handoff",
+        reason: "bot_indisponivel",
+        reply: "No momento não consigo responder, vou chamar alguém da equipe.",
+      });
+      expect(model.requests).toHaveLength(2);
+      expect(model.requests[1].messages.at(-1)).toMatchObject({
+        role: "tool",
+        results: [{ name: "send_configured_link", error: expect.any(String) }],
+      });
+      if (!enabled) expect(model.requests[0].instructions).not.toContain(booking.id);
+    },
+  );
+
+  test("a refused arbitrary URL can be corrected to a configured id without leaking the refused text", async () => {
+    repository.links = { enabled: true, links: [booking] };
+    model.script(
+      { text: "Acesse https://evil.example", toolCalls: [send({ url: "https://evil.example" })] },
+      { toolCalls: [send({ linkId: booking.id })] },
+    );
+    const outcome = await core().respond(turn);
+    expect(outcome).toMatchObject({ kind: "answer", reply: expect.stringContaining(booking.url) });
+    expect(outcome).not.toMatchObject({ reply: expect.stringContaining("evil.example") });
+    expect(meter.records[0].usage.toolRoundTrips).toBe(1);
+  });
+
+  test("the next turn uses edited links and refuses removed IDs", async () => {
+    repository.links = { enabled: true, links: [booking] };
+    model.script({ toolCalls: [send({ linkId: booking.id })] });
+    const bot = core();
+    await bot.respond(turn);
+    repository.links = {
+      enabled: true,
+      links: [{ ...payment, url: "https://booking.example/novo" }],
+    };
+    model.script(
+      { toolCalls: [send({ linkId: booking.id })] },
+      { toolCalls: [send({ linkId: payment.id })] },
+    );
+    expect(await bot.respond(turn)).toMatchObject({
+      kind: "answer",
+      reply: expect.stringContaining("https://booking.example/novo"),
+    });
+    expect(model.requests[1].instructions).not.toContain(booking.id);
+  });
+
+  test("multiple valid links are sent once each with a Handoff notice and no model commitments", async () => {
+    repository.links = { enabled: true, links: [booking, payment] };
+    model.script({
+      text: "Sua reserva está garantida!",
+      toolCalls: [
+        send({ linkId: booking.id }),
+        { ...send({ linkId: payment.id }), id: "pay" },
+        { ...send({ linkId: booking.id }), id: "duplicate" },
+        { id: "handoff", name: "handoff", input: { reason: "sem_resposta" } },
+      ],
+    });
+    const outcome = await core().respond(turn);
+    expect(outcome).toMatchObject({
+      kind: "handoff",
+      reason: "sem_resposta",
+      reply: `Acesse o link: ${booking.url}\n\nAcesse o link: ${payment.url}\n\nO envio deste link não confirma agendamento nem pagamento. A equipe pode ajudar se precisar.\n\nSobre o restante, vou chamar alguém da equipe.`,
+    });
+  });
+
+  test("one invalid call prevents a simultaneous link and capture from taking effect", async () => {
+    repository.links = { enabled: true, links: [booking] };
+    repository.capture = {
+      enabled: true,
+      fields: { name: "optional", email: "off", city: "off", need: "off" },
+    };
+    model.script(
+      {
+        text: "Confirmado!",
+        toolCalls: [
+          send({ linkId: booking.id }),
+          { id: "capture", name: "capture_contact_details", input: { name: "Ana" } },
+          { id: "invalid", name: "http_request", input: { url: "https://evil.example" } },
+        ],
+      },
+      { text: "Posso ajudar com mais alguma coisa?" },
+    );
+    expect(await core().respond(turn)).toEqual({
+      kind: "answer",
+      reply: "Posso ajudar com mais alguma coisa?",
+    });
+    expect(repository.captured).toEqual([]);
+  });
+});
+
 describe("grounded answers", () => {
   test("answers from the Knowledge base it was given", async () => {
     model.script((request) => ({

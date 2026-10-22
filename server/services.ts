@@ -10,6 +10,7 @@ import {
   createBotSandbox,
   createBotSettingsEditor,
   createCaptureSettingsEditor,
+  createLinkSettingsEditor,
   createLiveBot,
 } from "@/modules/bot";
 import { createBotModel } from "@/platform/ai-sdk-model";
@@ -60,6 +61,7 @@ export const knowledgeBaseEditor = createKnowledgeBaseEditor({ db, clock: system
 export const botSettingsEditor = createBotSettingsEditor({ db, clock: systemClock });
 
 export const captureSettingsEditor = createCaptureSettingsEditor({ db, clock: systemClock });
+export const linkSettingsEditor = createLinkSettingsEditor({ db, clock: systemClock });
 
 const model = createBotModel({
   gatewayApiKey: env.AI_GATEWAY_API_KEY,

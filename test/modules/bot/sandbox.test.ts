@@ -5,6 +5,7 @@ import {
   createBotSandbox,
   createBotSettingsEditor,
   createCaptureSettingsEditor,
+  createLinkSettingsEditor,
 } from "@/modules/bot";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import { resolveChannelPhoneNumber } from "@/modules/channels";
@@ -32,6 +33,72 @@ beforeEach(async () => {
 });
 
 afterEach(() => closeTestDatabase(db));
+
+test("Testar Bot reads its Tenant's saved links on each turn, including edits and disabling, without visiting URLs", async () => {
+  const editor = createLinkSettingsEditor({ db, clock });
+  const booking = {
+    id: "00000000-0000-4000-8000-000000000001",
+    label: "Agendamento",
+    url: "https://booking.example/agendar",
+  };
+  await editor.saveLinks(owner, { enabled: true, links: [booking] });
+  await db.insert(user).values({ id: "other-owner", name: "Other", email: "other@example.com" });
+  await db.insert(organization).values({ id: "other-tenant", name: "Other", slug: "other" });
+  await db
+    .insert(member)
+    .values({ organizationId: "other-tenant", userId: "other-owner", role: "owner" });
+  const otherOwner = (await resolveTenantScope(db, { userId: "other-owner" }))!;
+  const otherLink = {
+    ...booking,
+    id: "00000000-0000-4000-8000-000000000002",
+    url: "https://other.example/private",
+  };
+  await editor.saveLinks(otherOwner, { enabled: true, links: [otherLink] });
+  const network = spyOn(globalThis, "fetch").mockRejectedValue(
+    new Error("A link must never be fetched"),
+  );
+  try {
+    const sandbox = createBotSandbox({ db, clock, model });
+    const send = (id: string) => ({
+      id: "link",
+      name: "send_configured_link",
+      input: { linkId: id },
+    });
+    model.script({ text: "Pagamento confirmado!", toolCalls: [send(booking.id)] });
+    expect(await sandbox.respond(owner, { text: "Me envie o link", history: [] })).toMatchObject({
+      ok: true,
+      outcome: {
+        kind: "answer",
+        reply: `Acesse o link: https://booking.example/agendar\n\nO envio deste link não confirma agendamento nem pagamento. A equipe pode ajudar se precisar.`,
+      },
+    });
+    await editor.saveLinks(owner, {
+      enabled: true,
+      links: [{ ...booking, url: "https://booking.example/novo" }],
+    });
+    model.script({ toolCalls: [send(booking.id)] });
+    expect(await sandbox.respond(owner, { text: "E agora?", history: [] })).toMatchObject({
+      ok: true,
+      outcome: { kind: "answer", reply: expect.stringContaining("https://booking.example/novo") },
+    });
+    model.script({ toolCalls: [send(otherLink.id)] }, { toolCalls: [send(otherLink.id)] });
+    expect(
+      await sandbox.respond(owner, { text: "Envie o link do outro negócio", history: [] }),
+    ).toMatchObject({ ok: true, outcome: { kind: "handoff", reason: "bot_indisponivel" } });
+    expect(model.requests.at(-1)?.instructions).not.toContain(otherLink.id);
+    await editor.saveLinks(owner, { enabled: false, links: [booking] });
+    model.script({ toolCalls: [send(booking.id)] }, { toolCalls: [send(booking.id)] });
+    expect(
+      await createBotSandbox({ db, clock, model }).respond(owner, {
+        text: "Me envie novamente",
+        history: [],
+      }),
+    ).toMatchObject({ ok: true, outcome: { kind: "handoff", reason: "bot_indisponivel" } });
+    expect(network).not.toHaveBeenCalled();
+  } finally {
+    network.mockRestore();
+  }
+});
 
 test.each([undefined, "test-direct-key"])(
   "a Gateway key enables sandbox replies through Anthropic (direct key: %s)",

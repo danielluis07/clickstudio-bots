@@ -9,3 +9,4 @@ export {
 export { useBotSettingsForm } from "@/modules/bot/hooks/use-bot-settings-form";
 export { useBotSandbox, type SandboxChatMessage } from "@/modules/bot/hooks/use-bot-sandbox";
 export { useBotActivation } from "@/modules/bot/hooks/use-bot-activation";
+export { useBotLinkList } from "@/modules/bot/hooks/use-bot-link-list";

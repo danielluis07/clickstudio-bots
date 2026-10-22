@@ -231,7 +231,7 @@ test("published gate boundaries are inclusive, and p95 uses nearest rank instead
   expect(score.passed).toBe(true);
 });
 
-test("all 81 synthetic cases run with isolated Tenant facts, cold/warm prefixes and maximum-size Knowledge bases", async () => {
+test("all 99 synthetic cases run with isolated Tenant facts, cold/warm prefixes and maximum-size Knowledge bases", async () => {
   const corpus = createEvaluationCorpus("test-run");
   const model = createTestModel();
   for (const item of corpus.cases) {
@@ -240,8 +240,8 @@ test("all 81 synthetic cases run with isolated Tenant facts, cold/warm prefixes 
       model.script({ text: "Resposta sintética após recusa de ferramenta." });
   }
   const run = await runEvaluation({ ...corpus, model, pricing });
-  expect(run.cases).toHaveLength(81);
-  expect(scoreEvaluation(run).tenants.map(({ cases }) => cases)).toEqual([27, 27, 27]);
+  expect(run.cases).toHaveLength(99);
+  expect(scoreEvaluation(run).tenants.map(({ cases }) => cases)).toEqual([33, 33, 33]);
   expect(scoreEvaluation(run).recoveryCoverage).toEqual({ scheduled: 3, completed: 3 });
   const firstRequests = model.requests.filter(
     (request) => request.messages.at(-1)?.role !== "tool",
@@ -267,6 +267,44 @@ test("all 81 synthetic cases run with isolated Tenant facts, cold/warm prefixes 
     ].join("").length;
     expect(characters).toBe(30_000);
   }
+});
+
+test("the corpus exercises configured links through the production core with no invented commitments", async () => {
+  const corpus = createEvaluationCorpus();
+  const cases = corpus.cases.filter(({ tags }) =>
+    tags.some((tag) => tag === "link" || tag.startsWith("link-")),
+  );
+  const model = createTestModel();
+  for (const item of cases) {
+    const tenant = corpus.tenants.find(({ id }) => id === item.tenantId)!;
+    if (item.expected.handoff) {
+      model.script({
+        toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "sem_resposta" } }],
+      });
+    } else {
+      const link = tenant.links!.links[item.tags.includes("link-payment") ? 1 : 0];
+      model.script({
+        text: "Seu agendamento está confirmado e o pagamento aprovado!",
+        toolCalls: [{ id: "link", name: "send_configured_link", input: { linkId: link.id } }],
+      });
+    }
+  }
+  const run = await runEvaluation({ ...corpus, cases, model, pricing });
+  expect(run.cases).toHaveLength(21);
+  for (const item of run.cases) {
+    if (item.expected.handoff)
+      expect(item.outcome).toMatchObject({ kind: "handoff", reason: "sem_resposta" });
+    else {
+      const tenant = corpus.tenants.find(({ id }) => id === item.tenantId)!;
+      const link = tenant.links!.links[item.id.endsWith("link-payment") ? 1 : 0];
+      expect(item.outcome).toEqual({
+        kind: "answer",
+        reply: `Acesse o link: ${link.url}\n\nO envio deste link não confirma agendamento nem pagamento. A equipe pode ajudar se precisar.`,
+      });
+    }
+  }
+  expect(scoreEvaluation(run).gates.schemaValidity).toMatchObject({ value: 100, pass: true });
+  expect(scoreEvaluation(run).gates.crossTenantCalls).toMatchObject({ value: 0, pass: true });
 });
 
 test("a scoped argument cannot disappear from scores when production strips an unknown field", async () => {

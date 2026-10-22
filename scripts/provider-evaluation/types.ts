@@ -3,6 +3,7 @@ import type {
   ContextMessage,
   HandoffReason,
   KnowledgeBase,
+  LinkSettings,
   ModelResponse,
   ModelToolCall,
   TurnOutcome,
@@ -13,6 +14,7 @@ export type EvaluationTenant = {
   id: string;
   behaviour: BehaviourSettings;
   knowledgeBase: KnowledgeBase;
+  links?: LinkSettings;
 };
 export type EvaluationCase = {
   id: string;
@@ -20,6 +22,7 @@ export type EvaluationCase = {
   tags: string[];
   messages: Pick<ContextMessage, "author" | "text">[];
   knowledgeBase?: KnowledgeBase;
+  links?: LinkSettings;
   toolRefusalProbe?: boolean;
   expected: { handoff: HandoffReason | null; answerable: boolean; rubric: string };
 };

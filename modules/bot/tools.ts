@@ -1,9 +1,16 @@
 import { z } from "zod";
 import { captureInput, capturedFields, type CaptureSettings } from "@/modules/bot/capture";
+import {
+  availableLinks,
+  configuredLinkReply,
+  type ConfiguredLink,
+  type LinkSettings,
+} from "@/modules/bot/links";
 import type { ModelTool, ModelToolCall, ModelToolRefusal } from "@/modules/bot/model";
 import type { ContactDetails } from "@/modules/conversations";
 
 export const captureToolName = "capture_contact_details";
+export const linkToolName = "send_configured_link";
 
 // Why the Bot stepped aside. The model chooses among these;
 // "bot_indisponivel" is the core's own, after a provider or tool failure.
@@ -43,12 +50,22 @@ type OfferedTool = { name: string; description: string; input: z.ZodType };
 // The catalog tools this Tenant's Bot offers; a call to any other name is
 // refused. Inputs carry no Tenant, Conversation or Contact: the core applies
 // the turn's own.
-const offeredTools = (capture: CaptureSettings): OfferedTool[] => [
+const offeredTools = (capture: CaptureSettings, links: LinkSettings): OfferedTool[] => [
   {
     name: "handoff",
     description: "Pass the Conversation to the business's team, who will reply to the Contact.",
     input: handoffInput,
   },
+  ...(availableLinks(links).length
+    ? [
+        {
+          name: linkToolName,
+          description:
+            "Send a configured business link. This never books anything, makes a payment, confirms status, or fetches a URL. Select only its configured id.",
+          input: z.strictObject({ linkId: z.enum(availableLinks(links).map(({ id }) => id)) }),
+        },
+      ]
+    : []),
   ...(capturedFields(capture).length
     ? [
         {
@@ -61,8 +78,8 @@ const offeredTools = (capture: CaptureSettings): OfferedTool[] => [
     : []),
 ];
 
-export const modelTools = (capture: CaptureSettings): ModelTool[] =>
-  offeredTools(capture).map(({ name, description, input }) => ({
+export const modelTools = (capture: CaptureSettings, links: LinkSettings): ModelTool[] =>
+  offeredTools(capture, links).map(({ name, description, input }) => ({
     name,
     description,
     inputSchema: z.toJSONSchema(input),
@@ -74,13 +91,18 @@ export type CheckedCalls =
       handoff: z.output<typeof handoffInput> | null;
       // Every detail the response captured, later calls winning.
       captured: Partial<ContactDetails> | null;
+      links: ConfiguredLink[];
     }
   | { valid: false; errors: ModelToolRefusal[] };
 
 // Validates calls server-side whatever the provider checked. A response with
 // any invalid call is refused whole, so a valid call beside it does not run.
-export const checkToolCalls = (calls: ModelToolCall[], capture: CaptureSettings): CheckedCalls => {
-  const tools = offeredTools(capture);
+export const checkToolCalls = (
+  calls: ModelToolCall[],
+  capture: CaptureSettings,
+  links: LinkSettings,
+): CheckedCalls => {
+  const tools = offeredTools(capture, links);
   const checked = calls.map((call): { call: ModelToolCall; input?: unknown; error?: string } => {
     const tool = tools.find(({ name }) => name === call.name);
     if (!tool) return { call, error: `Tool "${call.name}" is not available.` };
@@ -89,11 +111,26 @@ export const checkToolCalls = (calls: ModelToolCall[], capture: CaptureSettings)
       ? { call, input: parsed.data }
       : { call, error: `Invalid input: ${z.prettifyError(parsed.error)}` };
   });
+  const selected = new Set(
+    checked
+      .filter(({ call, error }) => call.name === linkToolName && !error)
+      .map(({ input }) => (input as { linkId: string }).linkId),
+  );
+  const selectedLinks = availableLinks(links).filter(({ id }) => selected.has(id));
+  // Keep complete URLs and reserve 256 characters for a Handoff or required-detail
+  // notice within WhatsApp's 4,096-character text limit. Refuse before any capture.
+  if (selectedLinks.length && configuredLinkReply(selectedLinks).length > 4096 - 256) {
+    for (const item of checked) {
+      if (item.call.name === linkToolName)
+        item.error = "Selected links exceed the reply length limit. Select fewer links.";
+    }
+  }
   if (checked.every((result) => !result.error)) {
     const handoff = checked.find(({ call }) => call.name === "handoff");
     const captures = checked.filter(({ call }) => call.name === captureToolName);
     return {
       valid: true,
+      links: selectedLinks,
       handoff: (handoff?.input as z.output<typeof handoffInput> | undefined) ?? null,
       captured: captures.length
         ? Object.assign({}, ...captures.map(({ input }) => input as Partial<ContactDetails>))

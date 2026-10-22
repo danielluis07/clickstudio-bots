@@ -1,6 +1,7 @@
 import {
   createBotCore,
   disabledCapture,
+  disabledLinks,
   type Model,
   type ModelToolCall,
   type TurnUsage,
@@ -89,6 +90,7 @@ export const runEvaluation = async ({
         getKnowledgeBase: async () => item.knowledgeBase ?? tenant.knowledgeBase,
         // The corpus predates capture: its capture cases expect a safe Handoff.
         getCapture: async () => disabledCapture,
+        getLinks: async () => item.links ?? tenant.links ?? disabledLinks,
         getContactDetails: async () => noContactDetails,
         saveContactDetails: async () => {},
         listRecentMessages: async () =>

@@ -1,16 +1,18 @@
 import { BotCaptureForm } from "@/components/bot/bot-capture-form";
+import { BotLinksForm } from "@/components/bot/bot-links-form";
 import { BotSettingsForm } from "@/components/bot/bot-settings-form";
 import { BotSettingsSavedNote } from "@/components/bot/bot-settings-saved-note";
 import { BotSandboxChat } from "@/components/bot/bot-sandbox-chat";
 import { BotActivation } from "@/components/bot/bot-activation";
-import { botSettingsLimits } from "@/modules/bot";
+import { botSettingsLimits, linkSettingsLimits } from "@/modules/bot";
 import type { TenantScope } from "@/modules/tenancy";
-import { botSettingsEditor, captureSettingsEditor } from "@/server/services";
+import { botSettingsEditor, captureSettingsEditor, linkSettingsEditor } from "@/server/services";
 
 export async function BotSettingsEditor({ scope }: { scope: TenantScope }) {
-  const [{ settings, updatedAt, updatedBy }, capture] = await Promise.all([
+  const [{ settings, updatedAt, updatedBy }, capture, links] = await Promise.all([
     botSettingsEditor.getSettings(scope),
     captureSettingsEditor.getCapture(scope),
+    linkSettingsEditor.getLinks(scope),
   ]);
   // Disabling the form is not the authorization: the module re-checks.
   const canEdit = scope.role === "owner";
@@ -38,6 +40,12 @@ export async function BotSettingsEditor({ scope }: { scope: TenantScope }) {
         canEdit={canEdit}
       />
       <BotCaptureForm capture={capture.settings} savedAt={capture.updatedAt} canEdit={canEdit} />
+      <BotLinksForm
+        key={links.updatedAt?.toISOString() ?? "unsaved-links"}
+        settings={links.settings}
+        limits={linkSettingsLimits}
+        canEdit={canEdit}
+      />
       {canEdit ? <BotSandboxChat /> : null}
     </div>
   );
