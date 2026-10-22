@@ -2,7 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
 import { message } from "@/db/schema";
 import type { ChannelRoute } from "@/modules/channels";
-import { fileConversation } from "@/modules/conversations/inbound";
+import { withContactAdmission } from "@/modules/conversations/contact-deletion";
 
 // A text a Member sent from the WhatsApp Business app or a companion
 // device, which coexistence echoes to the platform.
@@ -67,29 +67,35 @@ export const recordMessageEcho = (db: Database, route: ChannelRoute, echo: Messa
     const stored = await findStored();
     if (stored) return classify(stored);
 
-    const conversationId = await fileConversation(tx, route, {
-      phone: echo.to,
-      profileName: null,
-      sentAt: echo.sentAt,
-      receivedAt: echo.receivedAt,
-    });
-    if (!conversationId) return null;
-    const [inserted] = await tx
-      .insert(message)
-      .values({
-        tenantId: route.tenantId,
-        conversationId,
-        wamid: echo.wamid,
-        direction: "outbound",
-        origin: "app",
-        // Echoed means sent; later statuses move it forward.
-        status: "sent",
-        type: "text",
-        text: echo.text,
-        sentAt: echo.sentAt,
-      })
-      .onConflictDoNothing({ target: [message.tenantId, message.wamid] })
-      .returning({ origin: message.origin, conversationId: message.conversationId });
-    // A concurrent job stored the same wamid first.
-    return classify(inserted ?? (await findStored()));
+    return withContactAdmission(
+      tx,
+      route,
+      {
+        phone: echo.to,
+        receivedAt: echo.receivedAt,
+        events: [echo],
+        occurredAt: (event) => event.sentAt,
+      },
+      async ({ tx, fileConversation }) => {
+        const conversationId = await fileConversation();
+        const [inserted] = await tx
+          .insert(message)
+          .values({
+            tenantId: route.tenantId,
+            conversationId,
+            wamid: echo.wamid,
+            direction: "outbound",
+            origin: "app",
+            // Echoed means sent; later statuses move it forward.
+            status: "sent",
+            type: "text",
+            text: echo.text,
+            sentAt: echo.sentAt,
+          })
+          .onConflictDoNothing({ target: [message.tenantId, message.wamid] })
+          .returning({ origin: message.origin, conversationId: message.conversationId });
+        // A concurrent job stored the same wamid first.
+        return classify(inserted ?? (await findStored()));
+      },
+    );
   });
