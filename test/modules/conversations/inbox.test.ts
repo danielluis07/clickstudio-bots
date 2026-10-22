@@ -92,6 +92,8 @@ describe("Inbox Conversation list", () => {
       {
         id: expect.any(String),
         channelId: "channel-a",
+        owner: "bot",
+        handoffReason: null,
         contact: {
           id: expect.any(String),
           phone: "5511900000001",
@@ -104,6 +106,8 @@ describe("Inbox Conversation list", () => {
       {
         id: expect.any(String),
         channelId: "channel-a",
+        owner: "bot",
+        handoffReason: null,
         contact: {
           id: expect.any(String),
           phone: "5511900000002",
@@ -182,6 +186,8 @@ describe("Conversation view", () => {
     expect(await inbox.getConversation(id)).toEqual({
       id,
       channelId: "channel-a",
+      owner: "bot",
+      handoffReason: null,
       contact: {
         id: expect.any(String),
         phone: "5511900000001",

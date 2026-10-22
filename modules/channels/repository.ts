@@ -10,6 +10,7 @@ const channelSummary = {
   phoneNumberId: channel.phoneNumberId,
   displayPhoneNumber: channel.displayPhoneNumber,
   botEnabled: channel.botEnabled,
+  botPaused: channel.botPaused,
   subscriptionStatus: channel.subscriptionStatus,
   subscriptionFields: channel.subscriptionFields,
   subscriptionAttemptedAt: channel.subscriptionAttemptedAt,

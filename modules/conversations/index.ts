@@ -5,6 +5,7 @@ export { recordAppContact, renameContact, type AppContact } from "@/modules/conv
 export { recordMessageChange, type MessageChange } from "@/modules/conversations/changes";
 export {
   recordMessageEcho,
+  recordBotReplySent,
   type EchoClassification,
   type MessageEcho,
 } from "@/modules/conversations/echoes";

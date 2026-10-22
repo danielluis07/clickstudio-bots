@@ -1,9 +1,10 @@
-type MessageAuthor = { origin: "contact" | "dashboard" | "app"; authorName: string | null };
+type MessageAuthor = { origin: "contact" | "dashboard" | "app" | "bot"; authorName: string | null };
 
 // Who wrote a reply, shown above it. A removed Member's replies stay readable
 // without naming them. The app's echo does not say which Member replied. Null
 // for the Contact's own messages.
 export const messageAuthorLabel = (message: MessageAuthor) => {
+  if (message.origin === "bot") return "Bot";
   if (message.origin === "dashboard") return message.authorName ?? "Membro removido";
   if (message.origin === "app") return "Equipe (app WhatsApp)";
   return null;

@@ -1,14 +1,15 @@
-import type { Job, JobQueue } from "@/modules/webhook-inbox";
+import type { Job } from "@/modules/webhook-inbox";
 
-export type TestJobQueue = JobQueue & {
-  jobs: Job[];
+export type TestJobQueue<Queued = Job> = {
+  enqueue(jobs: readonly Queued[]): Promise<void>;
+  jobs: Queued[];
   failing: boolean;
   // Removes and returns everything enqueued so far, as QStash would deliver it.
-  take(): Job[];
+  take(): Queued[];
 };
 
-export const createTestJobQueue = (): TestJobQueue => {
-  const queue: TestJobQueue = {
+export const createTestJobQueue = <Queued = Job>(): TestJobQueue<Queued> => {
+  const queue: TestJobQueue<Queued> = {
     jobs: [],
     failing: false,
     async enqueue(jobs) {

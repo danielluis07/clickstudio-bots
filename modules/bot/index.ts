@@ -1,5 +1,13 @@
 // The Bot core: one turn decides a grounded answer or a Handoff, behind the
 // Model, repository and usage ports.
+export { createBotActivation } from "@/modules/bot/activation";
+export {
+  createLiveBot,
+  type LiveBot,
+  type BotJob,
+  type BotJobQueue,
+  type BotAllowance,
+} from "@/modules/bot/live";
 export type { ContextLimits } from "@/modules/bot/context";
 export type {
   Model,

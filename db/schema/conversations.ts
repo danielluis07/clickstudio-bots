@@ -56,6 +56,12 @@ export const conversation = pgTable(
     contactId: text("contact_id")
       .notNull()
       .references(() => contact.id, { onDelete: "cascade" }),
+    owner: text("owner", { enum: ["bot", "team"] })
+      .notNull()
+      .default("bot"),
+    handoffReason: text("handoff_reason"),
+    botLeaseToken: text("bot_lease_token"),
+    botLeaseUntil: timestamp("bot_lease_until", { withTimezone: true }),
     // When the latest message was sent; the inbox lists the most recent first.
     lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull(),
     ...timestamps(),
@@ -86,7 +92,10 @@ export const message = pgTable(
     direction: text("direction", { enum: ["inbound", "outbound"] }).notNull(),
     // Who wrote it: the Contact, a Member replying from the dashboard, or a
     // Member replying from the WhatsApp Business app, seen through its echo.
-    origin: text("origin", { enum: ["contact", "dashboard", "app"] }).notNull(),
+    origin: text("origin", { enum: ["contact", "dashboard", "app", "bot"] }).notNull(),
+    // Contact messages covered by a reserved Bot reply. Imported messages never qualify.
+    botAnswered: boolean("bot_answered").notNull().default(false),
+    answeredMessageId: text("answered_message_id"),
     // The Member who wrote a dashboard reply. Null for other origins, and once
     // that Member is removed.
     authorMemberId: text("author_member_id").references(() => member.id, { onDelete: "set null" }),
@@ -102,6 +111,10 @@ export const message = pgTable(
   },
   (t) => [
     uniqueIndex("message_tenant_id_wamid_unique").on(t.tenantId, t.wamid),
+    uniqueIndex("message_conversation_answered_message_unique").on(
+      t.conversationId,
+      t.answeredMessageId,
+    ),
     index("message_conversation_id_sent_at_idx").on(t.conversationId, t.sentAt),
   ],
 );

@@ -49,7 +49,11 @@ export const useBotSandbox = () => {
               ]),
         ]);
       },
-      onSettled: () => queryClient.invalidateQueries(trpc.sandbox.status.pathFilter()),
+      onSettled: () =>
+        Promise.all([
+          queryClient.invalidateQueries(trpc.sandbox.status.pathFilter()),
+          queryClient.invalidateQueries(trpc.bot.status.pathFilter()),
+        ]),
     }),
   );
 

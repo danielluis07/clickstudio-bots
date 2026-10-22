@@ -35,3 +35,11 @@ export const botSandboxUsage = pgTable("bot_sandbox_usage", {
   day: date("day").notNull(),
   turns: integer("turns").notNull(),
 });
+
+// Only the test time is retained, never the sandbox transcript.
+export const botActivation = pgTable("bot_activation", {
+  tenantId: text("tenant_id")
+    .primaryKey()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  testedAt: timestamp("tested_at", { withTimezone: true }).notNull(),
+});
