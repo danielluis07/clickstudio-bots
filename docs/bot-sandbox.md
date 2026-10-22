@@ -51,10 +51,26 @@ if the displayed count is stale.
 
 ## Setup and verification
 
-Set `ANTHROPIC_API_KEY` to enable the existing AI SDK Model adapter. The sandbox
-uses that adapter's existing default model and timeout settings. With no key, the
-UI explains in pt-BR that testing is temporarily unavailable and disables sending.
-No provider credentials reach the browser.
+Set `AI_GATEWAY_API_KEY` in the local `.env` or deployment environment to enable
+the existing AI SDK Model adapter through Vercel AI Gateway. Gateway uses
+`anthropic/claude-haiku-5.5`, with routing restricted to Anthropic and no model
+fallbacks. The current Haiku 5.5 model choice remains provisional pending provider
+evaluation. The same prompt cache markers, timeout and token metering apply.
+
+`ANTHROPIC_API_KEY` remains supported for direct Anthropic access when no Gateway
+key is configured. If both are configured, Gateway takes precedence. A failed
+Gateway call follows the core's safe Handoff path; it never retries via the direct
+key or another provider. With neither key, the UI explains in pt-BR that testing
+is temporarily unavailable and disables sending. Restart the development server
+after changing keys. No provider credentials reach the browser.
+
+The Gateway key's team must have access to the selected model. Gateway can return
+HTTP 403 for Haiku 5.5 on its free tier, even when the key authenticates; enable
+paid Gateway credits for that model before testing live replies. The application
+handles this refusal through the same safe Handoff path as other provider errors.
+
+The manual provider-evaluation runner still uses its explicitly configured direct
+provider or local adapter module; see `docs/evaluation/README.md`.
 
 Run `bun run db:migrate` before deploying; the migration adds only the separate
 sandbox counter table. Automated tests use migrated PGlite and the deterministic

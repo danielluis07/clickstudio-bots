@@ -10,6 +10,7 @@ import { testBehaviour } from "@/test/support/bot";
 import { createTestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestModel } from "@/test/support/model";
+import { createBotModel } from "@/platform/ai-sdk-model";
 
 let db: Database;
 let owner: TenantScope;
@@ -27,6 +28,113 @@ beforeEach(async () => {
 });
 
 afterEach(() => closeTestDatabase(db));
+
+test.each([undefined, "test-direct-key"])(
+  "a Gateway key enables sandbox replies through Anthropic (direct key: %s)",
+  async (anthropicApiKey) => {
+    await createBotSettingsEditor({ db, clock }).saveSettings(owner, testBehaviour);
+    await createKnowledgeBaseEditor({ db, clock }).addEntry(owner, {
+      kind: "faq",
+      title: "Quanto custa o corte?",
+      body: "O corte custa R$ 80.",
+    });
+    const network = spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        content: [{ type: "text", text: "O corte custa R$ 80." }],
+        finishReason: { unified: "stop" },
+        usage: {
+          inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 5 },
+        },
+        warnings: [],
+      }),
+    );
+    try {
+      const configured = createBotModel({ gatewayApiKey: "test-gateway-key", anthropicApiKey });
+      const sandbox = createBotSandbox({ db, clock, model: configured });
+      expect(await sandbox.respond(owner, { text: "Qual o preço?", history: [] })).toMatchObject({
+        ok: true,
+        outcome: { kind: "answer", reply: "O corte custa R$ 80." },
+        allowance: { used: 1, limit: 50 },
+      });
+      expect(network).toHaveBeenCalledTimes(1);
+      const [url, init] = network.mock.calls[0];
+      expect(String(url)).toBe("https://ai-gateway.vercel.sh/v4/ai/language-model");
+      const headers = new Headers(init?.headers);
+      expect(headers.get("authorization")).toBe("Bearer test-gateway-key");
+      expect(headers.get("ai-language-model-id")).toBe("anthropic/claude-haiku-5.5");
+      const body = JSON.parse(String(init?.body));
+      expect(body.providerOptions).toEqual({ gateway: { only: ["anthropic"] } });
+      expect(body.tools).toMatchObject([{ name: "handoff" }]);
+      expect(body.prompt[0].content).toContain("Barbearia Navalha");
+      expect(body.prompt[1]).toMatchObject({
+        content: expect.stringContaining("O corte custa R$ 80."),
+        providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+      });
+    } finally {
+      network.mockRestore();
+    }
+  },
+);
+
+test("a failed Gateway request hands off without retrying the direct key or another provider", async () => {
+  const network = spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json({ error: { message: "Gateway temporarily unavailable" } }, { status: 503 }),
+  );
+  try {
+    const sandbox = createBotSandbox({
+      db,
+      clock,
+      model: createBotModel({
+        gatewayApiKey: "test-gateway-key",
+        anthropicApiKey: "test-direct-key",
+      }),
+    });
+    expect(await sandbox.respond(owner, { text: "Oi", history: [] })).toMatchObject({
+      ok: true,
+      outcome: { kind: "handoff", reason: "bot_indisponivel" },
+      allowance: { used: 1, limit: 50 },
+    });
+    expect(network).toHaveBeenCalledTimes(1);
+    expect(String(network.mock.calls[0][0])).toBe(
+      "https://ai-gateway.vercel.sh/v4/ai/language-model",
+    );
+  } finally {
+    network.mockRestore();
+  }
+});
+
+test("the direct Anthropic key still enables sandbox replies when no Gateway key is passed", async () => {
+  const network = spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json({
+      id: "msg_test",
+      type: "message",
+      role: "assistant",
+      model: "claude-haiku-5-5",
+      content: [{ type: "text", text: "Olá!" }],
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 10, output_tokens: 5 },
+    }),
+  );
+  try {
+    const sandbox = createBotSandbox({
+      db,
+      clock,
+      model: createBotModel({ anthropicApiKey: "test-direct-key" }),
+    });
+    expect(await sandbox.respond(owner, { text: "Oi", history: [] })).toMatchObject({
+      ok: true,
+      outcome: { kind: "answer", reply: "Olá!" },
+    });
+    expect(network).toHaveBeenCalledTimes(1);
+    const [url, init] = network.mock.calls[0];
+    expect(String(url)).toBe("https://api.anthropic.com/v1/messages");
+    expect(new Headers(init?.headers).get("x-api-key")).toBe("test-direct-key");
+  } finally {
+    network.mockRestore();
+  }
+});
 
 test("the owner tests saved settings and Knowledge base through the Bot's Model contract before connecting a Channel", async () => {
   await createBotSettingsEditor({ db, clock }).saveSettings(owner, testBehaviour);
@@ -220,7 +328,7 @@ test("invalid input and an unconfigured Model consume no sandbox allowance", asy
     { text: "Oi", history: [], tenantId: "another-tenant" },
   ])
     expect(await sandbox.respond(owner, input)).toEqual({ ok: false, error: "invalid" });
-  const unconfigured = createBotSandbox({ db, clock, model: null });
+  const unconfigured = createBotSandbox({ db, clock, model: createBotModel({}) });
   expect(await unconfigured.respond(owner, { text: "Oi", history: [] })).toEqual({
     ok: false,
     error: "unavailable",

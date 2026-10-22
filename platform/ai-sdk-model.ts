@@ -1,5 +1,6 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import {
+  createGateway,
   generateText,
   jsonSchema,
   tool,
@@ -73,10 +74,12 @@ export const createAiSdkModel = ({
   model,
   timeoutMs = 10_000,
   maxOutputTokens = 1_024,
+  providerOptions,
 }: {
   model: LanguageModel;
   timeoutMs?: number;
   maxOutputTokens?: number;
+  providerOptions?: Parameters<typeof generateText>[0]["providerOptions"];
 }) => ({
   async generate(request: Request) {
     const result = await generateText({
@@ -99,6 +102,7 @@ export const createAiSdkModel = ({
         },
       ],
       messages: request.messages.map(toSdkMessage),
+      providerOptions,
       maxOutputTokens,
       // A failure hands off at once rather than retry past the reply budget.
       maxRetries: 0,
@@ -125,3 +129,25 @@ export const createAiSdkModel = ({
     };
   },
 });
+
+// Gateway model ids use a different spelling from the direct Anthropic API.
+// Both routes select the same provisional Haiku 5.5 model.
+const gatewayBotModelId = "anthropic/claude-haiku-5.5";
+
+export const createBotModel = ({
+  gatewayApiKey,
+  anthropicApiKey,
+}: {
+  gatewayApiKey?: string;
+  anthropicApiKey?: string;
+}) => {
+  if (gatewayApiKey)
+    return createAiSdkModel({
+      model: createGateway({ apiKey: gatewayApiKey })(gatewayBotModelId),
+      // Keep the no-fallback contract: Gateway must not try other providers.
+      providerOptions: { gateway: { only: ["anthropic"] } },
+    });
+  if (anthropicApiKey)
+    return createAiSdkModel({ model: createAnthropicLanguageModel({ apiKey: anthropicApiKey }) });
+  return null;
+};

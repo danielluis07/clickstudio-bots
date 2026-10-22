@@ -35,6 +35,7 @@ export const env = createEnv({
     SENTRY_DSN: z.url().refine(isUsSentryDsn, "Sentry requires a US project DSN").optional(),
     CRON_SECRET: z.string().min(16).optional(),
     ANTHROPIC_API_KEY: z.string().min(1).optional(),
+    AI_GATEWAY_API_KEY: z.string().min(1).optional(),
   },
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
@@ -57,5 +58,6 @@ export const env = createEnv({
     SENTRY_DSN: process.env.SENTRY_DSN,
     CRON_SECRET: process.env.CRON_SECRET,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    AI_GATEWAY_API_KEY: process.env.AI_GATEWAY_API_KEY,
   },
 });

@@ -7,7 +7,7 @@ import { createChannelService } from "@/modules/channels";
 import { createReplyService } from "@/modules/conversations";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import { createBotSandbox, createBotSettingsEditor } from "@/modules/bot";
-import { createAiSdkModel, createAnthropicLanguageModel } from "@/platform/ai-sdk-model";
+import { createBotModel } from "@/platform/ai-sdk-model";
 import { createWhatsAppGateway } from "@/server/whatsapp";
 import { createWebhookInbox, pruneInboxEvents } from "@/modules/webhook-inbox";
 import { createQStashJobQueue, createQStashJobVerifier, qstashJobUrl } from "@/platform/qstash";
@@ -56,9 +56,10 @@ export const botSettingsEditor = createBotSettingsEditor({ db, clock: systemCloc
 export const botSandbox = createBotSandbox({
   db,
   clock: systemClock,
-  model: env.ANTHROPIC_API_KEY
-    ? createAiSdkModel({ model: createAnthropicLanguageModel({ apiKey: env.ANTHROPIC_API_KEY }) })
-    : null,
+  model: createBotModel({
+    gatewayApiKey: env.AI_GATEWAY_API_KEY,
+    anthropicApiKey: env.ANTHROPIC_API_KEY,
+  }),
 });
 
 export const replyService = createReplyService({
