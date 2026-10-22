@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { FailedInboxEventRow } from "@/components/admin/failed-inbox-event-row";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import {
   Table,
@@ -68,23 +68,26 @@ export async function FailedInboxEvents({ actorId, page }: { actorId: string; pa
       )}
       <nav aria-label="Páginas de eventos com falha" className="flex flex-wrap gap-2">
         {pageNumber > 1 && (
-          <Button
-            variant="outline"
-            render={<Link href={`/admin/eventos?pagina=${pageNumber - 1}`} />}
+          <Link
+            className={buttonVariants({ variant: "outline" })}
+            href={`/admin/eventos?pagina=${pageNumber - 1}`}
           >
             Anterior
-          </Button>
+          </Link>
         )}
-        <Button variant="outline" render={<a href={`/admin/eventos?pagina=${pageNumber}`} />}>
+        <a
+          className={buttonVariants({ variant: "outline" })}
+          href={`/admin/eventos?pagina=${pageNumber}`}
+        >
           Atualizar
-        </Button>
+        </a>
         {failures?.ok && failures.hasMore && (
-          <Button
-            variant="outline"
-            render={<Link href={`/admin/eventos?pagina=${pageNumber + 1}`} />}
+          <Link
+            className={buttonVariants({ variant: "outline" })}
+            href={`/admin/eventos?pagina=${pageNumber + 1}`}
           >
             Próxima
-          </Button>
+          </Link>
         )}
       </nav>
     </div>
