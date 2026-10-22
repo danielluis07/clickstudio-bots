@@ -8,7 +8,11 @@ import {
   createLiveBot,
   type BotJob,
 } from "@/modules/bot";
-import { createConversationRepository, recordInboundTextMessage } from "@/modules/conversations";
+import {
+  createConversationBotRepository,
+  createConversationRepository,
+  recordInboundTextMessage,
+} from "@/modules/conversations";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import { createPostgresTestDatabase } from "@/test/support/postgres";
 import { seedLiveBot } from "@/test/support/live-bot";
@@ -87,6 +91,23 @@ suite("live turns on real Postgres", () => {
         ({ origin }) => origin === "bot",
       ),
     ).toHaveLength(1);
+  });
+
+  test("a ChannelRoute cannot claim or mutate another Tenant's Conversation", async () => {
+    const { db, clock, conversationId, reader } = await setup();
+    const other = await seedLiveBot(db);
+    const foreign = createConversationBotRepository(db, other.route);
+    expect(await foreign.load(conversationId)).toBeNull();
+    expect(await foreign.claim(conversationId, "foreign", clock.now())).toBe(false);
+    expect(await foreign.listUnanswered(conversationId)).toEqual([]);
+    expect(
+      await foreign.reserve(conversationId, "foreign", ["foreign-key"], "Resposta", clock.now()),
+    ).toBeNull();
+    await foreign.handoff(conversationId, "foreign", "bot_indisponivel");
+    expect(await reader.getConversation(conversationId)).toMatchObject({
+      owner: "bot",
+      handoffReason: null,
+    });
   });
 
   test("an expired lease recovers while its former holder cannot send", async () => {

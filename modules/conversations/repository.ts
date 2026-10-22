@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, like, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, like, or, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Database } from "@/db/database";
 import { contact, conversation, member, message, messageChange, user } from "@/db/schema";
@@ -143,9 +143,11 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
       {
         cursor = null,
         limit = 50,
+        messageIds,
       }: {
         cursor?: MessageCursor | null;
         limit?: number;
+        messageIds?: string[];
       } = {},
     ) {
       if (!(await getConversation(conversationId))) return null;
@@ -175,6 +177,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
           and(
             eq(message.conversationId, conversationId),
             eq(message.tenantId, scope.tenantId),
+            messageIds ? inArray(message.id, messageIds) : undefined,
             before(message.sentAt, message.id, cursor && { at: cursor.sentAt, id: cursor.id }),
           ),
         )

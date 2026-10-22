@@ -32,12 +32,17 @@ expiry. A competing job gets HTTP 503 so QStash retries after a crashed holder.
 A short repeatable-read transaction snapshots unanswered message ids and context;
 Model and Meta calls run after it commits. Late messages get a follow-up job after
 release. The snapshot's last Contact message is the unique answered-message key.
+All unanswered texts are grouped into the current Contact turn, independently
+of the core's bounded historical replay. A burst cannot silently mark questions
+answered when they were omitted from the Model input.
 
 Immediately before reservation, the worker rechecks Schedule and the allowance
 hook. Reservation atomically fences out expired holders and rechecks Conversation
 ownership, Channel activation/pause/subscription and the 24-hour service window.
 It inserts a pending Bot message and marks the snapshot's Contact messages
-covered before calling Meta. Success records the wamid and delivery status,
+covered before calling Meta. A Model-requested Handoff is persisted in that same
+reservation, so a crash after sending cannot lose the ownership change.
+Success records the wamid and delivery status in one transaction,
 reconciling an own echo that arrived first. A retry finding pending without a
 wamid marks it failed and hands off as **Bot indisponível**; it never resends.
 
@@ -77,3 +82,6 @@ the required branch-protection context.
 
 Entry points: `modules/bot/index.ts`, `server/bot-jobs.ts`,
 `server/services.ts`, `trpc/routers/bot.ts` and `components/bot/bot-activation.tsx`.
+Conversation persistence is scoped by `ChannelRoute` in
+`modules/conversations/bot-turns.ts`; Channel activation and pause writes live
+in `modules/channels/bot-controls.ts`. Bot owns the activation checklist policy.

@@ -1,14 +1,17 @@
 import type { Database } from "@/db/database";
 import { createBotCore } from "@/modules/bot/turn";
 import { readBehaviour } from "@/modules/bot/settings";
-import { createLiveBotRepository } from "@/modules/bot/live-repository";
+import { scheduleAllows } from "@/modules/bot/schedule";
 import type { Model } from "@/modules/bot/model";
-import type { BotTurn } from "@/modules/bot/repository";
+import type { BotTurn, ContextMessage } from "@/modules/bot/repository";
 import type { UsageMeter } from "@/modules/bot/usage";
 import type { ChannelRoute } from "@/modules/channels";
 import {
   createConversationRepository,
   recordBotReplySent,
+  createConversationBotRepository,
+  resolveBotConversation,
+  listBotRecoveryCandidates,
   type WhatsAppSender,
 } from "@/modules/conversations";
 import { readKnowledgeBase } from "@/modules/knowledge-base";
@@ -43,14 +46,16 @@ export const createLiveBot = ({
   meter: UsageMeter;
   allowance: BotAllowance;
 }) => {
-  const repository = createLiveBotRepository(db);
-  const eligible = (found: Awaited<ReturnType<typeof repository.load>>) =>
+  const eligible = (
+    found: Awaited<ReturnType<ReturnType<typeof createConversationBotRepository>["load"]>>,
+  ) =>
     found &&
     found.enabled &&
     !found.paused &&
     found.subscribed === "subscribed" &&
     found.owner === "bot";
   const enqueue = async (scope: ChannelRoute, conversationId: string) => {
+    const repository = createConversationBotRepository(db, scope);
     const found = await repository.load(conversationId);
     if (
       !eligible(found) ||
@@ -64,6 +69,9 @@ export const createLiveBot = ({
   return {
     enqueue,
     async run(conversationId: string) {
+      const scope = await resolveBotConversation(db, conversationId);
+      if (!scope) return "skipped" as const;
+      const repository = createConversationBotRepository(db, scope);
       const initial = await repository.load(conversationId);
       if (!initial) return "skipped" as const;
       const token = crypto.randomUUID();
@@ -76,15 +84,7 @@ export const createLiveBot = ({
         }
         if (!eligible(await repository.load(conversationId))) return "skipped" as const;
         const snapshot = await db.transaction(
-          async (tx) => ({
-            pending: await createLiveBotRepository(tx).listUnanswered(conversationId),
-            history:
-              (
-                await createConversationRepository(tx, initial.scope).listMessages(conversationId, {
-                  limit: 50,
-                })
-              )?.messages ?? [],
-          }),
+          (tx) => createConversationBotRepository(tx, initial.scope).snapshot(conversationId),
           { isolationLevel: "repeatable read", accessMode: "read only" },
         );
         const pending = snapshot.pending;
@@ -95,20 +95,32 @@ export const createLiveBot = ({
         if (!found?.serviceWindowClosesAt || found.serviceWindowClosesAt <= clock.now())
           return "skipped" as const;
         const turn = { scope: initial.scope, conversationId };
-        if (!model) {
-          await repository.handoff(conversationId, token, "bot_indisponivel");
-          await notifyInbox(notifier, initial.tenantId, { conversationId });
-          return "handoff" as const;
-        }
+        if (!scheduleAllows(await readBehaviour(db, initial.scope), clock.now()))
+          return "skipped" as const;
         // Freeze context before the Model call. Messages arriving later get their own turn.
         const history = snapshot.history;
         const contactIds = new Set(ids);
         // A Contact may write while the previous reply is being generated. Its
         // unanswered text follows that reply logically, even if sentAt is earlier.
-        const replay = [
-          ...history.filter((row) => !contactIds.has(row.id)),
-          ...history.filter((row) => contactIds.has(row.id)),
-        ];
+        const replay = history.filter((row) => !contactIds.has(row.id));
+        // A burst is one Contact turn. Group every unanswered text so the core's
+        // bounded historical replay cannot silently discard any current question.
+        const currentText = snapshot.current
+          .filter((row) => !row.revokedAt)
+          .map((row) => row.text ?? "")
+          .filter(Boolean)
+          .join("\n\n");
+        if (!currentText) {
+          await repository.consume(conversationId, token, ids, clock.now());
+          followUp = true;
+          return "skipped" as const;
+        }
+        if (!eligible(await repository.load(conversationId))) return "skipped" as const;
+        if (!model) {
+          await repository.handoff(conversationId, token, "bot_indisponivel");
+          await notifyInbox(notifier, initial.tenantId, { conversationId });
+          return "handoff" as const;
+        }
         const turnAt = new Date(
           Math.max(clock.now().getTime(), ...history.map((row) => row.sentAt.getTime())),
         );
@@ -119,15 +131,17 @@ export const createLiveBot = ({
           repository: {
             getBehaviour: ({ scope }) => readBehaviour(db, scope),
             getKnowledgeBase: ({ scope }) => readKnowledgeBase(db, scope),
-            listRecentMessages: async () =>
-              replay
+            listRecentMessages: async () => [
+              ...replay
                 .filter((row) => !row.revokedAt)
-                .map((row) => ({
+                .map((row): ContextMessage => ({
                   author:
                     row.origin === "contact" ? "contact" : row.origin === "bot" ? "bot" : "member",
                   text: row.text ?? "",
-                  sentAt: contactIds.has(row.id) ? turnAt : row.sentAt,
+                  sentAt: row.sentAt,
                 })),
+              { author: "contact" as const, text: currentText, sentAt: turnAt },
+            ],
           },
         });
         if (!(await core.isScheduled(turn))) return "skipped" as const;
@@ -137,6 +151,8 @@ export const createLiveBot = ({
           followUp = true;
           return "skipped" as const;
         }
+        if (!(await core.isScheduled(turn)) || !eligible(await repository.load(conversationId)))
+          return "skipped" as const;
         const sender = await Promise.resolve()
           .then(getSender)
           .catch(() => null);
@@ -161,6 +177,7 @@ export const createLiveBot = ({
           ids,
           outcome.reply,
           clock.now(),
+          outcome.kind === "handoff" ? outcome.reason : undefined,
         );
         if (!messageId) return "skipped" as const;
         // A pending row is the durable send barrier. Never retry a send without a wamid.
@@ -173,9 +190,6 @@ export const createLiveBot = ({
           return "handoff" as const;
         }
         await recordBotReplySent(db, initial.scope, messageId, sent.wamid);
-        await repository.sent(messageId);
-        if (outcome.kind === "handoff")
-          await repository.handoff(conversationId, token, outcome.reason);
         await notifyInbox(notifier, initial.tenantId, { conversationId });
         followUp = true;
         return "sent" as const;
@@ -186,16 +200,18 @@ export const createLiveBot = ({
     },
     async cleanup() {
       const now = clock.now();
-      for (const stuck of await repository.stuck(now)) {
-        if (await repository.failPending(stuck.conversationId, now, true)) {
-          const found = await repository.load(stuck.conversationId);
-          if (found)
-            await notifyInbox(notifier, found.tenantId, { conversationId: stuck.conversationId });
+      for (const conversationId of await listBotRecoveryCandidates(db, now)) {
+        const scope = await resolveBotConversation(db, conversationId);
+        if (!scope) continue;
+        const repository = createConversationBotRepository(db, scope);
+        if (await repository.failPending(conversationId, now, true)) {
+          const found = await repository.load(conversationId);
+          if (found) await notifyInbox(notifier, found.tenantId, { conversationId });
         }
-      }
-      for (const expired of await repository.clearExpired(now)) {
-        const found = await repository.load(expired.id);
-        if (found) await enqueue(found.scope, expired.id);
+        await enqueue(scope, conversationId);
+        // Keep the expired lease recoverable if enqueue fails. A worker that
+        // already claimed it has a later expiry and cannot be cleared here.
+        await repository.clearExpired(conversationId, now);
       }
     },
   };

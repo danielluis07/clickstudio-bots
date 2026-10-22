@@ -55,7 +55,7 @@ const setup = async (allowance: BotAllowance = { canReply: async () => true }) =
     text: "Quanto custa?",
     sentAt: clock.now(),
   }))!;
-  const worker = createLiveBot({
+  const dependencies = {
     db,
     clock,
     model,
@@ -64,7 +64,8 @@ const setup = async (allowance: BotAllowance = { canReply: async () => true }) =
     getSender: () => sender,
     meter: createTestUsageMeter(),
     allowance,
-  });
+  };
+  const worker = createLiveBot(dependencies);
   return {
     ...seeded,
     model,
@@ -73,6 +74,7 @@ const setup = async (allowance: BotAllowance = { canReply: async () => true }) =
     activation,
     conversationId,
     worker,
+    dependencies,
     repository: createConversationRepository(db, scope),
   };
 };
@@ -89,6 +91,77 @@ test("a live Contact message sends exactly once after activation, including dupl
   expect((await repository.listMessages(conversationId))!.messages).toContainEqual(
     expect.objectContaining({ origin: "bot", status: "sent", wamid: "wamid.OUT1" }),
   );
+});
+
+test("one turn includes every unanswered Contact message in a large burst", async () => {
+  const { scope, route, clock, model, activation, conversationId, worker } = await setup();
+  await activation.activate(scope);
+  for (let index = 0; index < 55; index++) {
+    await recordInboundTextMessage(db, route, {
+      wamid: `burst-${index}`,
+      from: "5511999990001",
+      profileName: null,
+      text: `Pergunta ${index}.`,
+      sentAt: clock.now(),
+    });
+  }
+  model.script({ text: "Respostas às perguntas." });
+  await worker.run(conversationId);
+  const input = model.requests
+    .at(-1)!
+    .messages.map((entry) => ("text" in entry ? entry.text : ""))
+    .join("\n");
+  expect(input).toContain("Quanto custa?");
+  for (let index = 0; index < 55; index++) expect(input).toContain(`Pergunta ${index}.`);
+});
+
+test("an unavailable Model outside Schedule skips without Handoff", async () => {
+  const { scope, clock, activation, conversationId, repository, dependencies } = await setup();
+  await activation.activate(scope);
+  await createBotSettingsEditor({ db, clock }).saveSettings(scope, {
+    ...testBehaviour,
+    schedule: "outside_business_hours",
+  });
+  await createLiveBot({ ...dependencies, model: null }).run(conversationId);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "bot",
+    handoffReason: null,
+  });
+});
+
+test("a pause during generation takes precedence over an unavailable sender", async () => {
+  const { scope, model, activation, conversationId, repository, dependencies } = await setup();
+  await activation.activate(scope);
+  const generate = model.generate;
+  model.generate = async (request) => {
+    await activation.setPaused(scope, true);
+    return generate(request);
+  };
+  model.script({ text: "Resposta." });
+  await createLiveBot({
+    ...dependencies,
+    getSender: () => {
+      throw new Error("unconfigured");
+    },
+  }).run(conversationId);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "bot",
+    handoffReason: null,
+  });
+});
+
+test("a Model Handoff is durable before the Meta call starts", async () => {
+  const { scope, model, sender, activation, conversationId, worker, repository } = await setup();
+  await activation.activate(scope);
+  model.script({
+    toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "pedido_do_contato" } }],
+  });
+  let ownership: unknown;
+  sender.beforeAnswering(async () => {
+    ownership = await repository.getConversation(conversationId);
+  });
+  await worker.run(conversationId);
+  expect(ownership).toMatchObject({ owner: "team", handoffReason: "pedido_do_contato" });
 });
 
 test("an uncertain Meta send fails and hands off without resending on retry", async () => {

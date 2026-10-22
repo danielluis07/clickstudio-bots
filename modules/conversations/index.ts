@@ -1,5 +1,10 @@
 // Contacts, their Conversations with a Tenant on one Channel, and the
 // messages in them.
+export {
+  createConversationBotRepository,
+  resolveBotConversation,
+  listBotRecoveryCandidates,
+} from "@/modules/conversations/bot-turns";
 export { deleteContact } from "@/modules/conversations/contact-deletion";
 export { recordAppContact, renameContact, type AppContact } from "@/modules/conversations/contacts";
 export { recordMessageChange, type MessageChange } from "@/modules/conversations/changes";
