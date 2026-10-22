@@ -1,5 +1,7 @@
+import type { CaptureSettings } from "@/modules/bot/capture";
 import type { BotSchedule, BusinessHours } from "@/modules/bot/schedule";
 import type { ChannelRoute } from "@/modules/channels";
+import type { ContactDetails } from "@/modules/conversations";
 import type { TenantScope } from "@/modules/tenancy";
 
 // What the core reads about a turn's Tenant and Conversation. Adapters read
@@ -50,5 +52,11 @@ export type ContextWindow = { since: Date; limit: number };
 export interface BotRepository {
   getBehaviour(turn: BotTurn): Promise<BehaviourSettings>;
   getKnowledgeBase(turn: BotTurn): Promise<KnowledgeBase>;
+  getCapture(turn: BotTurn): Promise<CaptureSettings>;
+  // The turn's Contact, never another: adapters resolve it from the turn's
+  // Conversation under its scope.
+  getContactDetails(turn: BotTurn): Promise<ContactDetails>;
+  // Stores captured details on the turn's Contact, keeping the others.
+  saveContactDetails(turn: BotTurn, details: Partial<ContactDetails>): Promise<void>;
   listRecentMessages(turn: BotTurn, window: ContextWindow): Promise<ContextMessage[]>;
 }

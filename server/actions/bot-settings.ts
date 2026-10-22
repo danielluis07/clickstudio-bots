@@ -6,10 +6,11 @@ import {
   weekdays,
   type BehaviourSettings,
   type BusinessHours,
+  type CaptureMode,
 } from "@/modules/bot";
 import { formText, type FormState } from "@/server/actions/form-state";
 import { requireTenantScope } from "@/server/auth/guards";
-import { botSettingsEditor } from "@/server/services";
+import { botSettingsEditor, captureSettingsEditor } from "@/server/services";
 
 // The bot module re-checks that the actor is the Tenant's owner and that
 // every setting is within its bounds.
@@ -57,5 +58,36 @@ export async function saveBotSettingsAction(
   return {
     status: "success",
     message: "Salvo. O Bot já usa estas configurações na próxima resposta.",
+  };
+}
+
+const captureErrorMessages = {
+  forbidden: "Apenas o responsável pelo negócio pode alterar a captura de dados.",
+  invalid: "Escolha ao menos um dado para capturar, ou desative a captura.",
+} as const;
+
+// The module refuses any mode other than off, optional or required.
+const formCaptureMode = (formData: FormData, field: string) =>
+  formText(formData, `capture.${field}`) as CaptureMode;
+
+export async function saveCaptureSettingsAction(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const scope = await requireTenantScope();
+  const result = await captureSettingsEditor.saveCapture(scope, {
+    enabled: formData.has("captureEnabled"),
+    fields: {
+      name: formCaptureMode(formData, "name"),
+      email: formCaptureMode(formData, "email"),
+      city: formCaptureMode(formData, "city"),
+      need: formCaptureMode(formData, "need"),
+    },
+  });
+  if (!result.ok) return { status: "error", message: captureErrorMessages[result.error] };
+  refresh();
+  return {
+    status: "success",
+    message: "Salvo. O Bot já usa esta captura na próxima resposta.",
   };
 }

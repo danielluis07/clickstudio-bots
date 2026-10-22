@@ -6,6 +6,7 @@ import { recordSentWamid } from "@/modules/conversations/echoes";
 import { handOffFromBot } from "@/modules/conversations/handoff";
 import type { TenantScope } from "@/modules/tenancy";
 import type { ChannelRoute } from "@/modules/channels";
+import type { ContactDetails } from "@/modules/conversations/contact-details";
 
 // Matches the Contact name a Member gave, the name saved in the WhatsApp
 // Business app, the WhatsApp profile name, or the phone digits, so
@@ -33,6 +34,14 @@ const contactFields = {
   profileName: contact.profileName,
   appName: contact.appName,
   name: contact.name,
+};
+
+// The Contact panel also shows and edits the other details.
+const contactPanelFields = {
+  ...contactFields,
+  email: contact.email,
+  city: contact.city,
+  need: contact.need,
 };
 
 // WhatsApp lets a business reply freely for 24 hours after the Contact's
@@ -82,7 +91,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
         owner: conversation.owner,
         handoffReason: conversation.handoffReason,
         waiting: conversation.waiting,
-        contact: contactFields,
+        contact: contactPanelFields,
         // Null until the Contact has written; the window never opens otherwise.
         serviceWindowClosesAt: sql`(
         select max(${message.sentAt}) + make_interval(hours => ${serviceWindowHours}) from ${message}
@@ -243,15 +252,15 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
         .where(and(eq(message.id, messageId), eq(message.tenantId, scope.tenantId)));
     },
 
-    // A blank name clears it, so the WhatsApp profile name shows again. Null
-    // when the Contact is not the Tenant's.
-    async renameContact(contactId: string, name: string) {
-      const [renamed] = await db
+    // Replaces every detail with checked values. A null name shows the
+    // WhatsApp profile name again. Null when the Contact is not the Tenant's.
+    async updateContactDetails(contactId: string, details: ContactDetails) {
+      const [updated] = await db
         .update(contact)
-        .set({ name: name.trim() || null })
+        .set(details)
         .where(and(eq(contact.id, contactId), eq(contact.tenantId, scope.tenantId)))
-        .returning(contactFields);
-      return renamed ?? null;
+        .returning(contactPanelFields);
+      return updated ?? null;
     },
   };
 };

@@ -1,6 +1,7 @@
 "use client";
 
 import { SendHorizontalIcon } from "lucide-react";
+import { BotSandboxCaptured } from "@/components/bot/bot-sandbox-captured";
 import { BotSandboxTranscript } from "@/components/bot/bot-sandbox-transcript";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ export function BotSandboxChat() {
           </Alert>
         ) : null}
         <BotSandboxTranscript messages={sandbox.messages} />
+        <BotSandboxCaptured captured={sandbox.captured} />
         {sandbox.sending ? (
           <p role="status" className="text-sm text-muted-foreground">
             O Bot está respondendo…

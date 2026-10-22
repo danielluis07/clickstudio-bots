@@ -1,3 +1,9 @@
+import {
+  contactDetailFields,
+  contactDetailLimits,
+  type ContactDetailField,
+} from "@/modules/conversations/contact-details";
+
 type ContactNames = {
   name: string | null;
   appName: string | null;
@@ -15,3 +21,17 @@ export const formatContactPhone = (phone: string) => {
 // WhatsApp Business app, then the Contact's WhatsApp profile name.
 export const contactDisplayName = (contact: ContactNames) =>
   contact.name ?? contact.appName ?? contact.profileName ?? formatContactPhone(contact.phone);
+
+const detailLabels: Record<ContactDetailField, { label: string; placeholder: string }> = {
+  name: { label: "Nome", placeholder: "Sem nome" },
+  email: { label: "E-mail", placeholder: "Não informado" },
+  city: { label: "Cidade", placeholder: "Não informada" },
+  need: { label: "Necessidade", placeholder: "Não informada" },
+};
+
+// The Contact panel's detail inputs, in the order it shows them.
+export const contactDetailInputs = contactDetailFields.map((field) => ({
+  field,
+  maxLength: contactDetailLimits[field],
+  ...detailLabels[field],
+}));

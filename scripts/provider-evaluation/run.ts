@@ -80,6 +80,13 @@ export const runEvaluation = async ({
       repository: {
         getBehaviour: async () => tenant.behaviour,
         getKnowledgeBase: async () => item.knowledgeBase ?? tenant.knowledgeBase,
+        // The corpus predates capture: its capture cases expect a safe Handoff.
+        getCapture: async () => ({
+          enabled: false,
+          fields: { name: "off", email: "off", city: "off", need: "off" },
+        }),
+        getContactDetails: async () => ({ name: null, email: null, city: null, need: null }),
+        saveContactDetails: async () => {},
         listRecentMessages: async () =>
           item.messages.map((message, index) => ({
             ...message,

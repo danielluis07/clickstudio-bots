@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { channel, contact, conversation, member, message, organization, user } from "@/db/schema";
-import { createBotSandbox, createBotSettingsEditor } from "@/modules/bot";
+import {
+  createBotSandbox,
+  createBotSettingsEditor,
+  createCaptureSettingsEditor,
+} from "@/modules/bot";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import { resolveChannelPhoneNumber } from "@/modules/channels";
 import { createConversationRepository, recordInboundTextMessage } from "@/modules/conversations";
@@ -304,6 +308,81 @@ test("sandbox Handoffs and refused capture/send calls make no network requests o
   expect(await production.listConversations({})).toEqual(before);
   expect(await snapshot()).toEqual(savedRecords);
   expect(await sandbox.status(owner)).toMatchObject({ allowance: { used: 2, limit: 50 } });
+});
+
+test("sandbox captures return to the browser and never reach production Contacts", async () => {
+  await db.insert(channel).values({
+    id: "channel",
+    tenantId: "tenant",
+    wabaId: "201",
+    phoneNumberId: "301",
+    displayPhoneNumber: "+55 11 99999-0001",
+    subscriptionFields: [],
+    credential: { keyVersion: "v1", iv: "", ciphertext: "", tag: "" },
+  });
+  await recordInboundTextMessage(db, (await resolveChannelPhoneNumber(db, "301"))!, {
+    wamid: "wamid.production",
+    from: "5511900000001",
+    profileName: "Ana",
+    text: "Mensagem real",
+    sentAt: clock.now(),
+  });
+  const contacts = () => db.select().from(contact);
+  const savedContacts = await contacts();
+  await createCaptureSettingsEditor({ db, clock }).saveCapture(owner, {
+    enabled: true,
+    fields: { name: "required", email: "required", city: "off", need: "off" },
+  });
+  const sandbox = createBotSandbox({ db, clock, model });
+  model.script(
+    {
+      text: "Prazer, Bia!",
+      toolCalls: [{ id: "call-1", name: "capture_contact_details", input: { name: "Bia" } }],
+    },
+    { toolCalls: [{ id: "call-2", name: "handoff", input: { reason: "pedido_do_contato" } }] },
+  );
+
+  const first = await sandbox.respond(owner, { text: "Sou a Bia", history: [] });
+  expect(first).toMatchObject({
+    ok: true,
+    outcome: { kind: "answer", reply: "Prazer, Bia!" },
+    contact: { name: "Bia", email: null, city: null, need: null },
+  });
+  const second = await sandbox.respond(owner, {
+    text: "Quero falar com alguém",
+    history: [
+      { author: "contact", text: "Sou a Bia" },
+      { author: "bot", text: "Prazer, Bia!" },
+    ],
+    contact: first.ok ? first.contact : undefined,
+  });
+
+  expect(model.requests[1].contact).toContain("Name: Bia");
+  expect(second).toMatchObject({
+    ok: true,
+    outcome: {
+      kind: "answer",
+      reply: "Antes de chamar a equipe, me informe seu e-mail, por favor.",
+    },
+    contact: { name: "Bia" },
+  });
+  expect(await contacts()).toEqual(savedContacts);
+});
+
+test("the sandbox refuses test Contact details outside the catalog or bounds", async () => {
+  const sandbox = createBotSandbox({ db, clock, model });
+  const details = { name: null, email: null, city: null, need: null };
+  for (const contact of [
+    { ...details, email: "não é e-mail" },
+    { ...details, name: "A".repeat(101) },
+    { ...details, contactId: "contact-a" },
+  ])
+    expect(
+      await sandbox.respond(owner, { text: "Oi", history: [], contact } as Parameters<
+        typeof sandbox.respond
+      >[1]),
+    ).toEqual({ ok: false, error: "invalid" });
+  expect(model.requests).toHaveLength(0);
 });
 
 test("provider failures use the core's safe Handoff and still consume a sandbox attempt", async () => {

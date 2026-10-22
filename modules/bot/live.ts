@@ -1,4 +1,5 @@
 import type { Database } from "@/db/database";
+import { readCapture } from "@/modules/bot/capture";
 import { createBotCore } from "@/modules/bot/turn";
 import { readBehaviour } from "@/modules/bot/settings";
 import { scheduleAllows } from "@/modules/bot/schedule";
@@ -12,6 +13,8 @@ import {
   createConversationBotRepository,
   resolveBotConversation,
   listBotRecoveryCandidates,
+  readConversationContactDetails,
+  saveCapturedContactDetails,
   type WhatsAppSender,
 } from "@/modules/conversations";
 import { readKnowledgeBase } from "@/modules/knowledge-base";
@@ -131,6 +134,19 @@ export const createLiveBot = ({
           repository: {
             getBehaviour: ({ scope }) => readBehaviour(db, scope),
             getKnowledgeBase: ({ scope }) => readKnowledgeBase(db, scope),
+            getCapture: ({ scope }) => readCapture(db, scope),
+            getContactDetails: () =>
+              readConversationContactDetails(db, initial.scope, conversationId),
+            // Stored as soon as captured: the Contact stated them whether or
+            // not this turn's reply is sent.
+            saveContactDetails: (_turn, details) =>
+              saveCapturedContactDetails({
+                db,
+                route: initial.scope,
+                notifier,
+                conversationId,
+                details,
+              }),
             listRecentMessages: async () => [
               ...replay
                 .filter((row) => !row.revokedAt)

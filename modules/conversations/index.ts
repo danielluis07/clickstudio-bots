@@ -6,7 +6,20 @@ export {
   listBotRecoveryCandidates,
 } from "@/modules/conversations/bot-turns";
 export { deleteContact } from "@/modules/conversations/contact-deletion";
-export { recordAppContact, renameContact, type AppContact } from "@/modules/conversations/contacts";
+export {
+  contactDetailFields,
+  contactDetailLimits,
+  contactDetailSchemas,
+  type ContactDetailField,
+  type ContactDetails,
+} from "@/modules/conversations/contact-details";
+export {
+  readConversationContactDetails,
+  recordAppContact,
+  saveCapturedContactDetails,
+  updateContactDetails,
+  type AppContact,
+} from "@/modules/conversations/contacts";
 export { recordMessageChange, type MessageChange } from "@/modules/conversations/changes";
 export {
   recordMessageEcho,

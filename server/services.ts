@@ -6,7 +6,12 @@ import { createResendMailer } from "@/platform/resend-mailer";
 import { createChannelService } from "@/modules/channels";
 import { createReplyService } from "@/modules/conversations";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
-import { createBotSandbox, createBotSettingsEditor, createLiveBot } from "@/modules/bot";
+import {
+  createBotSandbox,
+  createBotSettingsEditor,
+  createCaptureSettingsEditor,
+  createLiveBot,
+} from "@/modules/bot";
 import { createBotModel } from "@/platform/ai-sdk-model";
 import { createWhatsAppGateway } from "@/server/whatsapp";
 import { createWebhookInbox, pruneInboxEvents } from "@/modules/webhook-inbox";
@@ -53,6 +58,8 @@ export const channelService = createChannelService({
 export const knowledgeBaseEditor = createKnowledgeBaseEditor({ db, clock: systemClock });
 
 export const botSettingsEditor = createBotSettingsEditor({ db, clock: systemClock });
+
+export const captureSettingsEditor = createCaptureSettingsEditor({ db, clock: systemClock });
 
 const model = createBotModel({
   gatewayApiKey: env.AI_GATEWAY_API_KEY,

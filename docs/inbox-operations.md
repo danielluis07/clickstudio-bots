@@ -89,9 +89,10 @@ control and cannot invoke the operation directly.
 
 Run `bun run db:migrate` before deploying this feature. Deletion atomically
 removes the Contact, all its Conversations/messages, and message edits/revokes,
-including changes whose original message has not arrived. Transcripts and
-captured fields do not have persisted tables yet; when introduced, they must
-participate in the same Contact/Conversation erasure.
+including changes whose original message has not arrived. Captured fields are
+columns of the Contact row, so they are erased with it. Transcripts do not have
+persisted tables yet; when introduced, they must participate in the same
+Contact/Conversation erasure.
 
 The migration backfills existing edit/revoke address hashes from their original
 messages or retained signed inbox events, checking Tenant and event identity.

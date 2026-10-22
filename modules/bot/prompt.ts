@@ -1,6 +1,9 @@
+import { capturedFields, type CaptureSettings } from "@/modules/bot/capture";
 import { memberLabel } from "@/modules/bot/context";
 import type { BehaviourSettings, KnowledgeBase } from "@/modules/bot/repository";
 import { weekdays, type BusinessHours } from "@/modules/bot/schedule";
+import { captureToolName } from "@/modules/bot/tools";
+import type { ContactDetailField, ContactDetails } from "@/modules/conversations";
 
 // Instructions to the model are English; the Tenant's own content is quoted
 // as written, and the Bot replies to Contacts in pt-BR.
@@ -43,9 +46,32 @@ const renderHours = (hours: BusinessHours) => {
   ].join("\n");
 };
 
+const detailLabels: Record<ContactDetailField, string> = {
+  name: "Name",
+  email: "Email",
+  city: "City",
+  need: "Need",
+};
+
+const capturePolicy = `- When the Contact states one of the details below about themselves, save it with the ${captureToolName} tool in the same response as your reply. Save only what they stated; never guess. The details already saved are listed under "Contact details".
+- Before a handoff, the platform asks the Contact for missing required details on your behalf. When the Contact answers that request, save what they gave and call handoff again for their earlier request.`;
+
+// Left out while capture is disabled. Only the Tenant's choices, never a
+// Contact's values, so the cached prefix is the same for every Contact.
+const renderCapture = (capture: CaptureSettings) => {
+  const fields = capturedFields(capture);
+  if (!fields.length) return null;
+  return [
+    "",
+    "# Contact details to capture",
+    ...fields.map((field) => `- ${detailLabels[field]}: ${capture.fields[field]}`),
+    capturePolicy,
+  ].join("\n");
+};
+
 // The schedule is left out: changing it must not invalidate the cache, and
 // whether the Bot replies at all is decided before the model is called.
-export const renderInstructions = (behaviour: BehaviourSettings) =>
+export const renderInstructions = (behaviour: BehaviourSettings, capture: CaptureSettings) =>
   joinPresent([
     policy,
     "",
@@ -64,6 +90,7 @@ export const renderInstructions = (behaviour: BehaviourSettings) =>
     behaviour.rules.trim() || "None.",
     line("Refused topics", behaviour.refusedTopics.join("; ")),
     line("Topics handed to the team", behaviour.handoffTopics.join("; ")),
+    renderCapture(capture),
   ]);
 
 export const renderKnowledgeBase = ({ faqs, sections }: KnowledgeBase) =>
@@ -72,3 +99,19 @@ export const renderKnowledgeBase = ({ faqs, sections }: KnowledgeBase) =>
     ...faqs.map(({ question, answer }) => `## Question: ${question.trim()}\n${answer.trim()}`),
     ...sections.map(({ title, body }) => `## ${title.trim()}\n${body.trim()}`),
   ].join("\n\n");
+
+// The turn's Contact, outside the cached prefix: only the chosen details, and
+// never the phone. Empty while capture is disabled.
+export const renderContactDetails = (capture: CaptureSettings, details: ContactDetails) => {
+  const fields = capturedFields(capture);
+  if (!fields.length) return "";
+  return [
+    "# Contact details",
+    ...fields.map((field) => {
+      const value = details[field]?.trim();
+      if (value) return `${detailLabels[field]}: ${value}`;
+      const required = capture.fields[field] === "required" ? " (required before a handoff)" : "";
+      return `${detailLabels[field]}: not provided${required}`;
+    }),
+  ].join("\n");
+};

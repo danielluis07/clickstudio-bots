@@ -38,11 +38,12 @@ Latency covers the complete core turn, including fixture reads and every model
 attempt/tool-refusal round trip. Run from the intended hosting region and record
 that environment; local latency is exploratory evidence only.
 
-The current production tool catalog offers only `handoff`. Capture cases require
-safe Handoff without inventing a capture tool. They do not certify the future
-capture capability. Likewise, the 15 voice-note slots are a manual evidence
-template, pending the production transcription path. Extend the corpus when
-those capabilities land, then rerun the provider gate.
+The runner keeps Contact capture disabled, so the catalog offers only `handoff`.
+Capture cases require safe Handoff without inventing a capture tool. They do not
+certify [Contact capture](../contact-capture.md), which has landed: extend the
+corpus with capture and required-detail cases, then rerun the provider gate.
+Likewise, the 15 voice-note slots are a manual evidence template, pending the
+production transcription path.
 
 ## Run manually
 

@@ -4,6 +4,7 @@ import {
   createBotActivation,
   createBotSandbox,
   createBotSettingsEditor,
+  createCaptureSettingsEditor,
   createLiveBot,
   type BotJob,
   type BotAllowance,
@@ -396,4 +397,85 @@ test("inbox processing enqueues a live turn only for an eligible Contact message
   await inbox.receive({ body, signature: signMetaDelivery(body) });
   for (const job of jobs.take()) await inbox.process(job.inboxEventId);
   expect(queue.take()).toEqual([{ type: "run-bot-turn", conversationId: expect.any(String) }]);
+});
+
+const captureCall = (input: Record<string, string>) => ({
+  id: "call-1",
+  name: "capture_contact_details",
+  input,
+});
+
+test("details the Bot captures are stored on the Contact and reach its next turns", async () => {
+  const {
+    scope,
+    route,
+    clock,
+    model,
+    sender,
+    activation,
+    conversationId,
+    worker,
+    repository,
+    dependencies: { notifier },
+  } = await setup();
+  await createCaptureSettingsEditor({ db, clock }).saveCapture(scope, {
+    enabled: true,
+    fields: { name: "required", email: "optional", city: "off", need: "optional" },
+  });
+  await activation.activate(scope);
+  model.script({
+    text: "Prazer, Ana! O corte custa R$ 80.",
+    toolCalls: [captureCall({ name: "Ana", email: "ana@example.com" })],
+  });
+
+  await worker.run(conversationId);
+
+  expect((await repository.getConversation(conversationId))!.contact).toMatchObject({
+    name: "Ana",
+    email: "ana@example.com",
+    city: null,
+    need: null,
+  });
+  expect(sender.sent.map(({ text }) => text)).toEqual(["Prazer, Ana! O corte custa R$ 80."]);
+  const contactId = (await repository.getConversation(conversationId))!.contact.id;
+  expect(notifier.pings).toContainEqual({ tenantId: scope.tenantId, ping: { contactId } });
+
+  clock.advance(60_000);
+  await recordInboundTextMessage(db, route, {
+    wamid: "later",
+    from: "5511999990001",
+    profileName: null,
+    text: "E a barba?",
+    sentAt: clock.now(),
+  });
+  model.script({ text: "Não tenho essa informação." });
+  await worker.run(conversationId);
+  const { contact } = model.requests.at(-1)!;
+  expect(contact).toContain("Name: Ana");
+  expect(contact).toContain("Email: ana@example.com");
+  expect(JSON.stringify(model.requests)).not.toContain("5511999990001");
+});
+
+test("a live Handoff first asks for missing required details, leaving the Bot in charge", async () => {
+  const { scope, clock, model, sender, activation, conversationId, worker, repository } =
+    await setup();
+  await createCaptureSettingsEditor({ db, clock }).saveCapture(scope, {
+    enabled: true,
+    fields: { name: "required", email: "off", city: "off", need: "off" },
+  });
+  await activation.activate(scope);
+  model.script({
+    toolCalls: [{ id: "call-1", name: "handoff", input: { reason: "pedido_do_contato" } }],
+  });
+
+  expect(await worker.run(conversationId)).toBe("sent");
+
+  expect(sender.sent.map(({ text }) => text)).toEqual([
+    "Antes de chamar a equipe, me informe seu nome, por favor.",
+  ]);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "bot",
+    waiting: false,
+    handoffReason: null,
+  });
 });

@@ -19,11 +19,14 @@ export type ModelToolCall = {
 // Why the core refused a tool call, returned so the model can retry.
 export type ModelToolRefusal = { callId: string; name: string; error: string };
 
+// What a call the core ran reports back, so the model can continue.
+export type ModelToolOutput = { callId: string; name: string; output: string };
+
 export type ModelMessage =
   | { role: "user"; text: string }
   | { role: "assistant"; text: string; toolCalls?: ModelToolCall[] }
-  // Refusals of the previous message's tool calls.
-  | { role: "tool"; results: ModelToolRefusal[] };
+  // The outcome of each of the previous message's tool calls.
+  | { role: "tool"; results: (ModelToolRefusal | ModelToolOutput)[] };
 
 export type ModelRequest = {
   // A stable prefix the provider caches, in this order: tools, instructions
@@ -31,6 +34,9 @@ export type ModelRequest = {
   tools: ModelTool[];
   instructions: string;
   knowledgeBase: string;
+  // The turn's Contact details, after the cached prefix because they differ
+  // per Contact. Empty when there are none to send.
+  contact: string;
   messages: ModelMessage[];
 };
 

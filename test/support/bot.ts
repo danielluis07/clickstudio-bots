@@ -2,11 +2,13 @@ import type {
   BehaviourSettings,
   BotRepository,
   BotTurn,
+  CaptureSettings,
   ContextMessage,
   KnowledgeBase,
   TurnUsage,
   UsageMeter,
 } from "@/modules/bot";
+import type { ContactDetails } from "@/modules/conversations";
 
 export const testBehaviour: BehaviourSettings = {
   businessName: "Barbearia Navalha",
@@ -35,9 +37,22 @@ export const testKnowledgeBase: KnowledgeBase = {
   sections: [{ title: "Pagamento", body: "Aceitamos PIX e cartão." }],
 };
 
+// Capture is off until a test turns it on.
+export const noCapture: CaptureSettings = {
+  enabled: false,
+  fields: { name: "off", email: "off", city: "off", need: "off" },
+};
+
+export const noContactDetails: ContactDetails = { name: null, email: null, city: null, need: null };
+
 export type TestBotRepository = BotRepository & {
   behaviour: BehaviourSettings;
   knowledgeBase: KnowledgeBase;
+  capture: CaptureSettings;
+  // The turn's Contact as saved; captured details are merged in.
+  contact: ContactDetails;
+  // Every capture the core saved, in order.
+  captured: Partial<ContactDetails>[];
   // Every message of the Conversation, whatever the core asks for.
   messages: ContextMessage[];
   turns: BotTurn[];
@@ -49,6 +64,9 @@ export const createTestBotRepository = (): TestBotRepository => {
   const repository: TestBotRepository = {
     behaviour: testBehaviour,
     knowledgeBase: testKnowledgeBase,
+    capture: noCapture,
+    contact: noContactDetails,
+    captured: [],
     messages: [],
     turns: [],
     getBehaviour: async (turn) => {
@@ -56,6 +74,12 @@ export const createTestBotRepository = (): TestBotRepository => {
       return repository.behaviour;
     },
     getKnowledgeBase: async () => repository.knowledgeBase,
+    getCapture: async () => repository.capture,
+    getContactDetails: async () => repository.contact,
+    saveContactDetails: async (_turn, details) => {
+      repository.captured.push(details);
+      repository.contact = { ...repository.contact, ...details };
+    },
     listRecentMessages: async () => repository.messages,
   };
   return repository;

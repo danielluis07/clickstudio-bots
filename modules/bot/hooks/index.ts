@@ -1,4 +1,6 @@
 export {
+  captureFieldOptions,
+  captureModeOptions,
   scheduleOptions,
   settingsEditorLabel,
   toneOptions,

@@ -494,7 +494,12 @@ describe("Contacts sync", () => {
         contact: { id },
       },
     ] = (await createConversationRepository(db, tenantA).listConversations()).conversations;
-    await createConversationRepository(db, tenantA).renameContact(id, "Ana (cliente VIP)");
+    await createConversationRepository(db, tenantA).updateContactDetails(id, {
+      name: "Ana (cliente VIP)",
+      email: null,
+      city: null,
+      need: null,
+    });
     await deliverAll([
       contactSyncChange({
         phoneNumberId: "300",

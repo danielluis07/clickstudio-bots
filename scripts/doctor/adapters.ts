@@ -72,6 +72,7 @@ export const createDoctorDependencies = (): DoctorDependencies => ({
       tools: [],
       instructions: "This is a synthetic connectivity check. Reply with exactly OK.",
       knowledgeBase: "Synthetic test only. No Contact data.",
+      contact: "",
       messages: [{ role: "user", text: "Responda apenas OK." }],
     });
     if (!result.text.trim() || result.toolCalls.length)

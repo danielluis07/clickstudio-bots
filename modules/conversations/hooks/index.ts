@@ -1,4 +1,5 @@
 export {
+  contactDetailInputs,
   contactDisplayName,
   formatContactPhone,
 } from "@/modules/conversations/hooks/contact-display";
@@ -21,7 +22,7 @@ export {
   useConversationList,
   useConversationMessages,
 } from "@/modules/conversations/hooks/use-conversations";
-export { useContactNameForm } from "@/modules/conversations/hooks/use-rename-contact";
+export { useContactDetailsForm } from "@/modules/conversations/hooks/use-contact-details-form";
 export { useDeleteContact } from "@/modules/conversations/hooks/use-delete-contact";
 export { useReplyComposer } from "@/modules/conversations/hooks/use-reply-composer";
 export {

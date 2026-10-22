@@ -1,4 +1,4 @@
-import { ContactNameForm } from "@/components/inbox/contact-name-form";
+import { ContactDetailsForm } from "@/components/inbox/contact-details-form";
 import { DeleteContactButton } from "@/components/inbox/delete-contact-button";
 import { formatContactPhone } from "@/modules/conversations/hooks";
 import type { RouterOutput } from "@/trpc/routers/_app";
@@ -28,7 +28,7 @@ export function ContactPanel({
           <dd>{formatContactPhone(contact.phone)}</dd>
         </div>
       </dl>
-      <ContactNameForm key={`name-${contact.id}`} contact={contact} />
+      <ContactDetailsForm key={`details-${contact.id}`} contact={contact} />
       {canDeleteContacts && (
         <DeleteContactButton key={`delete-${contact.id}`} contact={contact} onDeleted={onDeleted} />
       )}

@@ -1,11 +1,24 @@
+import { detailsRequest, isDetailsRequest, missingRequired } from "@/modules/bot/capture";
 import {
   contextWindow,
   defaultContextLimits,
+  memberLabel,
   replayContext,
   type ContextLimits,
 } from "@/modules/bot/context";
-import type { Model, ModelMessage, ModelRequest, ModelResponse } from "@/modules/bot/model";
-import { renderInstructions, renderKnowledgeBase } from "@/modules/bot/prompt";
+import type {
+  Model,
+  ModelMessage,
+  ModelRequest,
+  ModelResponse,
+  ModelToolOutput,
+  ModelToolRefusal,
+} from "@/modules/bot/model";
+import {
+  renderContactDetails,
+  renderInstructions,
+  renderKnowledgeBase,
+} from "@/modules/bot/prompt";
 import type { BotRepository, BotTurn } from "@/modules/bot/repository";
 import { scheduleAllows } from "@/modules/bot/schedule";
 import { checkToolCalls, handoffReply, modelTools, type HandoffReason } from "@/modules/bot/tools";
@@ -51,17 +64,27 @@ export const createBotCore = ({
 
   async respond(turn: BotTurn): Promise<TurnOutcome> {
     const window = contextWindow(clock.now(), context);
-    const [behaviour, knowledgeBase, recent] = await Promise.all([
+    const [behaviour, knowledgeBase, capture, details, recent] = await Promise.all([
       repository.getBehaviour(turn),
       repository.getKnowledgeBase(turn),
+      repository.getCapture(turn),
+      repository.getContactDetails(turn),
       repository.listRecentMessages(turn, window),
     ]);
     const messages = replayContext(recent, window);
     if (!messages) return { kind: "nothing_to_answer" };
+    // Required details are asked for once: if the Bot's latest reply asked,
+    // the Contact has answered it, and a Handoff now goes ahead regardless.
+    const latestBotReply = messages.findLast(
+      (message) => message.role === "assistant" && !message.text.startsWith(memberLabel),
+    );
+    const askedForDetails =
+      latestBotReply?.role === "assistant" && isDetailsRequest(latestBotReply.text);
     const request: ModelRequest = {
-      tools: modelTools,
-      instructions: renderInstructions(behaviour),
+      tools: modelTools(capture),
+      instructions: renderInstructions(behaviour, capture),
       knowledgeBase: renderKnowledgeBase(knowledgeBase),
+      contact: renderContactDetails(capture, details),
       messages,
     };
     const usage: TurnUsage = {
@@ -78,23 +101,58 @@ export const createBotCore = ({
     };
 
     const decide = async (): Promise<TurnOutcome> => {
-      let response: ModelResponse = await generate(request.messages);
-      let checked = checkToolCalls(response.toolCalls);
-      if (!checked.valid) {
-        // One retry: the model sees why its calls were refused.
+      let messages = request.messages;
+      let retried = false;
+      let continued = false;
+      // The Contact's details as saved, with what this turn captured.
+      const known = { ...details };
+      // The model sees its own calls and their results before it continues.
+      const roundTrip = (
+        response: ModelResponse,
+        results: (ModelToolRefusal | ModelToolOutput)[],
+      ) => {
         usage.toolRoundTrips += 1;
-        response = await generate([
-          ...request.messages,
+        messages = [
+          ...messages,
           { role: "assistant", text: response.text, toolCalls: response.toolCalls },
-          { role: "tool", results: checked.errors },
-        ]);
-        checked = checkToolCalls(response.toolCalls);
+          { role: "tool", results },
+        ];
+      };
+      for (;;) {
+        const response = await generate(messages);
+        const checked = checkToolCalls(response.toolCalls, capture);
+        if (!checked.valid) {
+          // A refused response's text is never sent, even beside a valid answer.
+          if (retried) return handoff("bot_indisponivel");
+          // One retry: the model sees why its calls were refused.
+          retried = true;
+          roundTrip(response, checked.errors);
+          continue;
+        }
+        if (checked.captured) {
+          await repository.saveContactDetails(turn, checked.captured);
+          Object.assign(known, checked.captured);
+        }
+        const reply = response.text.trim();
+        if (checked.handoff) {
+          const missing = missingRequired(capture, known);
+          if (missing.length && !askedForDetails)
+            return { kind: "answer", reply: detailsRequest(missing, reply) };
+          return handoff(checked.handoff.reason, reply);
+        }
+        if (reply) return { kind: "answer", reply };
+        // A capture alone gets one chance to write the reply it left out.
+        if (!checked.captured || continued) return handoff("bot_indisponivel");
+        continued = true;
+        roundTrip(
+          response,
+          response.toolCalls.map((call) => ({
+            callId: call.id,
+            name: call.name,
+            output: "Saved.",
+          })),
+        );
       }
-      // A refused response's text is never sent, even beside a valid answer.
-      if (!checked.valid) return handoff("bot_indisponivel");
-      const reply = response.text.trim();
-      if (!reply && !checked.handoff) return handoff("bot_indisponivel");
-      return checked.handoff ? handoff(checked.handoff.reason, reply) : { kind: "answer", reply };
     };
 
     // A timeout or provider error never falls back to another provider.
