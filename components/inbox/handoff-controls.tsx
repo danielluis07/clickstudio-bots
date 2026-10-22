@@ -10,8 +10,8 @@ export function HandoffControls({ conversation }: { conversation: Conversation }
   const { takeOver, returnToBot, resolve, pending, failed } = useHandoffControls(conversation.id);
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <div className="flex gap-2">
+    <div className="flex min-w-0 flex-col gap-1">
+      <div className="flex flex-wrap gap-2">
         {conversation.owner === "bot" ? (
           <Button type="button" size="sm" variant="outline" disabled={pending} onClick={takeOver}>
             Assumir

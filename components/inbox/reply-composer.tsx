@@ -16,7 +16,10 @@ export function ReplyComposer(props: ReplyComposerProps) {
     useReplyComposer(props);
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-2 border-t border-border p-3">
+    <form
+      onSubmit={submit}
+      className="flex shrink-0 flex-col gap-2 border-t border-border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+    >
       {windowClosed && (
         <p id="janela-fechada" className="text-sm text-muted-foreground">
           A janela de 24 horas para responder pelo painel está fechada. Continue a conversa pelo app
@@ -37,7 +40,7 @@ export function ReplyComposer(props: ReplyComposerProps) {
           }
           maxLength={4096}
           rows={1}
-          className="max-h-40 min-h-9 resize-none"
+          className="max-h-[min(10rem,20dvh)] min-h-9 resize-none"
           disabled={windowClosed}
           value={text}
           onChange={(event) => changeText(event.target.value)}
