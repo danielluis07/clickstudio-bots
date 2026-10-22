@@ -1,8 +1,7 @@
 import type { Database } from "@/db/database";
 import { message } from "@/db/schema";
 import type { ChannelRoute } from "@/modules/channels";
-import { fileConversation } from "@/modules/conversations/inbound";
-import { lockContact, predatesDeletion } from "@/modules/conversations/contact-deletion";
+import { withContactAdmission } from "@/modules/conversations/contact-deletion";
 
 // One Contact's messages from the WhatsApp Business app's history. Meta
 // shares it after onboarding in phased chunks that may arrive in any order,
@@ -30,37 +29,35 @@ export const recordImportedHistory = (
   route: ChannelRoute,
   history: ImportedHistory,
 ) =>
-  db.transaction(async (tx) => {
-    const deletedAt = await lockContact(tx, route.tenantId, history.phone);
-    const messages = history.messages.filter(
-      ({ sentAt }) => !predatesDeletion(deletedAt, sentAt, history.receivedAt),
-    );
-    if (messages.length === 0) return null;
-    const latest = new Date(Math.max(...messages.map(({ sentAt }) => sentAt.getTime())));
-    const conversationId = await fileConversation(tx, route, {
+  withContactAdmission(
+    db,
+    route,
+    {
       phone: history.phone,
-      profileName: null,
-      sentAt: latest,
       receivedAt: history.receivedAt,
-    });
-    if (!conversationId) return null;
-    await tx
-      .insert(message)
-      .values(
-        messages.map((imported) => ({
-          tenantId: route.tenantId,
-          conversationId,
-          wamid: imported.wamid,
-          direction: imported.direction,
-          // The business wrote in the app before the platform was connected.
-          origin: imported.direction === "inbound" ? ("contact" as const) : ("app" as const),
-          status: imported.status,
-          type: "text" as const,
-          text: imported.text,
-          sentAt: imported.sentAt,
-          imported: true,
-        })),
-      )
-      .onConflictDoNothing({ target: [message.tenantId, message.wamid] });
-    return conversationId;
-  });
+      events: history.messages,
+      occurredAt: (event) => event.sentAt,
+    },
+    async ({ tx, events: messages, fileConversation }) => {
+      const conversationId = await fileConversation();
+      await tx
+        .insert(message)
+        .values(
+          messages.map((imported) => ({
+            tenantId: route.tenantId,
+            conversationId,
+            wamid: imported.wamid,
+            direction: imported.direction,
+            // The business wrote in the app before the platform was connected.
+            origin: imported.direction === "inbound" ? ("contact" as const) : ("app" as const),
+            status: imported.status,
+            type: "text" as const,
+            text: imported.text,
+            sentAt: imported.sentAt,
+            imported: true,
+          })),
+        )
+        .onConflictDoNothing({ target: [message.tenantId, message.wamid] });
+      return conversationId;
+    },
+  );

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
+import { sql } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import {
   channel,
@@ -14,7 +15,9 @@ import {
 import {
   createConversationRepository,
   deleteContact,
+  recordImportedHistory,
   recordInboundTextMessage,
+  recordMessageEcho,
 } from "@/modules/conversations";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
@@ -238,6 +241,147 @@ test("an event received before deletion stays suppressed even with a later messa
   expect(await pruneInboxEvents(db, clock)).toBe(1);
   expect(await inbox.process(job.inboxEventId)).toEqual({ ok: false, error: "not_found" });
 });
+
+test.each(["echo", "history", "edit", "contact_sync"] as const)(
+  "a retained %s cannot alter a fresh Contact even when its event timestamp is after deletion",
+  async (kind) => {
+    const conversationId = await receive();
+    const found = (await repository().getConversation(conversationId!))!;
+    const timestamp = String(clock.now().getTime() / 1000 + 60);
+    const changes = {
+      echo: messageEchoChange({ phoneNumberId: "300", wamid: "wamid.retained-echo", timestamp }),
+      history: historyChange({
+        phoneNumberId: "300",
+        threads: [
+          { id: phone, messages: [{ wamid: "wamid.retained-history", from: phone, timestamp }] },
+        ],
+      }),
+      edit: referencingChange({
+        phoneNumberId: "300",
+        wamid: "wamid.retained-edit",
+        originalWamid: "wamid.fresh",
+        type: "edit",
+        timestamp,
+        body: "Dados excluídos",
+      }),
+      contact_sync: contactSyncChange({
+        phoneNumberId: "300",
+        contacts: [{ phone, fullName: "Nome excluído", timestamp }],
+      }),
+    };
+    const body = metaDelivery(changes[kind]);
+    await inbox.receive({ body, signature: signMetaDelivery(body) });
+    const [job] = queue.take();
+    clock.advance(1000);
+    expect(await remove(found.contact.id)).toEqual({ ok: true });
+    clock.advance(1000);
+    const freshId = await recordInboundTextMessage(db, route, {
+      wamid: "wamid.fresh",
+      from: phone,
+      profileName: "Ana",
+      text: "Novo contato",
+      sentAt: clock.now(),
+    });
+    const fresh = await repository().getConversation(freshId!);
+    const messages = await repository().listMessages(freshId!);
+    notifier.pings.length = 0;
+
+    expect(await inbox.process(job.inboxEventId)).toEqual({ ok: true, status: "processed" });
+    expect(await repository().getConversation(freshId!)).toEqual(fresh);
+    expect(await repository().listMessages(freshId!)).toEqual(messages);
+    expect(await db.select().from(messageChange)).toEqual([]);
+    expect(notifier.pings).toEqual([]);
+  },
+);
+
+test("mixed history creates a fresh Conversation from only its admitted messages, in any order", async () => {
+  const conversationId = await receive();
+  const found = (await repository().getConversation(conversationId!))!;
+  const oldTime = new Date(clock.now().getTime() - 1000);
+  expect(await remove(found.contact.id)).toEqual({ ok: true });
+  clock.advance(1000);
+  const first = clock.now();
+  clock.advance(1000);
+  const latest = clock.now();
+  const freshId = await recordImportedHistory(db, route, {
+    phone,
+    receivedAt: clock.now(),
+    messages: [
+      {
+        wamid: "wamid.latest",
+        direction: "outbound",
+        status: "read",
+        text: "Depois",
+        sentAt: latest,
+      },
+      {
+        wamid: "wamid.erased",
+        direction: "inbound",
+        status: "read",
+        text: "Excluído",
+        sentAt: oldTime,
+      },
+      {
+        wamid: "wamid.first",
+        direction: "inbound",
+        status: "read",
+        text: "Primeiro",
+        sentAt: first,
+      },
+    ],
+  });
+  const fresh = (await repository().getConversation(freshId!))!;
+  expect(fresh.contact.id).not.toBe(found.contact.id);
+  expect(freshId).not.toBe(conversationId);
+  expect((await repository().listMessages(freshId!))!.messages.map(({ text }) => text)).toEqual([
+    "Primeiro",
+    "Depois",
+  ]);
+  expect((await repository().listConversations()).conversations[0].lastMessageAt).toEqual(latest);
+});
+
+test.each(["inbound", "echo", "history"] as const)(
+  "a failed %s write rolls back its new Contact and Conversation",
+  async (kind) => {
+    // Force a storage failure after admission and filing, through the same
+    // database adapter the public event writers use.
+    await db.execute(sql`alter table message add constraint reject_test_message
+      check (wamid <> 'wamid.rejected')`);
+    try {
+      const sentAt = clock.now();
+      const record = {
+        inbound: () =>
+          recordInboundTextMessage(db, route, {
+            wamid: "wamid.rejected",
+            from: phone,
+            profileName: "Ana",
+            text: "Oi",
+            sentAt,
+          }),
+        echo: () =>
+          recordMessageEcho(db, route, {
+            wamid: "wamid.rejected",
+            to: phone,
+            text: "Oi",
+            sentAt,
+          }),
+        history: () =>
+          recordImportedHistory(db, route, {
+            phone,
+            messages: [
+              { wamid: "wamid.rejected", direction: "inbound", status: "read", text: "Oi", sentAt },
+            ],
+          }),
+      };
+      await expect(record[kind]()).rejects.toThrow();
+      expect(await db.select().from(contact)).toEqual([]);
+      expect(await db.select().from(conversation)).toEqual([]);
+      expect(await db.select().from(message)).toEqual([]);
+    } finally {
+      await db.execute(sql`alter table message drop constraint reject_test_message`);
+    }
+  },
+);
 
 test("ambiguous deletion-second messages are suppressed; a message in the next second creates a fresh Contact", async () => {
   clock.set(new Date(Math.floor(clock.now().getTime() / 1000) * 1000 + 100));

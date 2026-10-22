@@ -106,6 +106,12 @@ not an anonymization guarantee. It is retained until the Tenant is deleted and
 contains no names, raw phones or message content. Contact writes and deletion
 share a short transaction lock per address; external calls never hold this lock.
 
+The internal admission module in `modules/conversations/contact-deletion.ts`
+owns this lock, deletion chronology, history filtering and Contact/Conversation
+filing in one transaction. Event writers receive only admitted events. Echo
+reconciliation keeps its message lock first and runs admission in a savepoint;
+both locks remain held until the outer transaction commits.
+
 Pending/failed inbox events received on or before deletion settle without
 restoring Contact data. Messages/echoes, imported history, edits/revokes and app
 contact names dated on or before deletion are also suppressed when delivered
