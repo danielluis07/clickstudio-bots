@@ -40,7 +40,9 @@ Provider errors and invalid-tool retries belong to the reserved turn; the retry
 does not consume another turn. Invalid input, unauthorized requests and a missing
 provider configuration consume no allowance.
 
-A conditional upsert reserves the attempt before the Model call. No database
+A conditional upsert reserves the attempt before the Model call. The stored day
+only advances: a delayed prior-day reservation counts toward the later stored
+day, so it cannot erase usage already reserved after midnight. No database
 transaction or row lock is held during that external call. At the cap the endpoint
 returns `TOO_MANY_REQUESTS` with a pt-BR explanation and does not call the Model.
 The browser refreshes the count after each attempt and on focus/reconnect. Its

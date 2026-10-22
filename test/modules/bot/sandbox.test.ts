@@ -115,6 +115,28 @@ test("50 attempts exhaust the Tenant's separate cap across service instances unt
   });
 });
 
+test("a delayed prior-day reservation cannot roll back or reset the new day's allowance", async () => {
+  const priorDayClock = createTestClock(new Date("2026-10-23T02:59:59Z"));
+  const delayed = createBotSandbox({ db, clock: priorDayClock, model });
+  clock.set(new Date("2026-10-23T03:00:00Z"));
+  const current = createBotSandbox({ db, clock, model });
+  model.script({ text: "Olá!" }, { text: "Olá!" });
+  await current.respond(owner, { text: "Oi", history: [] });
+  await delayed.respond(owner, { text: "Oi", history: [] });
+  expect(await current.status(owner)).toMatchObject({ allowance: { used: 2, limit: 50 } });
+
+  for (let turn = 0; turn < 48; turn++) {
+    model.script({ text: "Olá!" });
+    await current.respond(owner, { text: "Oi", history: [] });
+  }
+  expect(await delayed.respond(owner, { text: "Oi", history: [] })).toEqual({
+    ok: false,
+    error: "daily_cap",
+  });
+  expect(await current.status(owner)).toMatchObject({ allowance: { used: 50, limit: 50 } });
+  expect(model.requests).toHaveLength(50);
+});
+
 test("sandbox Handoffs and refused capture/send calls make no network requests or changes to production Contacts, Conversations, messages or Channels", async () => {
   await db.insert(channel).values({
     id: "channel",

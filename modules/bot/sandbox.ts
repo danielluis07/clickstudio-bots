@@ -63,18 +63,19 @@ export const createBotSandbox = ({
 
       const now = clock.now();
       const day = dayFormatter.format(now);
-      // The conditional upsert reserves a turn before the Model call. No lock
-      // or transaction spans the external call, and failed attempts count too.
+      // Reserve before the Model call, without holding a transaction across it.
+      // A delayed prior-day request counts toward the persisted later day; it
+      // must never roll that day backward or erase its usage. Failures count too.
       const [reserved] = await db
         .insert(botSandboxUsage)
         .values({ tenantId: scope.tenantId, day, turns: 1 })
         .onConflictDoUpdate({
           target: botSandboxUsage.tenantId,
           set: {
-            day,
-            turns: sql`case when ${botSandboxUsage.day} = ${day} then ${botSandboxUsage.turns} + 1 else 1 end`,
+            day: sql`greatest(${botSandboxUsage.day}, ${day}::date)`,
+            turns: sql`case when ${botSandboxUsage.day} < ${day} then 1 else ${botSandboxUsage.turns} + 1 end`,
           },
-          setWhere: sql`${botSandboxUsage.day} <> ${day} or ${botSandboxUsage.turns} < ${sandboxDailyCap}`,
+          setWhere: sql`${botSandboxUsage.day} < ${day} or ${botSandboxUsage.turns} < ${sandboxDailyCap}`,
         })
         .returning({ used: botSandboxUsage.turns });
       if (!reserved) return { ok: false as const, error: "daily_cap" as const };
