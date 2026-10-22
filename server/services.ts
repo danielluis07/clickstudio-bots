@@ -6,6 +6,7 @@ import { createResendMailer } from "@/platform/resend-mailer";
 import { createChannelService } from "@/modules/channels";
 import { createReplyService } from "@/modules/conversations";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
+import { createBotSettingsEditor } from "@/modules/bot";
 import { createWhatsAppGateway } from "@/server/whatsapp";
 import { createWebhookInbox, pruneInboxEvents } from "@/modules/webhook-inbox";
 import { createQStashJobQueue, createQStashJobVerifier, qstashJobUrl } from "@/platform/qstash";
@@ -48,6 +49,8 @@ export const channelService = createChannelService({
 });
 
 export const knowledgeBaseEditor = createKnowledgeBaseEditor({ db, clock: systemClock });
+
+export const botSettingsEditor = createBotSettingsEditor({ db, clock: systemClock });
 
 export const replyService = createReplyService({
   db,

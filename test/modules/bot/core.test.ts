@@ -80,6 +80,86 @@ describe("cached prompt prefix", () => {
   });
 });
 
+describe("behaviour settings", () => {
+  test("shape the instructions: profile, weekly hours, tone, emoji, greeting, rules and topics", async () => {
+    repository.behaviour = {
+      ...repository.behaviour,
+      tone: "formal",
+      emoji: true,
+      refusedTopics: ["política", "religião"],
+      handoffTopics: ["reclamações", "reembolsos"],
+    };
+    model.script({ text: "Olá." });
+
+    await core().respond(turn);
+
+    const { instructions } = model.requests[0];
+    expect(instructions).toContain(
+      [
+        "# Style",
+        "Tone: formal and polite.",
+        "Emoji: allowed, sparingly.",
+        "Greeting to use when a Contact first writes: Olá! Aqui é a Barbearia Navalha.",
+        "",
+        "# Business profile",
+        "Name: Barbearia Navalha",
+        "Offer: Cortes de cabelo e barba",
+        "Address: Rua das Flores, 100, São Paulo",
+        "Opening hours (São Paulo time):",
+        "- Monday: closed",
+        "- Tuesday: 09:00 to 19:00",
+        "- Wednesday: 09:00 to 19:00",
+        "- Thursday: 09:00 to 19:00",
+        "- Friday: 09:00 to 19:00",
+        "- Saturday: 09:00 to 19:00",
+        "- Sunday: closed",
+        "",
+        "# Business rules",
+        "Não marcamos horário pelo WhatsApp; envie o link de agendamento.",
+        "Refused topics: política; religião",
+        "Topics handed to the team: reclamações; reembolsos",
+      ].join("\n"),
+    );
+  });
+
+  test("blank settings leave their lines out, and unset hours are not called closed", async () => {
+    repository.behaviour = {
+      ...repository.behaviour,
+      offer: "",
+      address: " ",
+      greeting: "",
+      rules: "",
+      refusedTopics: [],
+      handoffTopics: [],
+      hours: Object.fromEntries(
+        Object.keys(repository.behaviour.hours).map((day) => [day, null]),
+      ) as typeof repository.behaviour.hours,
+    };
+    model.script({ text: "Olá." });
+
+    await core().respond(turn);
+
+    const { instructions } = model.requests[0];
+    expect(instructions).toContain(
+      "# Business profile\nName: Barbearia Navalha\n\n# Business rules\nNone.",
+    );
+    expect(instructions).not.toContain("Greeting");
+    expect(instructions).not.toContain("closed");
+    expect(instructions.endsWith("None.")).toBe(true);
+  });
+
+  test("changing only the schedule leaves the cached prefix unchanged", async () => {
+    model.script({ text: "Oi!" }, { text: "Oi!" });
+
+    await core().respond(turn);
+    repository.behaviour = { ...repository.behaviour, schedule: "outside_business_hours" };
+    await core().respond(turn);
+
+    const [before, after] = model.requests;
+    expect(after.instructions).toBe(before.instructions);
+  });
+});
+
 const handoffCall = (reason: string, input: Record<string, unknown> = {}) => ({
   id: "call-1",
   name: "handoff",

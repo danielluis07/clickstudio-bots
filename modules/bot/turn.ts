@@ -7,6 +7,7 @@ import {
 import type { Model, ModelMessage, ModelRequest, ModelResponse } from "@/modules/bot/model";
 import { renderInstructions, renderKnowledgeBase } from "@/modules/bot/prompt";
 import type { BotRepository, BotTurn } from "@/modules/bot/repository";
+import { scheduleAllows } from "@/modules/bot/schedule";
 import { checkToolCalls, handoffReply, modelTools, type HandoffReason } from "@/modules/bot/tools";
 import type { TurnUsage, UsageMeter } from "@/modules/bot/usage";
 import type { Clock } from "@/platform/clock";
@@ -41,6 +42,13 @@ export const createBotCore = ({
   clock: Clock;
   context?: ContextLimits;
 }) => ({
+  // Whether the Tenant's schedule lets the Bot reply now. A reply also needs
+  // the Conversation with the Bot and the Channel unpaused; this checks only
+  // the schedule, and a false never hands the Conversation off.
+  async isScheduled(turn: BotTurn) {
+    return scheduleAllows(await repository.getBehaviour(turn), clock.now());
+  },
+
   async respond(turn: BotTurn): Promise<TurnOutcome> {
     const window = contextWindow(clock.now(), context);
     const [behaviour, knowledgeBase, recent] = await Promise.all([

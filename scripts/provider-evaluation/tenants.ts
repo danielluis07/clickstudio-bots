@@ -6,7 +6,15 @@ export const evaluationTenants: EvaluationTenant[] = [
     behaviour: {
       businessName: "Barbearia Horizonte Fictícia",
       offer: "Corte de cabelo e barba",
-      hours: "Terça a sábado, das 9h às 19h; domingo e segunda fechado.",
+      hours: {
+        monday: null,
+        tuesday: { opens: "09:00", closes: "19:00" },
+        wednesday: { opens: "09:00", closes: "19:00" },
+        thursday: { opens: "09:00", closes: "19:00" },
+        friday: { opens: "09:00", closes: "19:00" },
+        saturday: { opens: "09:00", closes: "19:00" },
+        sunday: null,
+      },
       address: "Rua Inventada, 100, Vila Fictícia",
       tone: "casual",
       emoji: true,
@@ -15,6 +23,7 @@ export const evaluationTenants: EvaluationTenant[] = [
         "Não confirme reservas, pagamentos nem descontos. Para agendar, envie apenas o link cadastrado.",
       refusedTopics: ["propaganda política"],
       handoffTopics: ["reclamação", "reembolso"],
+      schedule: "always",
     },
     knowledgeBase: {
       faqs: [
@@ -50,7 +59,15 @@ export const evaluationTenants: EvaluationTenant[] = [
     behaviour: {
       businessName: "Padaria Aurora Fictícia",
       offer: "Pães e bolos por encomenda",
-      hours: "Segunda a sábado, das 7h às 18h; domingo das 7h às 12h.",
+      hours: {
+        monday: { opens: "07:00", closes: "18:00" },
+        tuesday: { opens: "07:00", closes: "18:00" },
+        wednesday: { opens: "07:00", closes: "18:00" },
+        thursday: { opens: "07:00", closes: "18:00" },
+        friday: { opens: "07:00", closes: "18:00" },
+        saturday: { opens: "07:00", closes: "18:00" },
+        sunday: { opens: "07:00", closes: "12:00" },
+      },
       address: "Avenida Imaginária, 220, Bairro Fictício",
       tone: "neutral",
       emoji: false,
@@ -59,6 +76,7 @@ export const evaluationTenants: EvaluationTenant[] = [
         "Não confirme encomendas, pagamentos nem descontos. Envie apenas o link cadastrado para solicitar encomenda.",
       refusedTopics: ["propaganda política"],
       handoffTopics: ["reclamação", "reembolso"],
+      schedule: "always",
     },
     knowledgeBase: {
       faqs: [
@@ -92,7 +110,15 @@ export const evaluationTenants: EvaluationTenant[] = [
     behaviour: {
       businessName: "Banho e Tosa Estrela Fictício",
       offer: "Banho e tosa para cães",
-      hours: "Segunda a sexta, das 8h às 17h; sábado das 8h às 13h; domingo fechado.",
+      hours: {
+        monday: { opens: "08:00", closes: "17:00" },
+        tuesday: { opens: "08:00", closes: "17:00" },
+        wednesday: { opens: "08:00", closes: "17:00" },
+        thursday: { opens: "08:00", closes: "17:00" },
+        friday: { opens: "08:00", closes: "17:00" },
+        saturday: { opens: "08:00", closes: "13:00" },
+        sunday: null,
+      },
       address: "Travessa de Faz de Conta, 33, Jardim Fictício",
       tone: "formal",
       emoji: false,
@@ -101,6 +127,7 @@ export const evaluationTenants: EvaluationTenant[] = [
         "Não confirme reservas, pagamentos nem descontos. Para agendar, envie apenas o link cadastrado. Questões veterinárias vão para a equipe.",
       refusedTopics: ["propaganda política"],
       handoffTopics: ["reclamação", "reembolso", "questões veterinárias"],
+      schedule: "always",
     },
     knowledgeBase: {
       faqs: [

@@ -19,6 +19,21 @@ export type {
   ContextWindow,
   KnowledgeBase,
 } from "@/modules/bot/repository";
+export {
+  botSchedules,
+  botTimeZone,
+  weekdays,
+  type BotSchedule,
+  type BusinessHours,
+  type OpeningHours,
+  type Weekday,
+} from "@/modules/bot/schedule";
+export {
+  botSettingsLimits,
+  createBotSettingsEditor,
+  readBehaviour,
+  type BotSettingsLimits,
+} from "@/modules/bot/settings";
 export type { HandoffReason } from "@/modules/bot/tools";
 export { createBotCore, type BotCore, type TurnOutcome } from "@/modules/bot/turn";
 export type { TurnUsage, UsageMeter } from "@/modules/bot/usage";

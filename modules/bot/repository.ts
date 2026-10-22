@@ -1,3 +1,4 @@
+import type { BotSchedule, BusinessHours } from "@/modules/bot/schedule";
 import type { ChannelRoute } from "@/modules/channels";
 import type { TenantScope } from "@/modules/tenancy";
 
@@ -16,7 +17,7 @@ export type BotTurn = {
 export type BehaviourSettings = {
   businessName: string;
   offer: string;
-  hours: string;
+  hours: BusinessHours;
   address: string;
   tone: "formal" | "neutral" | "casual";
   emoji: boolean;
@@ -27,6 +28,8 @@ export type BehaviourSettings = {
   refusedTopics: string[];
   // Topics the Bot always passes to the team.
   handoffTopics: string[];
+  // Not part of the prompt: it decides only whether the Bot may reply.
+  schedule: BotSchedule;
 };
 
 export type KnowledgeBase = {
