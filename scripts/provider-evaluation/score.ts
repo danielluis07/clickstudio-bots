@@ -150,7 +150,7 @@ export const scoreEvaluation = (run: EvaluationRun, reviews: HumanReview[] = [])
     modelCost: gate(
       usageComplete ? Math.max(...tenants.map(({ costAt5000Replies }) => costAt5000Replies)) : null,
       run.cases.length,
-      "<= BRL 20 per Tenant / 5000 replies; transcription excluded",
+      "<= BRL 20 per Tenant / 5000 text replies",
       (v) => v <= 20,
     ),
   };

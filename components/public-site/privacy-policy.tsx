@@ -42,8 +42,8 @@ export function PrivacyPolicy() {
             conhecimento, para produzir respostas do Bot e permitir atendimento humano.
           </li>
           <li>
-            Áudios de voz: processados temporariamente para transcrição. A plataforma não armazena o
-            arquivo de áudio; a transcrição passa a compor a conversa.
+            Mensagens de voz: a transcrição não está disponível nesta versão. A plataforma não baixa
+            nem armazena o arquivo de áudio; o atendimento deve continuar pelo WhatsApp.
           </li>
           <li>
             Dados técnicos: identificadores, endereço IP e registros estritamente necessários para
@@ -53,10 +53,9 @@ export function PrivacyPolicy() {
         <p>
           O Bot usa a base de conhecimento e o contexto necessário da conversa para responder. A
           Anthropic é a provedora de modelo prevista nesta minuta, sujeita à avaliação antes do
-          lançamento; a Groq realiza a transcrição de voz. O número de telefone não é incluído como
-          campo estruturado enviado ao modelo. Não usamos os dados do atendimento para publicidade
-          nem para treinar modelos próprios. As APIs contratadas não usam o conteúdo para
-          treinamento por padrão.
+          lançamento. O número de telefone não é incluído como campo estruturado enviado ao modelo.
+          Não usamos os dados do atendimento para publicidade nem para treinar modelos próprios. As
+          APIs contratadas não usam o conteúdo para treinamento por padrão.
         </p>
         <p>
           O negócio deve informar seus contatos sobre o atendimento automatizado e definir a base
@@ -77,9 +76,9 @@ export function PrivacyPolicy() {
       <LegalSection title="Compartilhamento e transferências internacionais">
         <p>
           A infraestrutura prevista fica no leste dos Estados Unidos: Vercel (iad1) e Neon
-          (us-east). O conteúdo dos contatos é processado por Vercel, Neon, Anthropic e Groq. QStash
-          e Ably recebem apenas identificadores para tarefas e atualizações. Resend recebe os dados
-          de membros necessários aos e-mails do serviço. Sentry recebe diagnósticos com conteúdo
+          (us-east). O conteúdo dos contatos é processado por Vercel, Neon e Anthropic. QStash e
+          Ably recebem apenas identificadores para tarefas e atualizações. Resend recebe os dados de
+          membros necessários aos e-mails do serviço. Sentry recebe diagnósticos com conteúdo
           pessoal removido, em sua região dos Estados Unidos.
         </p>
         <p>
@@ -99,9 +98,8 @@ export function PrivacyPolicy() {
       <LegalSection title="Por quanto tempo os dados ficam na plataforma">
         <ul>
           <li>
-            Durante a assinatura: contatos, conversas, campos capturados, histórico importado e
-            transcrições ficam disponíveis sem expiração automática, salvo instrução de exclusão do
-            negócio.
+            Durante a assinatura: contatos, conversas, campos capturados e histórico importado ficam
+            disponíveis sem expiração automática, salvo instrução de exclusão do negócio.
           </li>
           <li>
             Eventos brutos recebidos da Meta: até 30 dias, inclusive quando contêm textos e
@@ -145,13 +143,11 @@ export function PrivacyPolicy() {
         </p>
         <p>
           A Anthropic informa retenção padrão de entradas e saídas da API por até 30 dias, com
-          exceções para cumprimento legal e investigação de abuso. A configuração prevista da Groq
-          habilita retenção zero para o conteúdo das transcrições; metadados de uso continuam
-          sujeitos às regras do fornecedor. O Resend informa retenção de e-mails e logs por 30 dias
-          nos planos Free, Pro e Scale. O Ably mantém mensagens por 2 minutos por padrão, sem
-          histórico persistente habilitado. A retenção de mensagens, logs e fila de falhas do QStash
-          ainda está em confirmação; os payloads levam apenas identificadores. Consulte as fontes na
-          lista de subprocessadores.
+          exceções para cumprimento legal e investigação de abuso. O Resend informa retenção de
+          e-mails e logs por 30 dias nos planos Free, Pro e Scale. O Ably mantém mensagens por 2
+          minutos por padrão, sem histórico persistente habilitado. A retenção de mensagens, logs e
+          fila de falhas do QStash ainda está em confirmação; os payloads levam apenas
+          identificadores. Consulte as fontes na lista de subprocessadores.
         </p>
       </LegalSection>
       <LegalSection title="Seus direitos e como solicitar">

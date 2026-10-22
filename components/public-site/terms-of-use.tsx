@@ -109,20 +109,19 @@ export function TermsOfUse() {
       <LegalSection id="dpa" title="Anexo: Acordo de Tratamento de Dados (DPA)">
         <p>
           Este Acordo integra os Termos de Uso. O negócio é controlador dos dados de seus contatos;
-          a ClickStudio é operadora dos contatos, conversas, histórico importado, transcrições,
-          campos capturados e base de conhecimento inseridos pelo negócio. A ClickStudio continua
-          controladora dos próprios dados de cadastro de membros, autenticação, cobrança e contato
-          comercial.
+          a ClickStudio é operadora dos contatos, conversas, histórico importado, campos capturados
+          e base de conhecimento inseridos pelo negócio. A ClickStudio continua controladora dos
+          próprios dados de cadastro de membros, autenticação, cobrança e contato comercial.
         </p>
       </LegalSection>
       <LegalSection title="Objeto, duração e instruções">
         <p>
           O tratamento dura enquanto necessário à execução do contrato e às retenções descritas
-          neste Acordo. Abrange receber, organizar, armazenar, consultar, transmitir, transcrever e
-          excluir dados para prestar o atendimento configurado. As categorias incluem identificação
-          e telefone de contatos, conteúdo e metadados das conversas, transcrições e dados inseridos
-          pelo negócio. Os titulares são os contatos e as pessoas cujos dados o negócio insere na
-          base de conhecimento ou nas conversas.
+          neste Acordo. Abrange receber, organizar, armazenar, consultar, transmitir e excluir dados
+          para prestar o atendimento configurado. As categorias incluem identificação e telefone de
+          contatos, conteúdo e metadados das conversas e dados inseridos pelo negócio. Os titulares
+          são os contatos e as pessoas cujos dados o negócio insere na base de conhecimento ou nas
+          conversas.
         </p>
         <p>
           A ClickStudio trata esses dados somente conforme instruções documentadas do negócio,
@@ -189,10 +188,10 @@ export function TermsOfUse() {
       <LegalSection title="Exclusão, devolução e fim do contrato">
         <p>
           A ClickStudio executará instruções de exclusão do negócio em até 15 dias nos sistemas
-          ativos, inclusive de contatos, conversas, transcrições e campos associados, e informará as
-          retenções residuais aplicáveis. Eventos brutos expiram em até 30 dias; backups são
-          eliminados pelo envelhecimento da janela de recuperação, sem uso para novas finalidades.
-          Uma restauração deve reaplicar as exclusões.
+          ativos, inclusive de contatos, conversas e campos associados, e informará as retenções
+          residuais aplicáveis. Eventos brutos expiram em até 30 dias; backups são eliminados pelo
+          envelhecimento da janela de recuperação, sem uso para novas finalidades. Uma restauração
+          deve reaplicar as exclusões.
         </p>
         <p>
           No cancelamento, o canal é desconectado e o Bot é interrompido. O negócio tem 30 dias para
@@ -206,10 +205,10 @@ export function TermsOfUse() {
         <p>
           O negócio autoriza as transferências necessárias às finalidades contratadas para os locais
           indicados na lista de subprocessadores, incluindo hospedagem no leste dos Estados Unidos e
-          processamento por Anthropic e Groq. O fundamento previsto é o art. 33, IX, combinado com o
-          art. 7º, V, da LGPD, condicionado ao parecer jurídico antes da ativação paga. Esta
-          autorização não substitui as salvaguardas legais exigidas. Não se declara adoção de
-          cláusulas-padrão da ANPD por fornecedores sem confirmação contratual.
+          processamento por Anthropic. O fundamento previsto é o art. 33, IX, combinado com o art.
+          7º, V, da LGPD, condicionado ao parecer jurídico antes da ativação paga. Esta autorização
+          não substitui as salvaguardas legais exigidas. Não se declara adoção de cláusulas-padrão
+          da ANPD por fornecedores sem confirmação contratual.
         </p>
         <p>
           Consulte a <Link href="/privacidade">Política de Privacidade</Link> e as

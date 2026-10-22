@@ -81,8 +81,8 @@ recover a known retained pending event through the same replay action.
 ## Delete a Contact
 
 A Tenant owner can choose **Excluir contato** in the Contact panel (#66).
-The confirmation warns that the Contact and its Conversations, transcripts and
-captured data are permanently removed, and reminds the owner to delete the
+The confirmation warns that the Contact, its Conversations and captured data
+are permanently removed, and reminds the owner to delete the
 Conversation in the WhatsApp Business app too. The mutation checks the current
 Tenant membership and owner role on the server. Other Members have no delete
 control and cannot invoke the operation directly.
@@ -90,9 +90,9 @@ control and cannot invoke the operation directly.
 Run `bun run db:migrate` before deploying this feature. Deletion atomically
 removes the Contact, all its Conversations/messages, and message edits/revokes,
 including changes whose original message has not arrived. Captured fields are
-columns of the Contact row, so they are erased with it. Transcripts do not have
-persisted tables yet; when introduced, they must participate in the same
-Contact/Conversation erasure.
+columns of the Contact row, so they are erased with it. Voice transcription is
+[deferred](voice-notes.md) (#62). If introduced in the future, transcripts must
+participate in the same Contact/Conversation erasure.
 
 The migration backfills existing edit/revoke address hashes from their original
 messages or retained signed inbox events, checking Tenant and event identity.

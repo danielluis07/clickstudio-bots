@@ -62,7 +62,7 @@ export function SubprocessorList() {
           autenticação e cobrança.
         </p>
         <p>
-          Apenas Vercel, Neon, Anthropic e Groq recebem conteúdo dos contatos. QStash e Ably recebem
+          Apenas Vercel, Neon e Anthropic recebem conteúdo dos contatos. QStash e Ably recebem
           identificadores nos payloads, Resend recebe os dados necessários para e-mails de membros e
           Sentry recebe diagnósticos sem corpos, textos de mensagens ou telefones. Esses serviços
           também podem tratar metadados técnicos necessários à conexão e à segurança.
@@ -95,8 +95,7 @@ export function SubprocessorList() {
         <p>
           Plano e janela efetiva de backup do Neon, retenção de logs de Vercel e Sentry e prazos de
           mensagens, logs e fila de falhas do QStash ainda serão confirmados antes do uso de dados
-          reais. Não prometemos exclusão imediata de cópias residuais fora dos prazos declarados. A
-          configuração de retenção zero da Groq será verificada antes da ativação da transcrição.
+          reais. Não prometemos exclusão imediata de cópias residuais fora dos prazos declarados.
         </p>
       </LegalSection>
       <LegalSection title="Transferências e aviso de mudanças">

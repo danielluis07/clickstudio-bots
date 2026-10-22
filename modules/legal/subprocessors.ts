@@ -11,7 +11,7 @@ export const subprocessors = [
     name: "Neon",
     purpose: "Banco de dados e recuperação por backup.",
     categories:
-      "Contatos, conversas, transcrições, campos capturados, base de conhecimento, dados de membros e tokens criptografados da Meta.",
+      "Contatos, conversas, campos capturados, base de conhecimento, dados de membros e tokens criptografados da Meta.",
     location: "Leste dos Estados Unidos, região us-east prevista para o banco.",
     source: "https://neon.com/dpa",
   },
@@ -28,19 +28,11 @@ export const subprocessors = [
     purpose:
       "Geração das respostas do Bot pela API comercial. Provedora prevista nesta minuta, condicionada à avaliação antes do lançamento.",
     categories:
-      "Base de conhecimento, contexto necessário das conversas, transcrições e campos capturados. Sem número de telefone como campo estruturado.",
+      "Base de conhecimento, contexto necessário das conversas e campos capturados. Sem número de telefone como campo estruturado.",
     location:
       "Estados Unidos; processamento internacional conforme a infraestrutura e os subprocessadores da provedora.",
     source:
       "https://privacy.anthropic.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data",
-  },
-  {
-    name: "Groq",
-    purpose: "Transcrição de mensagens de voz, com retenção zero habilitada para o conteúdo.",
-    categories:
-      "Áudio temporário e transcrição; metadados técnicos de uso. O arquivo de áudio não é armazenado pela ClickStudio.",
-    location: "Estados Unidos, processamento pela API GroqCloud.",
-    source: "https://console.groq.com/docs/your-data",
   },
   {
     name: "Resend",

@@ -4,7 +4,7 @@
   "transcriptionModel": null,
   "termsAndRetentionCheckedAt": null,
   "assumedVoiceShareAt5000Replies": null,
-  "notes": "Local authorized pt-BR recordings only. Do not commit recordings, transcripts, consent records or real Contact data. Each slot must record authorization, expected meaning, complete-reply latency, measured billable audio usage/cost and human answer/tone scores. Audio ingestion is pending the production transcription port; these slots are manual evidence, not automatically scored text cases.",
+  "notes": "Local authorized pt-BR recordings only. Do not commit recordings, transcripts, consent records or real Contact data. Each slot must record authorization, expected meaning, complete-reply latency, measured billable audio usage/cost and human answer/tone scores. DEFERRED from MVP scope on 2026-10-22 (#62); retained for possible future evaluation only. These slots are not required for provider acceptance or launch. Revisit scope, provider terms and combined costs before implementing transcription.",
   "slots": [
     {
       "id": "voice-01",

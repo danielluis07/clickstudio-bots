@@ -26,7 +26,7 @@ export function DeleteContactButton({
           confirm({
             title: `Excluir ${contactDisplayName(contact)}?`,
             message:
-              "O contato, suas conversas, transcrições e dados capturados serão excluídos permanentemente. Exclua também a conversa no aplicativo WhatsApp Business. Uma nova mensagem poderá criar um novo contato.",
+              "O contato, suas conversas e dados capturados serão excluídos permanentemente. Exclua também a conversa no aplicativo WhatsApp Business. Uma nova mensagem poderá criar um novo contato.",
             action: async () => {
               await deletion.mutateAsync({ contactId: contact.id });
             },

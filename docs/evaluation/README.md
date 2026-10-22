@@ -51,8 +51,9 @@ The runner keeps Contact capture disabled.
 Capture cases require safe Handoff without inventing a capture tool. They do not
 certify [Contact capture](../contact-capture.md), which has landed: extend the
 corpus with capture and required-detail cases, then rerun the provider gate.
-Likewise, the 15 voice-note slots are a manual evidence template, pending the
-production transcription path.
+Voice transcription is [deferred from the MVP](../voice-notes.md) (#62).
+The 15 voice-note slots are retained only as a future evaluation template;
+recordings, transcription implementation and Groq checks are not launch gates.
 
 ## Run manually
 
@@ -129,15 +130,14 @@ immediately. Offline scoring exits nonzero until all text gates pass. The live
 command exits nonzero for measured failures; pending human review is expected.
 
 Copy `results.template.md` to the run directory for the human decision, hosting
-evidence, cache analysis and **combined** model/transcription projection. Copy
-`voice-notes.template.json` for ~15 authorized informal/noisy pt-BR notes. Record
-authorization locally, durations including billable minimums, transcription and
-end-answer correctness, complete latency, token/cache/tool/audio usage and tone.
-No audio has been supplied or evaluated by this implementation. The text runner
-does not open recordings or contact a transcription service.
+evidence, cache analysis and model-cost projection. The MVP cost gate is at most
+R$20 per Tenant at 5,000 text replies. No audio evaluation is required.
+`voice-notes.template.json` is for possible future work only. If transcription
+is reconsidered, evaluate authorized recordings and combined costs under a new
+scope decision. The text runner does not contact a transcription service.
 
 Treat the initial synthetic mix as a repeatable stress evaluation, not a measured
-pilot traffic distribution. Record the mix and voice-share assumptions alongside
+pilot traffic distribution. Record the case-mix assumptions alongside
 the 5,000-reply estimate. Refresh them with authorized anonymized pilot evidence.
 Local artifacts are ignored by Git. Share only reviewed artifacts that satisfy
 their data authorization; never commit real recordings, transcripts or credentials.
