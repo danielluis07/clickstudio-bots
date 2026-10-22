@@ -14,8 +14,8 @@ export const weekdays = [
 
 export type Weekday = (typeof weekdays)[number];
 
-// "HH:MM" on a 24-hour clock. A day opens before it closes, so an interval
-// never crosses midnight.
+// "HH:MM" on a 24-hour clock, zero-padded so times compare as strings. A day
+// opens before it closes, so an interval never crosses midnight.
 export type OpeningHours = { opens: string; closes: string };
 
 // One interval per weekday, or null when the business is closed that day.
@@ -23,9 +23,9 @@ export type BusinessHours = Record<Weekday, OpeningHours | null>;
 
 // "always": the Bot may reply at any time. "outside_business_hours": only
 // while the business is closed, so the team answers during its hours.
-export type BotSchedule = "always" | "outside_business_hours";
+export const botSchedules = ["always", "outside_business_hours"] as const;
 
-export const botSchedules = ["always", "outside_business_hours"] as const satisfies BotSchedule[];
+export type BotSchedule = (typeof botSchedules)[number];
 
 const localTime = new Intl.DateTimeFormat("en-US", {
   timeZone: botTimeZone,
@@ -35,20 +35,15 @@ const localTime = new Intl.DateTimeFormat("en-US", {
   hourCycle: "h23",
 });
 
-const minutesOf = (time: string) => {
-  const [hours, minutes] = time.split(":").map(Number);
-  return hours * 60 + minutes;
-};
-
 const isOpen = (hours: BusinessHours, at: Date) => {
   const parts = Object.fromEntries(
     localTime.formatToParts(at).map(({ type, value }) => [type, value]),
   );
   const today = hours[parts.weekday.toLowerCase() as Weekday];
   if (!today) return false;
-  const now = Number(parts.hour) * 60 + Number(parts.minute);
+  const now = `${parts.hour}:${parts.minute}`;
   // Open from the opening minute until, not including, the closing minute.
-  return now >= minutesOf(today.opens) && now < minutesOf(today.closes);
+  return now >= today.opens && now < today.closes;
 };
 
 // Whether the schedule lets the Bot reply at `at`. It is one of the

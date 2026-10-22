@@ -1,8 +1,8 @@
 import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { BehaviourSettings, BotSettingsLimits } from "@/modules/bot";
 import { formatCount } from "@/lib/format";
+import type { BehaviourSettings, BotSettingsLimits } from "@/modules/bot";
 
 type BusinessProfileFieldsProps = {
   settings: BehaviourSettings;

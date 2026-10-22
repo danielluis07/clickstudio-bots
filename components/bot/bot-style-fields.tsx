@@ -1,4 +1,4 @@
-import { OptionSelect } from "@/components/bot/option-select";
+import { OptionSelect } from "@/components/forms/option-select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";

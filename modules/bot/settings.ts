@@ -41,7 +41,6 @@ const topicList = z
 
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
-// Zero-padded times compare as strings.
 const openingHours = z
   .strictObject({ opens: time, closes: time })
   .refine(({ opens, closes }) => opens < closes)
@@ -124,8 +123,23 @@ const toBehaviour = (saved: SavedSettings): BehaviourSettings => ({
   schedule: saved.schedule,
 });
 
-const settingsOf = (tenantName: string, saved: SavedSettings | null) =>
-  saved ? toBehaviour(saved) : defaultSettings(tenantName);
+// The Tenant's settings as saved now, or its defaults before the first save.
+// `updatedBy` is null before the first save and once that Member was removed.
+const loadSettings = async (db: Database, tenantId: string) => {
+  const [found] = await db
+    .select({ tenantName: organization.name, saved: botSettings, updatedBy: user.name })
+    .from(organization)
+    .leftJoin(botSettings, eq(botSettings.tenantId, organization.id))
+    .leftJoin(member, eq(member.id, botSettings.updatedByMemberId))
+    .leftJoin(user, eq(user.id, member.userId))
+    .where(eq(organization.id, tenantId));
+  if (!found) throw new Error("Bot settings of a missing Tenant");
+  return {
+    settings: found.saved ? toBehaviour(found.saved) : defaultSettings(found.tenantName),
+    updatedAt: found.saved?.updatedAt ?? null,
+    updatedBy: found.updatedBy,
+  };
+};
 
 // The settings as saved now, for a Bot turn's Tenant. Read on every turn with
 // no cache of its own, so a saved edit reaches the next reply and the next
@@ -133,32 +147,10 @@ const settingsOf = (tenantName: string, saved: SavedSettings | null) =>
 export const readBehaviour = async (
   db: Database,
   scope: BotTurn["scope"],
-): Promise<BehaviourSettings> => {
-  const [found] = await db
-    .select({ tenantName: organization.name, saved: botSettings })
-    .from(organization)
-    .leftJoin(botSettings, eq(botSettings.tenantId, organization.id))
-    .where(eq(organization.id, scope.tenantId));
-  if (!found) throw new Error("Bot turn for a missing Tenant");
-  return settingsOf(found.tenantName, found.saved);
-};
+): Promise<BehaviourSettings> => (await loadSettings(db, scope.tenantId)).settings;
 
 export const createBotSettingsEditor = ({ db, clock }: { db: Database; clock: Clock }) => ({
-  // `updatedBy` is null before the first save and once that Member was removed.
-  async getSettings(scope: TenantScope) {
-    const [found] = await db
-      .select({ tenantName: organization.name, saved: botSettings, updatedBy: user.name })
-      .from(organization)
-      .leftJoin(botSettings, eq(botSettings.tenantId, organization.id))
-      .leftJoin(member, eq(member.id, botSettings.updatedByMemberId))
-      .leftJoin(user, eq(user.id, member.userId))
-      .where(eq(organization.id, scope.tenantId));
-    return {
-      settings: settingsOf(found.tenantName, found.saved),
-      updatedAt: found.saved?.updatedAt ?? null,
-      updatedBy: found.updatedBy,
-    };
-  },
+  getSettings: (scope: TenantScope) => loadSettings(db, scope.tenantId),
 
   // Replaces every setting at once. Saving never touches Conversations: a
   // schedule change only affects whether the Bot may send its next reply.

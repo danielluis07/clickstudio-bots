@@ -1,7 +1,12 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { botSettingsLimits, weekdays, type BehaviourSettings } from "@/modules/bot";
+import {
+  botSettingsLimits,
+  weekdays,
+  type BehaviourSettings,
+  type BusinessHours,
+} from "@/modules/bot";
 import { formText, type FormState } from "@/server/actions/form-state";
 import { requireTenantScope } from "@/server/auth/guards";
 import { botSettingsEditor } from "@/server/services";
@@ -26,7 +31,7 @@ const formHours = (formData: FormData) =>
         ? { opens: formText(formData, `${day}.opens`), closes: formText(formData, `${day}.closes`) }
         : null,
     ]),
-  ) as BehaviourSettings["hours"];
+  ) as BusinessHours;
 
 export async function saveBotSettingsAction(
   _previous: FormState,

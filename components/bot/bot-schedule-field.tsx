@@ -1,4 +1,4 @@
-import { OptionSelect } from "@/components/bot/option-select";
+import { OptionSelect } from "@/components/forms/option-select";
 import { FieldLegend, FieldSet } from "@/components/ui/field";
 import type { BotSchedule } from "@/modules/bot";
 import { scheduleOptions } from "@/modules/bot/hooks";
