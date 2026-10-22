@@ -1,5 +1,6 @@
 import { BotSettingsForm } from "@/components/bot/bot-settings-form";
 import { BotSettingsSavedNote } from "@/components/bot/bot-settings-saved-note";
+import { BotSandboxChat } from "@/components/bot/bot-sandbox-chat";
 import { botSettingsLimits } from "@/modules/bot";
 import type { TenantScope } from "@/modules/tenancy";
 import { botSettingsEditor } from "@/server/services";
@@ -30,6 +31,7 @@ export async function BotSettingsEditor({ scope }: { scope: TenantScope }) {
         limits={botSettingsLimits}
         canEdit={canEdit}
       />
+      {canEdit ? <BotSandboxChat /> : null}
     </div>
   );
 }

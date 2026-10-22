@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import type { Database } from "@/db/database";
 import { channel, member, organization, user } from "@/db/schema";
 import { resolveChannelPhoneNumber } from "@/modules/channels";
+import { createBotSandbox } from "@/modules/bot";
 import { createReplyService, recordInboundTextMessage } from "@/modules/conversations";
 import type { TRPCContext } from "@/trpc/init";
 import { appRouter } from "@/trpc/routers/_app";
@@ -11,11 +12,13 @@ import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
 import { createAblyRealtime } from "@/platform/ably";
 import { createTestNotifier } from "@/test/support/notifier";
+import { createTestModel } from "@/test/support/model";
 
 let db: Database;
 let conversationOfB: string;
 let contactOfB: string;
 const notifier = createTestNotifier();
+const sandboxModel = createTestModel();
 
 const callerFor = (session: TRPCContext["session"]) =>
   appRouter.createCaller({
@@ -23,6 +26,7 @@ const callerFor = (session: TRPCContext["session"]) =>
     session,
     realtime: createAblyRealtime({ apiKey: "test.key:private-test-secret" }),
     notifier,
+    sandbox: createBotSandbox({ db, clock: createTestClock(), model: sandboxModel }),
     replies: createReplyService({
       db,
       clock: createTestClock(),
@@ -94,6 +98,56 @@ beforeAll(async () => {
 });
 
 describe("tRPC router", () => {
+  test("only the owner can test the Bot, and sandbox requests cannot select a Tenant or production records", async () => {
+    const attendant = callerFor({ userId: "attendant", activeTenantId: "tenant-b" });
+    const input = { text: "Oi", history: [] };
+    expect(await codeOf(attendant.sandbox.respond(input))).toBe("FORBIDDEN");
+    expect(await codeOf(attendant.sandbox.status())).toBe("FORBIDDEN");
+    expect(await callerFor(ownerA).sandbox.status()).toMatchObject({
+      allowance: { used: 0, limit: 50 },
+    });
+    for (const extra of [
+      { tenantId: "tenant-b" },
+      { contactId: contactOfB },
+      { conversationId: conversationOfB },
+    ]) {
+      expect(
+        await codeOf(callByPath(callerFor(ownerA), "sandbox.respond", { ...input, ...extra })),
+      ).toBe("BAD_REQUEST");
+    }
+    sandboxModel.script({ text: "Olá!" });
+    expect(await callerFor(ownerA).sandbox.respond(input)).toMatchObject({
+      outcome: { kind: "answer", reply: "Olá!" },
+      allowance: { used: 1, limit: 50 },
+    });
+  });
+
+  test("exhausting the daily sandbox cap returns a pt-BR message and leaves another Tenant's allowance untouched", async () => {
+    const ownerB = callerFor({ userId: "owner-b", activeTenantId: "tenant-b" });
+    for (let turn = 0; turn < 50; turn++) {
+      sandboxModel.script({ text: "Olá!" });
+      await ownerB.sandbox.respond({ text: "Oi", history: [] });
+    }
+    try {
+      await ownerB.sandbox.respond({ text: "Oi", history: [] });
+      throw new Error("expected daily cap refusal");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TRPCError);
+      expect(error).toMatchObject({
+        code: "TOO_MANY_REQUESTS",
+        message:
+          "Você atingiu o limite diário de testes do Bot. Tente novamente amanhã, após a meia-noite no horário de São Paulo.",
+      });
+    }
+    expect(await callerFor(ownerA).sandbox.status()).toMatchObject({
+      allowance: { used: 1, limit: 50 },
+    });
+    sandboxModel.script({ text: "Ainda posso responder." });
+    expect(await callerFor(ownerA).sandbox.respond({ text: "Oi", history: [] })).toMatchObject({
+      allowance: { used: 2, limit: 50 },
+    });
+  });
+
   test("the sidebar reads only the authorized Tenant, including the first-membership fallback", async () => {
     expect(await callerFor(ownerA).tenancy.current()).toEqual({ id: "tenant-a", name: "Tenant A" });
     expect(await callerFor({ ...ownerA, activeTenantId: null }).tenancy.current()).toEqual({
