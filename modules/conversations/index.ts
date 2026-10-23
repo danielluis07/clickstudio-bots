@@ -40,7 +40,12 @@ export {
   type HandoffControls,
 } from "@/modules/conversations/handoff";
 export { recordImportedHistory, type ImportedHistory } from "@/modules/conversations/history";
-export { recordInboundTextMessage, type InboundTextMessage } from "@/modules/conversations/inbound";
+export {
+  recordInboundMessage,
+  recordInboundTextMessage,
+  type InboundMessage,
+  type InboundTextMessage,
+} from "@/modules/conversations/inbound";
 export {
   createReplyService,
   type DashboardReply,

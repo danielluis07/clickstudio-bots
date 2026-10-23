@@ -13,6 +13,7 @@ export { useBulkReturnToBot } from "@/modules/conversations/hooks/use-bulk-retur
 export {
   messageAuthorLabel,
   messageEditedLabel,
+  messageDisplayText,
   messagePlaceholder,
   messageStatusLabels,
 } from "@/modules/conversations/hooks/message-display";

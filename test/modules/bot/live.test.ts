@@ -1,4 +1,7 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { MessageBubble } from "@/components/inbox/message-bubble";
 import type { Database } from "@/db/database";
 import {
   createBotActivation,
@@ -13,7 +16,11 @@ import {
 import { eq, sql } from "drizzle-orm";
 import { botReplyUsage, conversation, message } from "@/db/schema";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
-import { createConversationRepository, recordInboundTextMessage } from "@/modules/conversations";
+import {
+  createConversationRepository,
+  createHandoffControls,
+  recordInboundTextMessage,
+} from "@/modules/conversations";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
 import { createTestBotAllowance, createTestUsageMeter, testBehaviour } from "@/test/support/bot";
@@ -28,6 +35,7 @@ import {
   metaDelivery,
   signMetaDelivery,
   textMessageChange,
+  mediaMessageChange,
 } from "@/test/support/meta-webhook";
 
 let db: Database;
@@ -74,6 +82,15 @@ const setup = async (allowance?: BotAllowance) => {
     allowance: allowance ?? createBotAllowance({ db, clock, mailer: createTestMailer() }),
   };
   const worker = createLiveBot(dependencies);
+  const inboxJobs = createTestJobQueue();
+  const inbox = createWebhookInbox({
+    db,
+    clock,
+    queue: inboxJobs,
+    notifier: dependencies.notifier,
+    appSecret: metaAppSecret,
+    bot: worker,
+  });
   return {
     ...seeded,
     model,
@@ -84,8 +101,253 @@ const setup = async (allowance?: BotAllowance) => {
     worker,
     dependencies,
     repository: createConversationRepository(db, scope),
+    async receive(change: Parameters<typeof metaDelivery>[number]) {
+      const body = metaDelivery(change);
+      expect(await inbox.receive({ body, signature: signMetaDelivery(body) })).toEqual({
+        ok: true,
+      });
+      for (const job of inboxJobs.take())
+        expect(await inbox.process(job.inboxEventId)).toMatchObject({ status: "processed" });
+    },
   };
 };
+
+test.each([
+  ["a short voice note", "audio", 3, "Áudio"],
+  ["a long voice note", "audio", 600, "Áudio"],
+  ["an image", "image", undefined, "Imagem"],
+  ["a video", "video", undefined, "Vídeo"],
+  ["a document", "document", undefined, "Documento"],
+  ["a sticker", "sticker", undefined, "Figurinha"],
+  ["unknown media", "unknown", undefined, "Mídia não suportada"],
+] as const)(
+  "%s shows a placeholder and hands off without a media download",
+  async (_name, type, duration, label) => {
+    const { phoneNumberId, clock, conversationId, repository, receive, model, sender } =
+      await setup();
+    const network = spyOn(globalThis, "fetch").mockRejectedValue(
+      new Error("Unexpected media download"),
+    );
+    try {
+      await receive(
+        mediaMessageChange({
+          phoneNumberId,
+          wamid: "unsupported-media",
+          from: "5511999990001",
+          timestamp: String(clock.now().getTime() / 1000),
+          type,
+          duration,
+        }),
+      );
+      expect(await repository.getConversation(conversationId)).toMatchObject({
+        owner: "team",
+        waiting: true,
+        handoffReason: "sem_resposta",
+      });
+      const messages = (await repository.listMessages(conversationId))!.messages;
+      const media = messages.find((row) => row.type !== "text")!;
+      expect(media).toMatchObject({ type: type === "unknown" ? "unsupported" : type, text: null });
+      const html = renderToStaticMarkup(createElement(MessageBubble, { message: media }));
+      expect(html).toContain(label);
+      expect(html).toContain("Abra no WhatsApp");
+      expect(html).not.toContain("synthetic-media-id");
+      expect(model.requests).toHaveLength(1); // Only the activation sandbox turn.
+      expect(sender.sent).toHaveLength(0);
+      expect(network).not.toHaveBeenCalled();
+    } finally {
+      network.mockRestore();
+    }
+  },
+);
+
+test.each(["image", "video", "document"])(
+  "an answerable %s caption is answered without Handoff or a media download",
+  async (type) => {
+    const {
+      phoneNumberId,
+      clock,
+      scope,
+      activation,
+      conversationId,
+      repository,
+      receive,
+      model,
+      sender,
+      worker,
+    } = await setup();
+    await activation.activate(scope);
+    model.script({ text: "O corte custa R$ 80." });
+    await worker.run(conversationId);
+    clock.advance(1000);
+    const network = spyOn(globalThis, "fetch").mockRejectedValue(
+      new Error("Unexpected media download"),
+    );
+    try {
+      await receive(
+        mediaMessageChange({
+          phoneNumberId,
+          wamid: "captioned-media",
+          from: "5511999990001",
+          timestamp: String(clock.now().getTime() / 1000),
+          type,
+          caption: "Qual é o preço do corte?",
+        }),
+      );
+      const media = (await repository.listMessages(conversationId))!.messages.find(
+        (row) => row.type === type,
+      )!;
+      const html = renderToStaticMarkup(createElement(MessageBubble, { message: media }));
+      expect(html).toContain("Abra no WhatsApp");
+      expect(html).toContain("Qual é o preço do corte?");
+      model.script({ text: "O corte custa R$ 80." });
+      expect(await worker.run(conversationId)).toBe("sent");
+      expect(await repository.getConversation(conversationId)).toMatchObject({
+        owner: "bot",
+        waiting: false,
+      });
+      expect(sender.sent.at(-1)?.text).toBe("O corte custa R$ 80.");
+      expect(model.requests.at(-1)!.messages).toContainEqual(
+        expect.objectContaining({
+          role: "user",
+          text: expect.stringContaining("Qual é o preço do corte?"),
+        }),
+      );
+      expect(JSON.stringify(model.requests.at(-1))).not.toContain("synthetic-media");
+      expect(network).not.toHaveBeenCalled();
+    } finally {
+      network.mockRestore();
+    }
+  },
+);
+
+test("a voice note hands off even with an answerable caption and required Contact capture", async () => {
+  const {
+    scope,
+    phoneNumberId,
+    clock,
+    activation,
+    conversationId,
+    repository,
+    receive,
+    sender,
+    worker,
+  } = await setup();
+  await activation.activate(scope);
+  await createCaptureSettingsEditor({ db, clock }).saveCapture(scope, {
+    enabled: true,
+    fields: { name: "required", email: "off", city: "off", need: "off" },
+  });
+  await receive(
+    mediaMessageChange({
+      phoneNumberId,
+      wamid: "audio-with-caption",
+      from: "5511999990001",
+      timestamp: String(clock.now().getTime() / 1000),
+      type: "audio",
+      caption: "Qual é o preço do corte?",
+      duration: 600,
+    }),
+  );
+  await worker.run(conversationId);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "team",
+    waiting: true,
+  });
+  expect((await repository.listMessages(conversationId))!.messages).toContainEqual(
+    expect.objectContaining({ type: "audio", text: null }),
+  );
+  expect(sender.sent).toHaveLength(0);
+});
+
+test("a caption requiring unavailable media hands off instead of inventing its contents", async () => {
+  const {
+    scope,
+    phoneNumberId,
+    clock,
+    activation,
+    conversationId,
+    repository,
+    receive,
+    model,
+    worker,
+  } = await setup();
+  await activation.activate(scope);
+  await receive(
+    mediaMessageChange({
+      phoneNumberId,
+      wamid: "unanswerable-caption",
+      from: "5511999990001",
+      timestamp: String(clock.now().getTime() / 1000),
+      type: "image",
+      caption: "O que aparece nesta foto?",
+    }),
+  );
+  model.script({
+    toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "sem_resposta" } }],
+  });
+  await worker.run(conversationId);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "team",
+    handoffReason: "sem_resposta",
+  });
+});
+
+test("a voice note arriving during generation blocks the pending Bot reply", async () => {
+  const {
+    scope,
+    phoneNumberId,
+    clock,
+    activation,
+    conversationId,
+    repository,
+    receive,
+    model,
+    sender,
+    worker,
+  } = await setup();
+  await activation.activate(scope);
+  const generate = model.generate;
+  model.generate = async (request) => {
+    clock.advance(1000);
+    await receive(
+      mediaMessageChange({
+        phoneNumberId,
+        wamid: "audio-during-generation",
+        from: "5511999990001",
+        timestamp: String(clock.now().getTime() / 1000),
+        type: "audio",
+      }),
+    );
+    return generate(request);
+  };
+  model.script({ text: "O corte custa R$ 80." });
+  expect(await worker.run(conversationId)).toBe("skipped");
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "team",
+    handoffReason: "sem_resposta",
+  });
+  expect(sender.sent).toHaveLength(0);
+});
+
+test("retrying media after a failed inbox ping preserves a Member's return to the Bot", async () => {
+  const { scope, phoneNumberId, clock, conversationId, repository, receive, dependencies } =
+    await setup();
+  const change = mediaMessageChange({
+    phoneNumberId,
+    wamid: "retried-media",
+    from: "5511999990001",
+    timestamp: String(clock.now().getTime() / 1000),
+    type: "image",
+  });
+  dependencies.notifier.failNext();
+  await expect(receive(change)).rejects.toThrow("Notifier unavailable");
+  await createHandoffControls(dependencies).returnToBot(scope, conversationId);
+  await receive(change);
+  expect(await repository.getConversation(conversationId)).toMatchObject({ owner: "bot" });
+  expect(
+    (await repository.listMessages(conversationId))!.messages.filter((row) => row.type === "image"),
+  ).toHaveLength(1);
+});
 
 test("a live Contact message sends exactly once after activation, including duplicate jobs", async () => {
   const { scope, model, sender, activation, conversationId, worker, repository } = await setup();

@@ -1,3 +1,5 @@
+import type { InboundMessage } from "@/modules/conversations/inbound";
+
 type MessageAuthor = { origin: "contact" | "dashboard" | "app" | "bot"; authorName: string | null };
 
 // Who wrote a reply, shown above it. A removed Member's replies stay readable
@@ -11,8 +13,35 @@ export const messageAuthorLabel = (message: MessageAuthor) => {
 };
 
 // What a message shows in place of text it does not have.
-export const messagePlaceholder = (message: { revokedAt: Date | null }) =>
-  message.revokedAt ? "Mensagem apagada" : "Mensagem sem texto";
+const mediaLabels: Record<Exclude<InboundMessage["type"], "text">, string> = {
+  audio: "Áudio",
+  image: "Imagem",
+  video: "Vídeo",
+  document: "Documento",
+  sticker: "Figurinha",
+  unsupported: "Mídia não suportada",
+};
+
+export const messagePlaceholder = (message: {
+  revokedAt: Date | null;
+  type?: InboundMessage["type"];
+}) => {
+  if (message.revokedAt) return "Mensagem apagada";
+  return message.type && message.type !== "text"
+    ? `${mediaLabels[message.type]}. Abra no WhatsApp.`
+    : "Mensagem sem texto";
+};
+
+export const messageDisplayText = (message: {
+  type: InboundMessage["type"];
+  text: string | null;
+  revokedAt: Date | null;
+}) => {
+  if (message.revokedAt) return messagePlaceholder(message);
+  if (message.type !== "text")
+    return [messagePlaceholder(message), message.text].filter(Boolean).join("\n\n");
+  return message.text ?? messagePlaceholder(message);
+};
 
 // Marks an edited message; a revoked one shows nothing to edit.
 export const messageEditedLabel = (message: { editedAt: Date | null; revokedAt: Date | null }) =>

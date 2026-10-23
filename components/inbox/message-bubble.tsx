@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   messageAuthorLabel,
   messageEditedLabel,
-  messagePlaceholder,
+  messageDisplayText,
 } from "@/modules/conversations/hooks";
 import type { RouterOutput } from "@/trpc/routers/_app";
 
@@ -25,7 +25,7 @@ export function MessageBubble({ message }: { message: ConversationMessage }) {
           <BubbleContent
             className={cn("wrap-anywhere whitespace-pre-wrap", message.text === null && "italic")}
           >
-            {message.text ?? messagePlaceholder(message)}
+            {messageDisplayText(message)}
           </BubbleContent>
         </Bubble>
         <MessageFooter className="flex-wrap gap-1.5">

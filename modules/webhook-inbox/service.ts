@@ -7,7 +7,7 @@ import {
 import {
   recordAppContact,
   recordImportedHistory,
-  recordInboundTextMessage,
+  recordInboundMessage,
   recordMessageChange,
   recordMessageEcho,
   recordMessageStatus,
@@ -15,7 +15,7 @@ import {
 import {
   readAppContact,
   readHistory,
-  readInboundTextMessage,
+  readInboundMessage,
   readMessageChange,
   readMessageEcho,
   readMessageStatus,
@@ -62,10 +62,10 @@ export const createWebhookInbox = ({
     conversationId?: string | null;
     contactId?: string | null;
   } | null> => {
-    const inbound = readInboundTextMessage(payload);
+    const inbound = readInboundMessage(payload);
     if (inbound)
       return {
-        conversationId: await recordInboundTextMessage(db, route, { ...inbound, receivedAt }),
+        conversationId: await recordInboundMessage(db, route, { ...inbound, receivedAt }),
       };
     const statusUpdate = readMessageStatus(payload);
     if (statusUpdate) return { conversationId: await recordMessageStatus(db, route, statusUpdate) };
@@ -119,8 +119,9 @@ export const createWebhookInbox = ({
       }
       conversationId = recorded.conversationId ?? undefined;
       // Enqueue before settling, so a queue failure retries the committed,
-      // idempotent inbound write. History, statuses and echoes never start turns.
-      if (route && conversationId && readInboundTextMessage(event.payload))
+      // idempotent inbound write. Media already handed off fails eligibility;
+      // captions can start a turn. History, statuses and echoes never do.
+      if (route && conversationId && readInboundMessage(event.payload))
         await bot?.enqueue(route, conversationId);
       // A failed ping retries the idempotent committed write and ping together.
       if (recorded.conversationId)
