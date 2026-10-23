@@ -130,12 +130,13 @@ suite("live turns on real Postgres", () => {
   });
 
   test("competing workers cannot both send for one answered-message key", async () => {
-    const { model, sender, dependencies, conversationId, reader } = await setup();
+    const { scope, model, sender, dependencies, conversationId, reader, allowance } = await setup();
     model.script({ text: "O corte custa R$ 80." });
     await Promise.all(
       Array.from({ length: 12 }, () => createLiveBot(dependencies).run(conversationId)),
     );
     expect(sender.sent).toHaveLength(1);
+    expect(await allowance.status(scope)).toMatchObject({ used: 1 });
     expect(
       (await reader.listMessages(conversationId))!.messages.filter(
         ({ origin }) => origin === "bot",

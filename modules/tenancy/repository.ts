@@ -3,6 +3,19 @@ import type { Database } from "@/db/database";
 import { invitation, legalAcceptance, member, organization, user } from "@/db/schema";
 import type { TenantScope } from "@/modules/tenancy/scope";
 
+// Privileged background notifications use the Tenant id from persisted work,
+// never from a request. Choose the earliest owner deterministically.
+export const findTenantOwnerEmail = async (db: Database, tenantId: string) => {
+  const [owner] = await db
+    .select({ email: user.email })
+    .from(member)
+    .innerJoin(user, eq(user.id, member.userId))
+    .where(and(eq(member.organizationId, tenantId), eq(member.role, "owner")))
+    .orderBy(asc(member.createdAt), asc(member.id))
+    .limit(1);
+  return owner?.email ?? null;
+};
+
 // The single entry point to Tenant-owned data for Members: every query is
 // bound to the scope's Tenant, whatever record ids the caller passes.
 export const createTenantRepository = (db: Database, scope: TenantScope) => {

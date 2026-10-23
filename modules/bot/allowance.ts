@@ -1,8 +1,10 @@
-import { and, asc, count, eq, gt, gte, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
-import { botReplyUsage, member, message, user } from "@/db/schema";
+import { botReplyUsage } from "@/db/schema";
 import type { BotTurn } from "@/modules/bot/repository";
-import type { TenantScope } from "@/modules/tenancy";
+import { botTimeZone } from "@/modules/bot/schedule";
+import { countPendingBotReplies } from "@/modules/conversations";
+import { findTenantOwnerEmail, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 import type { Mailer } from "@/platform/mailer";
 
@@ -30,7 +32,7 @@ export const recordBotReplyUsage = async (
 
 const periodAt = (at: Date) => {
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Sao_Paulo",
+    timeZone: botTimeZone,
     year: "numeric",
     month: "2-digit",
   }).formatToParts(at);
@@ -72,14 +74,8 @@ export const createBotAllowance = ({
       ),
     );
   const deliverWarning = async (tenantId: string, period: string) => {
-    const [owner] = await db
-      .select({ email: user.email })
-      .from(member)
-      .innerJoin(user, eq(user.id, member.userId))
-      .where(and(eq(member.organizationId, tenantId), eq(member.role, "owner")))
-      .orderBy(asc(member.createdAt), asc(member.id))
-      .limit(1);
-    if (!owner) return;
+    const ownerEmail = await findTenantOwnerEmail(db, tenantId);
+    if (!ownerEmail) return;
     const token = crypto.randomUUID();
     const ownsClaim = and(
       eq(botReplyUsage.tenantId, tenantId),
@@ -89,7 +85,7 @@ export const createBotAllowance = ({
     const [claimed] = await db
       .update(botReplyUsage)
       .set({
-        warningTo: sql`coalesce(${botReplyUsage.warningTo}, ${owner.email})`,
+        warningTo: sql`coalesce(${botReplyUsage.warningTo}, ${ownerEmail})`,
         warningClaimToken: token,
         warningLeaseUntil: new Date(clock.now().getTime() + 60_000),
       })
@@ -168,22 +164,8 @@ export const createBotAllowance = ({
         .for("update");
       // Pending message rows are already durable send reservations. Count them
       // under the Tenant counter's short lock, never across a Model/Meta call.
-      const [pending] = await tx
-        .select({ total: count() })
-        .from(message)
-        .where(
-          and(
-            eq(message.tenantId, turn.scope.tenantId),
-            eq(message.origin, "bot"),
-            eq(message.direction, "outbound"),
-            eq(message.type, "text"),
-            eq(message.imported, false),
-            eq(message.status, "pending"),
-            isNull(message.wamid),
-            gt(message.createdAt, new Date(clock.now().getTime() - 120_000)),
-          ),
-        );
-      if (usage!.used >= monthlyReplyLimit || usage!.used + pending!.total >= monthlyReplyLimit + 2)
+      const pending = await countPendingBotReplies(tx, turn.scope, clock.now());
+      if (usage!.used >= monthlyReplyLimit || usage!.used + pending >= monthlyReplyLimit + 2)
         throw new Error("Reply allowance is busy; retry the Bot turn");
     },
     async notifyWarning(turn: BotTurn) {

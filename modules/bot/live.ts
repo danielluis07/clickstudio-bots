@@ -12,7 +12,7 @@ import type { ChannelRoute } from "@/modules/channels";
 import {
   createConversationRepository,
   handOffAndNotify,
-  recordBotReplySent,
+  recordSentWamid,
   createConversationBotRepository,
   resolveBotConversation,
   listBotRecoveryCandidates,
@@ -167,7 +167,7 @@ export const createLiveBot = ({
           outcome.reply,
           clock.now(),
           outcome.kind === "handoff" ? outcome.reason : undefined,
-          allowance.reserve ? (tx) => allowance.reserve!(tx, turn) : undefined,
+          (tx) => allowance.reserve(tx, turn),
         );
         if (!messageId) return "skipped" as const;
         // A pending row is the durable send barrier. Never retry a send without a wamid.
@@ -180,9 +180,10 @@ export const createLiveBot = ({
           return "handoff" as const;
         }
         const acknowledgedAt = clock.now();
-        await recordBotReplySent(db, initial.scope, messageId, sent.wamid, (tx) =>
-          recordBotReplyUsage(tx, initial.scope, acknowledgedAt),
-        );
+        await db.transaction(async (tx) => {
+          if (await recordSentWamid(tx, initial.scope, messageId, sent.wamid))
+            await recordBotReplyUsage(tx, initial.scope, acknowledgedAt);
+        });
         await notifyInbox(notifier, initial.tenantId, { conversationId });
         followUp = true;
         return "sent" as const;
@@ -191,7 +192,7 @@ export const createLiveBot = ({
         if (followUp) await enqueue(initial.scope, conversationId);
         // Job retries also recover a warning after an interrupted acknowledgment,
         // even when the Conversation has no unanswered messages or is with the team.
-        await allowance.notifyWarning?.({ scope: initial.scope, conversationId });
+        await allowance.notifyWarning({ scope: initial.scope, conversationId });
       }
     },
     async cleanup() {

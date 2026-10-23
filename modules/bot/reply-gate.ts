@@ -12,8 +12,8 @@ import type { Clock } from "@/platform/clock";
 // Billing supplies this hook; live turns never infer allowance from sandbox usage.
 export interface BotAllowance {
   canReply(turn: BotTurn): Promise<boolean>;
-  reserve?(tx: Transaction, turn: BotTurn): Promise<void>;
-  notifyWarning?(turn: BotTurn): Promise<void>;
+  reserve(tx: Transaction, turn: BotTurn): Promise<void>;
+  notifyWarning(turn: BotTurn): Promise<void>;
 }
 
 // Where a live turn asks. `enqueue` only decides whether a turn is worth

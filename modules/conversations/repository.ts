@@ -245,7 +245,10 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
     // Meta's wamid lets delivery statuses find the reply; without one the
     // send failed.
     async recordReplySent(messageId: string, sent: { wamid: string } | null) {
-      if (sent) return recordSentWamid(db, scope, messageId, sent.wamid);
+      if (sent)
+        return db.transaction(async (tx) => {
+          await recordSentWamid(tx, scope, messageId, sent.wamid);
+        });
       await db
         .update(message)
         .set({ status: "failed" })

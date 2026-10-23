@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { eq } from "drizzle-orm";
 import type { Database } from "@/db/database";
-import { invitation } from "@/db/schema";
+import { invitation, member, user } from "@/db/schema";
 import { createPlatformAdmin } from "@/modules/identity";
 import {
   createTenantOnboarding,
   createTenantRepository,
+  findTenantOwnerEmail,
   resolveTenantScope,
   type TenantScope,
 } from "@/modules/tenancy";
@@ -103,6 +105,32 @@ describe("resolving Tenant scope", () => {
 });
 
 describe("Tenant-scoped data access", () => {
+  test("background notifications select the earliest owner in the requested Tenant", async () => {
+    const createdAt = new Date("2020-01-01T00:00:00Z");
+    for (const [id, role] of [
+      ["earlier-member", "member"],
+      ["owner-b", "owner"],
+      ["owner-a", "owner"],
+    ]) {
+      await db.insert(user).values({ id, name: id, email: `${id}@a.example` });
+      await db.insert(member).values({
+        id,
+        userId: id,
+        organizationId: tenantA.tenantId,
+        role,
+        createdAt: role === "member" ? new Date("2019-01-01T00:00:00Z") : createdAt,
+      });
+    }
+    try {
+      expect(await findTenantOwnerEmail(db, tenantA.tenantId)).toBe("owner-a@a.example");
+      expect(await findTenantOwnerEmail(db, tenantB.tenantId)).toBe("dono@b.example");
+      expect(await findTenantOwnerEmail(db, "missing-tenant")).toBeNull();
+    } finally {
+      for (const id of ["earlier-member", "owner-b", "owner-a"])
+        await db.delete(user).where(eq(user.id, id));
+    }
+  });
+
   test("reads only the scoped Tenant's profile and Members", async () => {
     const tenant = createTenantRepository(db, scopeA);
 
