@@ -9,6 +9,7 @@ import {
   knowledgeBaseSize,
 } from "@/modules/knowledge-base/allowance";
 import { knowledgeEntryKinds } from "@/modules/knowledge-base/kinds";
+import { normalizeEntryText } from "@/modules/knowledge-base/text";
 import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 
@@ -20,7 +21,7 @@ export const entryTitleMaxLength = 200;
 const entryTextSchema = (maxLength: number) =>
   z
     .string()
-    .transform((text) => text.replaceAll("\r\n", "\n").trim())
+    .transform(normalizeEntryText)
     .pipe(
       z
         .string()
