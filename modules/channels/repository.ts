@@ -1,7 +1,7 @@
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import { channel, organization } from "@/db/schema";
-import type { TenantScope } from "@/modules/tenancy";
+import { tenantOperationLeaseMs, type TenantScope } from "@/modules/tenancy";
 
 // Explicit projection: neither RSC nor action results can serialize credentials.
 const channelSummary = {
@@ -64,15 +64,83 @@ export const createChannelRepository = (db: Database, scope: TenantScope) => ({
       .limit(1);
     return found ?? null;
   },
+  async claimSubscription(now: Date) {
+    return db.transaction(async (tx) => {
+      const [tenant] = await tx
+        .select()
+        .from(organization)
+        .where(eq(organization.id, scope.tenantId))
+        .for("update");
+      if (!tenant || tenant.canceledAt) return { kind: "unavailable" as const };
+      if (tenant.lifecycleLeaseUntil && tenant.lifecycleLeaseUntil > now)
+        return { kind: "busy" as const };
+      const token = crypto.randomUUID();
+      await tx
+        .update(organization)
+        .set({
+          lifecycleToken: token,
+          lifecycleLeaseUntil: new Date(now.getTime() + tenantOperationLeaseMs),
+        })
+        .where(eq(organization.id, scope.tenantId));
+      return { kind: "claimed" as const, token };
+    });
+  },
+  // Atomically release a normal subscription or keep its lease to compensate
+  // a cancellation. Cancellation can never fall between this check and release.
+  async finishSubscription(token: string) {
+    return db.transaction(async (tx) => {
+      const [tenant] = await tx
+        .select()
+        .from(organization)
+        .where(and(eq(organization.id, scope.tenantId), eq(organization.lifecycleToken, token)))
+        .for("update");
+      if (!tenant) return false;
+      if (tenant.canceledAt) {
+        await tx
+          .update(channel)
+          .set({ subscriptionError: "disconnect_pending" })
+          .where(eq(channel.tenantId, scope.tenantId));
+        return true;
+      }
+      await tx
+        .update(organization)
+        .set({ lifecycleToken: null, lifecycleLeaseUntil: null })
+        .where(eq(organization.id, scope.tenantId));
+      return false;
+    });
+  },
+  async finishCanceledSubscription(token: string, disconnected: boolean) {
+    await db.transaction(async (tx) => {
+      const [tenant] = await tx
+        .select({ id: organization.id })
+        .from(organization)
+        .where(and(eq(organization.id, scope.tenantId), eq(organization.lifecycleToken, token)))
+        .for("update");
+      if (!tenant) return;
+      await tx
+        .update(channel)
+        .set({
+          subscriptionStatus: "disconnected",
+          subscriptionError: disconnected ? null : "disconnect_failed",
+        })
+        .where(eq(channel.tenantId, scope.tenantId));
+      await tx
+        .update(organization)
+        .set({ lifecycleToken: null, lifecycleLeaseUntil: null })
+        .where(eq(organization.id, scope.tenantId));
+    });
+  },
   async recordSubscription(input: {
     subscriptionStatus: "subscribed" | "failed";
     subscriptionAttemptedAt: Date;
     subscriptionError: string | null;
   }) {
-    await db
+    const recorded = await db
       .update(channel)
       .set(input)
-      .where(and(eq(channel.tenantId, scope.tenantId), activeTenant));
+      .where(and(eq(channel.tenantId, scope.tenantId), activeTenant))
+      .returning({ id: channel.id });
+    return recorded.length > 0;
   },
   // Marks the sync requested unless it already was or the Channel onboarded
   // before `onboardedAfter`, so concurrent callers ask Meta at most once.
@@ -83,6 +151,7 @@ export const createChannelRepository = (db: Database, scope: TenantScope) => ({
       .where(
         and(
           eq(channel.tenantId, scope.tenantId),
+          activeTenant,
           eq(channel[sync], "pending"),
           gt(channel.createdAt, onboardedAfter),
         ),

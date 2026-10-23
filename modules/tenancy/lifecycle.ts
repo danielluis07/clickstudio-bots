@@ -4,13 +4,11 @@ import { channel, organization } from "@/db/schema";
 import type { WhatsAppGateway } from "@/modules/channels";
 import { isPlatformAdmin } from "@/modules/identity";
 import type { Clock } from "@/platform/clock";
+import { tenantOperationLeaseMs, tenantRecoveryDays } from "@/modules/tenancy/lifecycle-policy";
 
 // Privileged operations: unlike Member repositories, these require a current
 // platform administrator and never turn a supplied Tenant id into a TenantScope.
-export const tenantRecoveryDays = 30;
 const recoveryMs = tenantRecoveryDays * 24 * 60 * 60 * 1000;
-// Longer than the adapter's bounded requests; interrupted commands are retryable.
-const operationLeaseMs = 120_000;
 
 export const createTenantLifecycle = ({
   db,
@@ -30,8 +28,22 @@ export const createTenantLifecycle = ({
         .for("update");
       if (!tenant) return { ok: false as const, error: "not_found" as const };
       const now = clock.now();
-      if (tenant.lifecycleLeaseUntil && tenant.lifecycleLeaseUntil > now)
+      if (tenant.lifecycleLeaseUntil && tenant.lifecycleLeaseUntil > now) {
+        // A Member subscription already owns the lease. Record the local stop
+        // immediately; its finalizer will unsubscribe before releasing it.
+        if (operation === "cancel" && !tenant.canceledAt) {
+          await tx
+            .update(organization)
+            .set({ canceledAt: now })
+            .where(eq(organization.id, tenantId));
+          await tx
+            .update(channel)
+            .set({ subscriptionStatus: "disconnected", subscriptionError: "disconnect_pending" })
+            .where(eq(channel.tenantId, tenantId));
+          return { ok: true as const, pending: true as const, canceledAt: now };
+        }
         return { ok: false as const, error: "busy" as const };
+      }
       if (operation === "disconnect" && !tenant.canceledAt)
         return { ok: false as const, error: "not_canceled" as const };
       if (operation === "reactivate") {
@@ -46,7 +58,7 @@ export const createTenantLifecycle = ({
         .set({
           canceledAt,
           lifecycleToken: token,
-          lifecycleLeaseUntil: new Date(now.getTime() + operationLeaseMs),
+          lifecycleLeaseUntil: new Date(now.getTime() + tenantOperationLeaseMs),
         })
         .where(eq(organization.id, tenantId));
       const [stored] = await tx
@@ -66,6 +78,8 @@ export const createTenantLifecycle = ({
   const disconnect = async (tenantId: string, operation: "cancel" | "disconnect") => {
     const claimed = await claim(tenantId, operation);
     if (!claimed.ok) return claimed;
+    if ("pending" in claimed)
+      return { ok: true as const, canceledAt: claimed.canceledAt, channelDisconnected: false };
     const { stored, canceledAt, token } = claimed;
     try {
       // The local stop commits before Meta. Failure cannot leave the Tenant
@@ -128,6 +142,7 @@ export const createTenantLifecycle = ({
         return { ok: false as const, error: "forbidden" as const };
       const claimed = await claim(tenantId, "reactivate");
       if (!claimed.ok) return claimed;
+      if ("pending" in claimed) return { ok: false as const, error: "busy" as const };
       const { stored, token } = claimed;
       try {
         const subscribed =

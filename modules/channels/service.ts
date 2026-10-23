@@ -60,17 +60,30 @@ export const createChannelService = ({
     const repository = createChannelRepository(db, scope);
     const stored = await repository.getCredential();
     if (!stored) return { ok: false as const, error: "not_found" as const };
-    const result = await Promise.resolve()
-      .then(() => getWhatsApp().subscribe(stored))
-      .catch(() => ({ ok: false as const, error: "subscription_failed" as const }));
-    await repository.recordSubscription({
-      subscriptionStatus: result.ok ? "subscribed" : "failed",
-      subscriptionAttemptedAt: clock.now(),
-      subscriptionError: result.ok ? null : result.error,
-    });
-    // History arrives as webhooks, so it is requested only once they flow.
-    if (result.ok) await requestAppSyncs(scope, stored);
-    return { ok: true as const };
+    const claim = await repository.claimSubscription(clock.now());
+    if (claim.kind === "unavailable") return { ok: false as const, error: "not_found" as const };
+    if (claim.kind === "busy") return { ok: true as const };
+    try {
+      const result = await Promise.resolve()
+        .then(() => getWhatsApp().subscribe(stored))
+        .catch(() => ({ ok: false as const, error: "subscription_failed" as const }));
+      const recorded = await repository.recordSubscription({
+        subscriptionStatus: result.ok ? "subscribed" : "failed",
+        subscriptionAttemptedAt: clock.now(),
+        subscriptionError: result.ok ? null : result.error,
+      });
+      // History arrives as webhooks, so it is requested only once they flow.
+      if (recorded && result.ok) await requestAppSyncs(scope, stored);
+      return { ok: true as const };
+    } finally {
+      if (await repository.finishSubscription(claim.token)) {
+        const disconnected = await Promise.resolve()
+          .then(() => getWhatsApp().unsubscribe(stored))
+          .then((result) => result.ok)
+          .catch(() => false);
+        await repository.finishCanceledSubscription(claim.token, disconnected);
+      }
+    }
   };
 
   const getChannel = async (scope: TenantScope) => {

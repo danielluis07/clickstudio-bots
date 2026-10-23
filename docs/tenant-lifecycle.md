@@ -39,9 +39,11 @@ and retry before the deadline. Tenants without a Channel can also be restored.
 The original memberships, Knowledge base, settings and Bot pause/activation
 choices remain intact. Reactivation does not undo Conversation Handoffs.
 
-A short database lease serializes cancellation, disconnection retries and
-reactivation without holding a transaction across Meta calls. An interrupted
-command becomes retryable after two minutes.
+A short database lease serializes Channel subscriptions, disconnections and
+reactivation without holding a transaction across Meta calls. Cancellation during
+a Member's subscription records the local stop immediately; that subscription
+then unsubscribes its late result before releasing the lease. A failed compensation
+or interrupted command remains marked for daily retry, after the two-minute lease.
 
 ## Daily hard deletion
 

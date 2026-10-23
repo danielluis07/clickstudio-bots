@@ -9,7 +9,7 @@ import {
   user,
   verification,
 } from "@/db/schema";
-import { tenantRecoveryDays } from "@/modules/tenancy/lifecycle";
+import { tenantRecoveryDays } from "@/modules/tenancy/lifecycle-policy";
 import type { Clock } from "@/platform/clock";
 
 // System-only maintenance, called by the authenticated daily task. Recheck

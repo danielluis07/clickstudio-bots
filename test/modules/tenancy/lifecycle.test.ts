@@ -12,7 +12,11 @@ import {
   user,
   verification,
 } from "@/db/schema";
-import { findChannelCredential, resolveChannelPhoneNumber } from "@/modules/channels";
+import {
+  createChannelService,
+  findChannelCredential,
+  resolveChannelPhoneNumber,
+} from "@/modules/channels";
 import { createReplyGate } from "@/modules/bot";
 import { recordInboundTextMessage } from "@/modules/conversations";
 import { createTestBotAllowance } from "@/test/support/bot";
@@ -225,6 +229,39 @@ test("reactivation cannot overtake an in-flight disconnection", async () => {
     channelDisconnected: true,
   });
 });
+
+test.each([true, false])(
+  "cancellation during a Member subscription durably disconnects its late completion (immediate compensation: %s)",
+  async (compensated) => {
+    const { tenant, lifecycle, remote } = await setup();
+    let cancellation: Awaited<ReturnType<typeof lifecycle.cancel>> | undefined;
+    const service = createChannelService({
+      db,
+      clock: tenant.clock,
+      getWhatsApp: () => ({
+        exchangeSignup: async () => {
+          throw new Error("Unused signup");
+        },
+        requestAppSync: async () => ({ ok: true }),
+        async subscribe() {
+          cancellation = await lifecycle.cancel("admin", tenant.scope.tenantId);
+          expect(await resolveChannelPhoneNumber(db, tenant.phoneNumberId)).toBeNull();
+          remote.subscribed = true;
+          return { ok: true as const };
+        },
+        async unsubscribe() {
+          remote.subscribed = !compensated;
+          return { ok: compensated };
+        },
+      }),
+    });
+    await service.retrySubscription(tenant.scope);
+    expect(cancellation).toMatchObject({ ok: true });
+    expect(remote.subscribed).toBe(!compensated);
+    await lifecycle.retryDisconnections();
+    expect(remote.subscribed).toBe(false);
+  },
+);
 
 test("the daily task deletes expired Tenant data and exclusive identities, preserving shared Members", async () => {
   const { tenant, other, lifecycle } = await setup();
