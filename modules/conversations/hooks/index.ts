@@ -9,6 +9,7 @@ export {
   isWaitingFilter,
 } from "@/modules/conversations/hooks/handoff-display";
 export { useHandoffControls } from "@/modules/conversations/hooks/use-handoff-controls";
+export { useBulkReturnToBot } from "@/modules/conversations/hooks/use-bulk-return-to-bot";
 export {
   messageAuthorLabel,
   messageEditedLabel,

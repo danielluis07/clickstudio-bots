@@ -45,6 +45,7 @@ export function Inbox({
           <ConversationSearch search={search} onSearch={setSearch} />
           <ConversationFilter filter={filter} onFilter={setFilter} />
           <ConversationList
+            key={`${filter}:${search}`}
             search={search}
             waiting={isWaitingFilter(filter)}
             selectedId={conversationId}
