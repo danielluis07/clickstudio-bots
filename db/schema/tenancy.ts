@@ -3,14 +3,22 @@ import { user } from "@/db/schema/auth";
 import { id, timestamps } from "@/db/columns";
 
 // A Tenant is a Better Auth organization; the table keeps the plugin's names.
-export const organization = pgTable("organization", {
-  id: id(),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  logo: text("logo"),
-  metadata: text("metadata"),
-  ...timestamps(),
-});
+export const organization = pgTable(
+  "organization",
+  {
+    id: id(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    logo: text("logo"),
+    metadata: text("metadata"),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    // Serializes Meta calls without keeping a transaction open over the network.
+    lifecycleToken: text("lifecycle_token"),
+    lifecycleLeaseUntil: timestamp("lifecycle_lease_until", { withTimezone: true }),
+    ...timestamps(),
+  },
+  (t) => [index("organization_canceled_at_idx").on(t.canceledAt)],
+);
 
 export const member = pgTable(
   "member",

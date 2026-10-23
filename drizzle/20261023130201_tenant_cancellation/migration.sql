@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "canceled_at" timestamp with time zone;

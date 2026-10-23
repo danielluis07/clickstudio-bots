@@ -15,3 +15,6 @@ export {
 } from "@/modules/tenancy/onboarding";
 export { createTenantRepository, findTenantOwnerEmail } from "@/modules/tenancy/repository";
 export { resolveTenantScope, type TenantScope } from "@/modules/tenancy/scope";
+export { createTenantLifecycle, tenantRecoveryDays } from "@/modules/tenancy/lifecycle";
+export { pruneCanceledTenants } from "@/modules/tenancy/retention";
+export { createTenantExport, type TenantExportFile } from "@/modules/tenancy/export";

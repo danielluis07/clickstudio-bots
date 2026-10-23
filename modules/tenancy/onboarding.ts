@@ -1,5 +1,5 @@
 import { hashPassword, verifyPassword } from "better-auth/crypto";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
 import { account, invitation, legalAcceptance, member, organization, user } from "@/db/schema";
@@ -75,12 +75,13 @@ export const createTenantOnboarding = ({
         status: invitation.status,
         expiresAt: invitation.expiresAt,
         tenantName: organization.name,
+        tenantId: organization.id,
         existingUserId: user.id,
       })
       .from(invitation)
       .innerJoin(organization, eq(organization.id, invitation.organizationId))
       .leftJoin(user, eq(user.email, invitation.email))
-      .where(eq(invitation.id, invitationId))
+      .where(and(eq(invitation.id, invitationId), isNull(organization.canceledAt)))
       .limit(1);
     if (!found) return null;
     const { existingUserId, ...rest } = found;
@@ -181,6 +182,12 @@ export const createTenantOnboarding = ({
       }
 
       const accepted = await db.transaction(async (tx) => {
+        const [tenant] = await tx
+          .select({ id: organization.id })
+          .from(organization)
+          .where(and(eq(organization.id, pending.tenantId), isNull(organization.canceledAt)))
+          .for("share");
+        if (!tenant) return null;
         const [claimed] = await tx
           .update(invitation)
           .set({ status: "accepted" })

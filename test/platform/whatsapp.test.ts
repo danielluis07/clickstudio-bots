@@ -12,6 +12,34 @@ const options = {
 };
 
 describe("WhatsApp adapter", () => {
+  test("disconnects the owning WABA without exposing credentials or vendor errors", async () => {
+    const context = { tenantId: "tenant-a", wabaId: "200", phoneNumberId: "300" };
+    const credential = createWhatsAppTokenCipher(
+      options.activeKeyVersion,
+      options.encryptionKeys,
+    ).encrypt(accessToken, context);
+    let fail = false;
+    const requests: { url: string; init?: RequestInit }[] = [];
+    const adapter = createWhatsAppAdapter({
+      ...options,
+      async fetch(url, init) {
+        requests.push({ url: String(url), init });
+        return fail
+          ? new Response("private vendor error", { status: 500 })
+          : Response.json({ success: true });
+      },
+    });
+    expect(await adapter.unsubscribe({ ...context, credential })).toEqual({ ok: true });
+    expect(requests[0].url).toBe("https://graph.facebook.com/v26.0/200/subscribed_apps");
+    expect(requests[0].init?.method).toBe("DELETE");
+    expect(requests[0].init?.headers).toEqual({ Authorization: `Bearer ${accessToken}` });
+    fail = true;
+    expect(await adapter.unsubscribe({ ...context, credential })).toEqual({ ok: false });
+    expect(await adapter.unsubscribe({ ...context, tenantId: "tenant-b", credential })).toEqual({
+      ok: false,
+    });
+    expect(requests).toHaveLength(2);
+  });
   test("exchanges a code and discovers a coexistence number without exposing its token", async () => {
     const requests: { url: string; init?: RequestInit }[] = [];
     const adapter = createWhatsAppAdapter({

@@ -134,6 +134,11 @@ production deployment. The endpoint rejects missing/incorrect credentials with
 raw inbox rows strictly older than 30 days by `receivedAt`, in every status.
 Rows exactly 30 days old remain until the next run. Duplicate calls are safe.
 
+The same endpoint retries canceled Channels' disconnections and hard-deletes
+Tenants at their 30-day recovery deadline. See the
+[Tenant lifecycle runbook](tenant-lifecycle.md) for cancellation, reactivation,
+manual JSON/CSV exports and billing-record retention.
+
 The task list is composed in `server/services.ts`. Later tickets can append
 their own daily tasks without adding schedules or auth entry points. Each task
 has a fixed name and its own failure boundary; independent later tasks still run

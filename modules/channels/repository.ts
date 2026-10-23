@@ -1,6 +1,6 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import type { Database } from "@/db/database";
-import { channel } from "@/db/schema";
+import { channel, organization } from "@/db/schema";
 import type { TenantScope } from "@/modules/tenancy";
 
 // Explicit projection: neither RSC nor action results can serialize credentials.
@@ -20,6 +20,7 @@ const channelSummary = {
 };
 
 type AppSync = "contactsSync" | "historySync";
+const activeTenant = sql`exists(select 1 from ${organization} where ${organization.id} = ${channel.tenantId} and ${organization.canceledAt} is null)`;
 
 export const createChannelRepository = (db: Database, scope: TenantScope) => ({
   async getChannel() {
@@ -59,7 +60,7 @@ export const createChannelRepository = (db: Database, scope: TenantScope) => ({
         credential: channel.credential,
       })
       .from(channel)
-      .where(eq(channel.tenantId, scope.tenantId))
+      .where(and(eq(channel.tenantId, scope.tenantId), activeTenant))
       .limit(1);
     return found ?? null;
   },
@@ -68,7 +69,10 @@ export const createChannelRepository = (db: Database, scope: TenantScope) => ({
     subscriptionAttemptedAt: Date;
     subscriptionError: string | null;
   }) {
-    await db.update(channel).set(input).where(eq(channel.tenantId, scope.tenantId));
+    await db
+      .update(channel)
+      .set(input)
+      .where(and(eq(channel.tenantId, scope.tenantId), activeTenant));
   },
   // Marks the sync requested unless it already was or the Channel onboarded
   // before `onboardedAfter`, so concurrent callers ask Meta at most once.
@@ -125,7 +129,8 @@ export const resolveChannelPhoneNumber = async (
   const [found] = await db
     .select({ channelId: channel.id, tenantId: channel.tenantId })
     .from(channel)
-    .where(eq(channel.phoneNumberId, phoneNumberId))
+    .innerJoin(organization, eq(organization.id, channel.tenantId))
+    .where(and(eq(channel.phoneNumberId, phoneNumberId), isNull(organization.canceledAt)))
     .limit(1);
   return found ? (found as ChannelRoute) : null;
 };

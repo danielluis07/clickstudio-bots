@@ -142,6 +142,18 @@ export const createWhatsAppAdapter = (options: Options) => {
       }
     },
 
+    async unsubscribe(input: WhatsAppCredentialContext & { credential: EncryptedWhatsAppToken }) {
+      try {
+        const result = await request(`${input.wabaId}/subscribed_apps`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${cipher.decrypt(input.credential, input)}` },
+        });
+        return { ok: z.object({ success: z.literal(true) }).safeParse(result).success };
+      } catch {
+        return { ok: false };
+      }
+    },
+
     async requestAppSync(
       input: WhatsAppCredentialContext & {
         credential: EncryptedWhatsAppToken;

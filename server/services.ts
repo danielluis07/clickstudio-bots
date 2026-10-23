@@ -5,6 +5,8 @@ import {
   createMemberManagement,
   createTenantOnboarding,
   createTenantRepository,
+  createTenantLifecycle,
+  pruneCanceledTenants,
 } from "@/modules/tenancy";
 import { createResendMailer } from "@/platform/resend-mailer";
 import { createChannelService } from "@/modules/channels";
@@ -59,6 +61,11 @@ const dependencies = {
 };
 
 export const tenantOnboarding = createTenantOnboarding(dependencies);
+export const tenantLifecycle = createTenantLifecycle({
+  db,
+  clock: systemClock,
+  getWhatsApp: createWhatsAppGateway,
+});
 
 export const memberManagement = createMemberManagement(dependencies);
 
@@ -171,6 +178,8 @@ export const dailyCronRoute = createDailyCronRoute({
   secret: env.CRON_SECRET ?? null,
   diagnostics,
   tasks: [
+    { name: "disconnect-canceled-channels", run: () => tenantLifecycle.retryDisconnections() },
+    { name: "delete-canceled-tenants", run: () => pruneCanceledTenants(db, systemClock) },
     { name: "prune-inbox", run: () => pruneInboxEvents(db, systemClock) },
     { name: "retry-reply-warnings", run: () => botAllowance.retryWarnings() },
     {

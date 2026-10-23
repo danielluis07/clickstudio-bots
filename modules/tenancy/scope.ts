@@ -1,6 +1,6 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type { Database } from "@/db/database";
-import { member } from "@/db/schema";
+import { member, organization } from "@/db/schema";
 
 declare const tenantScopeBrand: unique symbol;
 
@@ -32,9 +32,11 @@ export const resolveTenantScope = async (
       role: member.role,
     })
     .from(member)
+    .innerJoin(organization, eq(organization.id, member.organizationId))
     .where(
       and(
         eq(member.userId, userId),
+        isNull(organization.canceledAt),
         activeTenantId ? eq(member.organizationId, activeTenantId) : undefined,
       ),
     )

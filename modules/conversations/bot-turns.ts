@@ -1,6 +1,6 @@
 import { and, asc, count, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
-import { channel, conversation, message } from "@/db/schema";
+import { channel, conversation, message, organization } from "@/db/schema";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
 import type { TenantScope } from "@/modules/tenancy";
 import { resolveUnresolvedEchoes } from "@/modules/conversations/echoes";
@@ -47,6 +47,8 @@ export const countPendingBotReplies = async (
 const botEligible = sql`(${conversation.owner} = 'bot' and exists(
   select 1 from ${channel} where ${channel.id} = ${conversation.channelId}
   and ${channel.botEnabled} and not ${channel.botPaused} and ${channel.subscriptionStatus} = 'subscribed'
+  and exists(select 1 from ${organization} where ${organization.id} = ${channel.tenantId}
+    and ${organization.canceledAt} is null)
 ))`;
 
 // WhatsApp's service window for the Bot, opened by the Contact's latest live
