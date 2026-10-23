@@ -149,17 +149,30 @@ const gatewayBotModelId = "anthropic/claude-haiku-5.5";
 export const createBotModel = ({
   gatewayApiKey,
   anthropicApiKey,
+  modelId,
 }: {
   gatewayApiKey?: string;
   anthropicApiKey?: string;
+  modelId?: string;
 }) => {
-  if (gatewayApiKey)
+  if (gatewayApiKey) {
+    const selectedModelId = modelId?.trim() ?? gatewayBotModelId;
+    if (!/^[a-z0-9-]+\/[a-z0-9._:-]+$/.test(selectedModelId))
+      throw new Error("AI_MODEL_ID must use provider/model format with AI Gateway");
+    const provider = selectedModelId.split("/")[0];
     return createAiSdkModel({
-      model: createGateway({ apiKey: gatewayApiKey })(gatewayBotModelId),
+      model: createGateway({ apiKey: gatewayApiKey })(selectedModelId),
       // Keep the no-fallback contract: Gateway must not try other providers.
-      providerOptions: { gateway: { only: ["anthropic"] } },
+      providerOptions: { gateway: { only: [provider] } },
     });
-  if (anthropicApiKey)
-    return createAiSdkModel({ model: createAnthropicLanguageModel({ apiKey: anthropicApiKey }) });
+  }
+  if (anthropicApiKey) {
+    const selectedModelId = modelId?.trim() ?? defaultBotModelId;
+    if (!/^[a-z0-9._:-]+$/.test(selectedModelId))
+      throw new Error("AI_MODEL_ID must use an Anthropic model ID for direct Anthropic access");
+    return createAiSdkModel({
+      model: createAnthropicLanguageModel({ apiKey: anthropicApiKey, modelId: selectedModelId }),
+    });
+  }
   return null;
 };

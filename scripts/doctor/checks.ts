@@ -15,7 +15,7 @@ export type DoctorDependencies = {
   migrationNames: string[];
   inspectDatabase(connectionString: string): Promise<DatabaseReadiness>;
   checkServer(origin: string): Promise<boolean>;
-  probeProvider(environment: DoctorEnvironment): Promise<void>;
+  probeProvider(environment: DoctorEnvironment, modelId?: string): Promise<void>;
 };
 
 const requiredEnvironment = [
@@ -41,10 +41,12 @@ export const runDoctor = async ({
   environment,
   dependencies,
   probeProvider = false,
+  probeModelId,
 }: {
   environment: DoctorEnvironment;
   dependencies: DoctorDependencies;
   probeProvider?: boolean;
+  probeModelId?: string;
 }) => {
   const checks: DoctorCheck[] = [];
   const add = (name: DoctorCheck["name"], status: DoctorCheck["status"], message: string) =>
@@ -139,7 +141,12 @@ export const runDoctor = async ({
     add("server", "skip", "Configure uma APP_URL válida para verificar o servidor.");
   }
 
-  if (!probeProvider) {
+  if (
+    probeModelId !== undefined &&
+    (!probeProvider || !/^[a-z0-9-]+\/[a-z0-9._:-]+$/.test(probeModelId))
+  ) {
+    add("provider_probe", "fail", "Use --probe-model criador/modelo junto com --probe-provider.");
+  } else if (!probeProvider) {
     add(
       "provider_probe",
       "skip",
@@ -147,6 +154,12 @@ export const runDoctor = async ({
     );
   } else if (environment.CI) {
     add("provider_probe", "fail", "A chamada ao provedor real é desabilitada em CI.");
+  } else if (probeModelId && provider !== "gateway") {
+    add(
+      "provider_probe",
+      "fail",
+      "--probe-model exige AI_GATEWAY_API_KEY; nenhuma chamada foi feita.",
+    );
   } else if (!provider) {
     add(
       "provider_probe",
@@ -155,11 +168,13 @@ export const runDoctor = async ({
     );
   } else {
     try {
-      await dependencies.probeProvider(environment);
+      await dependencies.probeProvider(environment, probeModelId);
       add(
         "provider_probe",
         "pass",
-        "O modelo respondeu à chamada sintética sem dados de contatos.",
+        probeModelId
+          ? `O modelo alternativo ${probeModelId} respondeu sem dados de contatos. O modelo do Bot não foi verificado.`
+          : "O modelo respondeu à chamada sintética sem dados de contatos.",
       );
     } catch (error) {
       const status =

@@ -48,6 +48,8 @@ See [Phone inbox](docs/phone-inbox.md) for responsive layouts and browser checks
 To configure the Bot, start with [Behaviour settings](docs/bot-settings.md) and
 [Testar Bot setup and code entry points](docs/bot-sandbox.md). The sandbox guide
 explains provider keys, model access, daily limits and production isolation.
+Set the server-only `AI_MODEL_ID` to choose a different model per environment
+(for example, `google/gemini-2.5-flash-lite` for local Gateway testing).
 [Capturing Contact details](docs/contact-capture.md) covers the capture capability.
 
 Before testing in a browser, run `bun run doctor`. It checks local readiness

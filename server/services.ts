@@ -92,6 +92,7 @@ export const linkSettingsEditor = createLinkSettingsEditor({ db, clock: systemCl
 const model = createBotModel({
   gatewayApiKey: env.AI_GATEWAY_API_KEY,
   anthropicApiKey: env.ANTHROPIC_API_KEY,
+  modelId: env.AI_MODEL_ID,
 });
 const queue = env.QSTASH_TOKEN
   ? createQStashJobQueue({ token: env.QSTASH_TOKEN, baseUrl: env.QSTASH_URL, appUrl: env.APP_URL })

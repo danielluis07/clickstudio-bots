@@ -46,6 +46,27 @@ policy as the Bot, without saved Tenant content, tools or production metering.
 It is refused when `CI` is set. Routine doctor runs and CI tests never call a
 real Model.
 
+The normal probe reads `AI_MODEL_ID`, just like the live Bot and sandbox. Set it
+in your local `.env` to test an eligible model, then restart the development
+server. See [model configuration](bot-sandbox.md#setup-and-verification) for
+Gateway and direct Anthropic ID formats and production settings.
+
+To test an alternative using your Gateway key without changing the Bot's model:
+
+```powershell
+bun run doctor --json --probe-provider --probe-model google/gemini-2.5-flash-lite
+```
+
+The override takes precedence over `AI_MODEL_ID` for this request only. It
+requires both `--probe-provider` and `AI_GATEWAY_API_KEY`. It uses
+Gateway's default provider routing, a 32-token output cap and no SDK retries.
+The report identifies the alternative and leaves the Bot's model unverified.
+This is a connectivity check, not an evaluation of tool use or reply quality.
+
+AI Gateway's free credits cover only eligible models. A 403 can mean the selected
+model requires purchased Gateway credits; upgrading the hosting plan is not the
+prescribed fix. See [Gateway pricing](https://vercel.com/docs/ai-gateway/pricing).
+
 The probe separates key presence from actual model access: HTTP 401 reports an
 authentication refusal; HTTP 403 reports a model-access refusal and points to
 permissions and credits. Other failures return a generic diagnosis without raw
