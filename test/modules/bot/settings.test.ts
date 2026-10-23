@@ -6,6 +6,7 @@ import {
   createBotCore,
   createBotSettingsEditor,
   readBehaviour,
+  scheduleAllows,
   type BehaviourSettings,
 } from "@/modules/bot";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
@@ -279,21 +280,12 @@ describe("what the Bot reads", () => {
 
   test("the schedule saved now decides eligibility, in São Paulo time", async () => {
     await saved(settings);
-    const core = createBotCore({
-      model: createTestModel(),
-      repository: {
-        ...createTestBotRepository(),
-        getBehaviour: (turn) => readBehaviour(db, turn.scope),
-      },
-      meter: createTestUsageMeter(),
-      clock,
-    });
-    const turn = { scope: routeA, conversationId: "conversation-a" };
+    const isScheduled = async () => scheduleAllows(await readBehaviour(db, routeA), clock.now());
 
     // Tuesday 2026-03-10, 09:00 in São Paulo.
-    expect(await core.isScheduled(turn)).toBe(false);
+    expect(await isScheduled()).toBe(false);
     await saved({ ...settings, schedule: "always" });
-    expect(await core.isScheduled(turn)).toBe(true);
+    expect(await isScheduled()).toBe(true);
   });
 
   test("changing the schedule leaves every Conversation as it was", async () => {
