@@ -65,8 +65,8 @@ export const createTenantExport = ({ db, clock }: { db: Database; clock: Clock }
           sandboxUsage,
           replyUsage,
           activation,
-        ] = await Promise.all([
-          tx
+        ] = [
+          await tx
             .select({
               id: member.id,
               userId: user.id,
@@ -79,17 +79,17 @@ export const createTenantExport = ({ db, clock }: { db: Database; clock: Clock }
             .innerJoin(user, eq(user.id, member.userId))
             .where(eq(member.organizationId, tenantId))
             .orderBy(asc(member.id)),
-          tx
+          await tx
             .select()
             .from(invitation)
             .where(eq(invitation.organizationId, tenantId))
             .orderBy(asc(invitation.id)),
-          tx
+          await tx
             .select()
             .from(legalAcceptance)
             .where(eq(legalAcceptance.tenantId, tenantId))
             .orderBy(asc(legalAcceptance.id)),
-          tx
+          await tx
             .select({
               id: channel.id,
               tenantId: channel.tenantId,
@@ -103,8 +103,12 @@ export const createTenantExport = ({ db, clock }: { db: Database; clock: Clock }
             })
             .from(channel)
             .where(eq(channel.tenantId, tenantId)),
-          tx.select().from(contact).where(eq(contact.tenantId, tenantId)).orderBy(asc(contact.id)),
-          tx
+          await tx
+            .select()
+            .from(contact)
+            .where(eq(contact.tenantId, tenantId))
+            .orderBy(asc(contact.id)),
+          await tx
             .select({
               id: conversation.id,
               tenantId: conversation.tenantId,
@@ -120,22 +124,29 @@ export const createTenantExport = ({ db, clock }: { db: Database; clock: Clock }
             .from(conversation)
             .where(eq(conversation.tenantId, tenantId))
             .orderBy(asc(conversation.id)),
-          tx.select().from(message).where(eq(message.tenantId, tenantId)).orderBy(asc(message.id)),
-          tx
+          await tx
+            .select()
+            .from(message)
+            .where(eq(message.tenantId, tenantId))
+            .orderBy(asc(message.id)),
+          await tx
             .select()
             .from(messageChange)
             .where(eq(messageChange.tenantId, tenantId))
             .orderBy(asc(messageChange.id)),
-          tx
+          await tx
             .select()
             .from(knowledgeBaseEntry)
             .where(eq(knowledgeBaseEntry.tenantId, tenantId))
             .orderBy(asc(knowledgeBaseEntry.id)),
-          tx.select().from(botSettings).where(eq(botSettings.tenantId, tenantId)),
-          tx.select().from(botCaptureSettings).where(eq(botCaptureSettings.tenantId, tenantId)),
-          tx.select().from(botLinkSettings).where(eq(botLinkSettings.tenantId, tenantId)),
-          tx.select().from(botSandboxUsage).where(eq(botSandboxUsage.tenantId, tenantId)),
-          tx
+          await tx.select().from(botSettings).where(eq(botSettings.tenantId, tenantId)),
+          await tx
+            .select()
+            .from(botCaptureSettings)
+            .where(eq(botCaptureSettings.tenantId, tenantId)),
+          await tx.select().from(botLinkSettings).where(eq(botLinkSettings.tenantId, tenantId)),
+          await tx.select().from(botSandboxUsage).where(eq(botSandboxUsage.tenantId, tenantId)),
+          await tx
             .select({
               tenantId: botReplyUsage.tenantId,
               period: botReplyUsage.period,
@@ -145,8 +156,8 @@ export const createTenantExport = ({ db, clock }: { db: Database; clock: Clock }
             .from(botReplyUsage)
             .where(eq(botReplyUsage.tenantId, tenantId))
             .orderBy(asc(botReplyUsage.period)),
-          tx.select().from(botActivation).where(eq(botActivation.tenantId, tenantId)),
-        ]);
+          await tx.select().from(botActivation).where(eq(botActivation.tenantId, tenantId)),
+        ];
         return {
           version: 1,
           exportedAt: clock.now(),
