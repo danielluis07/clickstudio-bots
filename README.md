@@ -55,6 +55,9 @@ without applying migrations, seeding data or calling a Model. See
 [Local readiness and branch protection](docs/local-development.md) for JSON output
 and the optional provider probe.
 
+For personal-data incidents, follow the [incident runbook](docs/incident-runbook.md),
+which is pending legal review before go-live.
+
 ## Scripts
 
 | Script                | What it does                                                    |
