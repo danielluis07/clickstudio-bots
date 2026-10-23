@@ -39,8 +39,8 @@ does not invalidate the provider's cache.
 
 ## Schedule eligibility
 
-`createBotCore(...).isScheduled(turn)` reads the current settings and the
-injected `Clock`. It returns whether the schedule lets the Bot reply now:
+`scheduleAllows(settings, at)` returns whether the schedule lets the Bot reply
+at that instant. The live reply gate calls it with the settings saved now:
 
 - **Always on**: always true.
 - **Outside business hours only**: false from the opening minute until the
@@ -50,12 +50,11 @@ injected `Clock`. It returns whether the schedule lets the Bot reply now:
 Weekday and time come from `America/Sao_Paulo` for every Tenant, whatever the
 server's time zone.
 
-The schedule is one of the independent conditions a reply needs, alongside
-Conversation Handoff and Channel pause. A false result only stops the Bot from
+The schedule is one of the conditions the [reply gate](live-bot.md#reply-gate)
+checks, before and after each Model call. A false result only stops the Bot from
 sending. It never hands a Conversation off. Saving a schedule change writes only
 the settings row: no Conversation moves to the waiting list and no ownership
-changes. The turn coordinator, which is not built yet, must call
-`isScheduled` in its pre-send re-check.
+changes.
 
 ## Deployment
 

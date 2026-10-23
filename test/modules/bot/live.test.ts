@@ -302,14 +302,10 @@ test("an unavailable Model outside Schedule skips without Handoff", async () => 
   });
 });
 
-test("a pause during generation takes precedence over an unavailable sender", async () => {
-  const { scope, model, activation, conversationId, repository, dependencies } = await setup();
+test("an unavailable sender hands off after generation", async () => {
+  const { scope, model, sender, activation, conversationId, repository, dependencies } =
+    await setup();
   await activation.activate(scope);
-  const generate = model.generate;
-  model.generate = async (request) => {
-    await activation.setPaused(scope, true);
-    return generate(request);
-  };
   model.script({ text: "Resposta." });
   await createLiveBot({
     ...dependencies,
@@ -317,9 +313,10 @@ test("a pause during generation takes precedence over an unavailable sender", as
       throw new Error("unconfigured");
     },
   }).run(conversationId);
+  expect(sender.sent).toHaveLength(0);
   expect(await repository.getConversation(conversationId)).toMatchObject({
-    owner: "bot",
-    handoffReason: null,
+    owner: "team",
+    handoffReason: "bot_indisponivel",
   });
 });
 

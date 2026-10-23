@@ -9,9 +9,28 @@ import {
   handoffFields,
   type ConversationHandoffReason,
 } from "@/modules/conversations/handoff";
-import { createConversationRepository } from "@/modules/conversations/repository";
+import {
+  createConversationRepository,
+  serviceWindowHours,
+} from "@/modules/conversations/repository";
 
 export const botLeaseMs = 120_000;
+
+// The Bot may reply in a Conversation only while it owns it and its Channel is
+// activated, unpaused and subscribed. The reply gate reads this and the
+// reservation fences on it, so both always agree.
+const botEligible = sql`(${conversation.owner} = 'bot' and exists(
+  select 1 from ${channel} where ${channel.id} = ${conversation.channelId}
+  and ${channel.botEnabled} and not ${channel.botPaused} and ${channel.subscriptionStatus} = 'subscribed'
+))`;
+
+// WhatsApp's service window for the Bot, opened by the Contact's latest live
+// message. Imported history never reopens it.
+const serviceWindowOpen = (now: Date) => sql`exists(
+  select 1 from ${message} where ${message.conversationId} = ${conversation.id}
+  and ${message.origin} = 'contact' and not ${message.imported}
+  and ${message.sentAt} > ${now.toISOString()}::timestamptz - make_interval(hours => ${serviceWindowHours})
+)`;
 
 // Only verified jobs and daily maintenance call this resolver. It derives
 // proof from the stored Channel phone-number-id, never a request's Tenant id.
@@ -76,10 +95,6 @@ export const createConversationBotRepository = (db: Database, scope: ChannelRout
           phoneNumberId: channel.phoneNumberId,
           credential: channel.credential,
           wabaId: channel.wabaId,
-          enabled: channel.botEnabled,
-          paused: channel.botPaused,
-          subscribed: channel.subscriptionStatus,
-          owner: conversation.owner,
         })
         .from(conversation)
         .innerJoin(
@@ -89,6 +104,17 @@ export const createConversationBotRepository = (db: Database, scope: ChannelRout
         .where(ownsConversation(conversationId));
       if (!found) return null;
       return { ...found, scope };
+    },
+    // Null for a Conversation outside this Channel.
+    async eligibility(conversationId: string, now: Date) {
+      const [found] = await db
+        .select({
+          eligible: sql<boolean>`${botEligible}`,
+          windowOpen: sql<boolean>`${serviceWindowOpen(now)}`,
+        })
+        .from(conversation)
+        .where(ownsConversation(conversationId));
+      return found ?? null;
     },
     async claim(conversationId: string, token: string, now: Date) {
       const claimed = await db
@@ -181,11 +207,10 @@ export const createConversationBotRepository = (db: Database, scope: ChannelRout
           .where(
             and(
               ownsConversation(conversationId),
-              eq(conversation.owner, "bot"),
               eq(conversation.botLeaseToken, token),
               gt(conversation.botLeaseUntil, now),
-              sql`exists(select 1 from ${channel} where ${channel.id} = ${conversation.channelId} and ${channel.botEnabled} and not ${channel.botPaused} and ${channel.subscriptionStatus} = 'subscribed')`,
-              sql`exists(select 1 from ${message} where ${message.conversationId} = ${conversation.id} and ${message.origin} = 'contact' and not ${message.imported} and ${message.sentAt} > ${new Date(now.getTime() - 86_400_000).toISOString()}::timestamptz)`,
+              botEligible,
+              serviceWindowOpen(now),
             ),
           )
           .returning({ tenantId: conversation.tenantId });

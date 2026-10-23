@@ -1,12 +1,12 @@
-import type { Database, Transaction } from "@/db/database";
+import type { Database } from "@/db/database";
 import { readCapture } from "@/modules/bot/capture";
 import { recordBotReplyUsage } from "@/modules/bot/allowance";
 import { readLinks } from "@/modules/bot/links";
 import { createBotCore } from "@/modules/bot/turn";
 import { readBehaviour } from "@/modules/bot/settings";
-import { scheduleAllows } from "@/modules/bot/schedule";
+import { createReplyGate, type BotAllowance, type ReplyDecision } from "@/modules/bot/reply-gate";
 import type { Model } from "@/modules/bot/model";
-import type { BotTurn, ContextMessage } from "@/modules/bot/repository";
+import type { ContextMessage } from "@/modules/bot/repository";
 import type { UsageMeter } from "@/modules/bot/usage";
 import type { ChannelRoute } from "@/modules/channels";
 import {
@@ -27,13 +27,6 @@ export type BotJob = { type: "run-bot-turn"; conversationId: string };
 export interface BotJobQueue {
   enqueue(jobs: readonly BotJob[]): Promise<void>;
 }
-// Billing supplies this hook; live turns never infer allowance from sandbox usage.
-export interface BotAllowance {
-  canReply(turn: BotTurn): Promise<boolean>;
-  reserve?(tx: Transaction, turn: BotTurn): Promise<void>;
-  notifyWarning?(turn: BotTurn): Promise<void>;
-}
-
 export const createLiveBot = ({
   db,
   clock,
@@ -53,23 +46,10 @@ export const createLiveBot = ({
   meter: UsageMeter;
   allowance: BotAllowance;
 }) => {
-  const eligible = (
-    found: Awaited<ReturnType<ReturnType<typeof createConversationBotRepository>["load"]>>,
-  ) =>
-    found &&
-    found.enabled &&
-    !found.paused &&
-    found.subscribed === "subscribed" &&
-    found.owner === "bot";
+  const gate = createReplyGate({ db, clock, allowance });
   const enqueue = async (scope: ChannelRoute, conversationId: string) => {
+    if ((await gate.check({ scope, conversationId }, "enqueue")).kind !== "reply") return;
     const repository = createConversationBotRepository(db, scope);
-    const found = await repository.load(conversationId);
-    if (
-      !eligible(found) ||
-      found!.scope.channelId !== scope.channelId ||
-      found!.tenantId !== scope.tenantId
-    )
-      return;
     if ((await repository.listUnanswered(conversationId)).length)
       await queue.enqueue([{ type: "run-bot-turn", conversationId }]);
   };
@@ -84,12 +64,19 @@ export const createLiveBot = ({
       const token = crypto.randomUUID();
       if (!(await repository.claim(conversationId, token, clock.now()))) return "busy" as const;
       let followUp = false;
+      const turn = { scope: initial.scope, conversationId };
+      // Every Handoff the gate decides is fenced by this turn's lease.
+      const settle = async (decision: Exclude<ReplyDecision, { kind: "reply" }>) => {
+        if (decision.kind === "skip") return "skipped" as const;
+        await repository.handoff(conversationId, token, decision.reason);
+        await notifyInbox(notifier, initial.tenantId, { conversationId });
+        return "handoff" as const;
+      };
       try {
         if (await repository.failPending(conversationId, clock.now())) {
           await notifyInbox(notifier, initial.tenantId, { conversationId });
           return "handoff" as const;
         }
-        if (!eligible(await repository.load(conversationId))) return "skipped" as const;
         const snapshot = await db.transaction(
           (tx) => createConversationBotRepository(tx, initial.scope).snapshot(conversationId),
           { isolationLevel: "repeatable read", accessMode: "read only" },
@@ -99,9 +86,7 @@ export const createLiveBot = ({
         const ids = pending.map(({ id }) => id);
         const reader = createConversationRepository(db, initial.scope);
         const found = await reader.getConversation(conversationId);
-        if (!found?.serviceWindowClosesAt || found.serviceWindowClosesAt <= clock.now())
-          return "skipped" as const;
-        const turn = { scope: initial.scope, conversationId };
+        if (!found) return "skipped" as const;
         // Freeze context before the Model call. Messages arriving later get their own turn.
         const history = snapshot.history;
         const contactIds = new Set(ids);
@@ -120,19 +105,9 @@ export const createLiveBot = ({
           followUp = true;
           return "skipped" as const;
         }
-        if (!eligible(await repository.load(conversationId))) return "skipped" as const;
-        if (!(await allowance.canReply(turn))) {
-          await repository.handoff(conversationId, token, "limite_atingido");
-          await notifyInbox(notifier, initial.tenantId, { conversationId });
-          return "handoff" as const;
-        }
-        if (!scheduleAllows(await readBehaviour(db, initial.scope), clock.now()))
-          return "skipped" as const;
-        if (!model) {
-          await repository.handoff(conversationId, token, "bot_indisponivel");
-          await notifyInbox(notifier, initial.tenantId, { conversationId });
-          return "handoff" as const;
-        }
+        const beforeModel = await gate.check(turn, "beforeModel", model !== null);
+        if (beforeModel.kind !== "reply") return settle(beforeModel);
+        if (!model) return "skipped" as const;
         const turnAt = new Date(
           Math.max(clock.now().getTime(), ...history.map((row) => row.sentAt.getTime())),
         );
@@ -170,33 +145,19 @@ export const createLiveBot = ({
             ],
           },
         });
-        if (!(await core.isScheduled(turn))) return "skipped" as const;
         const outcome = await core.respond(turn);
         if (outcome.kind === "nothing_to_answer") {
           await repository.consume(conversationId, token, ids, clock.now());
           followUp = true;
           return "skipped" as const;
         }
-        if (!(await core.isScheduled(turn)) || !eligible(await repository.load(conversationId)))
-          return "skipped" as const;
         const sender = await Promise.resolve()
           .then(getSender)
           .catch(() => null);
-        if (!sender) {
-          await repository.handoff(conversationId, token, "bot_indisponivel");
-          await notifyInbox(notifier, initial.tenantId, { conversationId });
-          return "handoff" as const;
-        }
-        // All mutable gates are checked again after the Model call.
-        if (!(await core.isScheduled(turn))) return "skipped" as const;
-        const allowed = await allowance.canReply(turn);
-        if (!(await core.isScheduled(turn)) || !eligible(await repository.load(conversationId)))
-          return "skipped" as const;
-        if (!allowed) {
-          await repository.handoff(conversationId, token, "limite_atingido");
-          await notifyInbox(notifier, initial.tenantId, { conversationId });
-          return "handoff" as const;
-        }
+        // Everything may have changed during the Model call.
+        const beforeSend = await gate.check(turn, "beforeSend", sender !== null);
+        if (beforeSend.kind !== "reply") return settle(beforeSend);
+        if (!sender) return "skipped" as const;
         const messageId = await repository.reserve(
           conversationId,
           token,

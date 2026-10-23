@@ -18,13 +18,14 @@ export {
   type CaptureMode,
   type CaptureSettings,
 } from "@/modules/bot/capture";
+export { createLiveBot, type LiveBot, type BotJob, type BotJobQueue } from "@/modules/bot/live";
 export {
-  createLiveBot,
-  type LiveBot,
-  type BotJob,
-  type BotJobQueue,
+  createReplyGate,
   type BotAllowance,
-} from "@/modules/bot/live";
+  type ReplyCheckpoint,
+  type ReplyDecision,
+  type ReplyGate,
+} from "@/modules/bot/reply-gate";
 export type { ContextLimits } from "@/modules/bot/context";
 export type {
   Model,
@@ -48,6 +49,7 @@ export type {
 export {
   botSchedules,
   botTimeZone,
+  scheduleAllows,
   weekdays,
   type BotSchedule,
   type BusinessHours,

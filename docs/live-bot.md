@@ -36,9 +36,37 @@ All unanswered texts are grouped into the current Contact turn, independently
 of the core's bounded historical replay. A burst cannot silently mark questions
 answered when they were omitted from the Model input.
 
-Immediately before reservation, the worker rechecks Schedule and the allowance
-hook. Reservation atomically fences out expired holders and rechecks Conversation
-ownership, Channel activation/pause/subscription and the 24-hour service window.
+## Reply gate
+
+Whether the Bot may send its next reply is decided in one place,
+`modules/bot/reply-gate.ts`. It reads the current saved state on every check
+and writes nothing. A live turn asks it at three checkpoints:
+
+- `enqueue`: eligibility only. An exhausted allowance still enqueues a turn, so
+  that turn can hand off.
+- `beforeModel`: everything, with whether a Model is configured.
+- `beforeSend`: everything again after generation, with whether a sender is
+  available. Any change made during the Model call is seen here.
+
+Every checkpoint applies the same order, and the first match wins:
+
+1. Not eligible (Channel not activated, paused or unsubscribed, or the
+   Conversation is with the team): skip.
+2. The 24-hour service window, opened by the Contact's latest live message, has
+   closed: skip.
+3. The monthly reply allowance is used up: Handoff as **Limite atingido**, even
+   outside the Schedule.
+4. Outside the Schedule: skip. The Schedule never causes a Handoff.
+5. The Model or sender is unavailable: Handoff as **Bot indisponível**.
+
+Skips leave the Conversation with the Bot. The worker writes a gate's Handoff
+fenced by its lease and publishes an inbox notification.
+
+## Reservation, send and recovery
+
+Reservation atomically fences out expired holders and rechecks eligibility and
+the service window. It uses the same SQL predicates as the gate
+(`modules/conversations/bot-turns.ts`), so the two cannot disagree.
 It inserts a pending Bot message and marks the snapshot's Contact messages
 covered before calling Meta. A Model-requested Handoff is persisted in that same
 reservation, so a crash after sending cannot lose the ownership change.
@@ -52,14 +80,15 @@ lease is absent or expired, hands off those Conversations, clears stale leases,
 and re-enqueues eligible unanswered messages from recovered leases. It preserves
 healthy leases and publishes inbox notifications for committed Handoffs.
 
-The live service exposes `BotAllowance.canReply` and `UsageMeter` for the billing
-work. The current composition permits replies and does not implement monthly
-accounting. Sandbox counters remain separate from production.
+The gate asks `BotAllowance.canReply`; reservation calls `BotAllowance.reserve`
+in the same transaction. The monthly accounting is described in
+[Bot reply allowance](bot-reply-allowance.md). `UsageMeter` is a no-op in
+production. Sandbox counters remain separate from production.
 
 ## Verification
 
 ```powershell
-bun test test/modules/bot/live.test.ts
+bun test test/modules/bot/live.test.ts test/modules/bot/reply-gate.test.ts
 bun test test/modules/bot/activation.test.ts test/server/bot-jobs.test.ts
 $env:BOT_TEST_DATABASE_URL = 'postgresql://test_role@localhost:5432/test_database'
 bun run test:postgres

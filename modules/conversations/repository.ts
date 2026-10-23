@@ -46,7 +46,7 @@ const contactPanelFields = {
 
 // WhatsApp lets a business reply freely for 24 hours after the Contact's
 // latest message.
-const serviceWindowHours = 24;
+export const serviceWindowHours = 24;
 
 // The message's changes of one kind, matched by its wamid and direction.
 const changesOf = (

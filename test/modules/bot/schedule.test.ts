@@ -1,30 +1,11 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { ChannelRoute } from "@/modules/channels";
-import { createBotCore, type BotTurn } from "@/modules/bot";
-import {
-  createTestBotRepository,
-  createTestUsageMeter,
-  type TestBotRepository,
-} from "@/test/support/bot";
-import { createTestClock } from "@/test/support/clock";
-import { createTestModel } from "@/test/support/model";
+import { scheduleAllows } from "@/modules/bot";
+import { createTestBotRepository, type TestBotRepository } from "@/test/support/bot";
 
-const turn: BotTurn = {
-  scope: { channelId: "channel-a", tenantId: "tenant-a" } as ChannelRoute,
-  conversationId: "conversation-a",
-};
-const clock = createTestClock();
 let repository: TestBotRepository;
 
-const isScheduledAt = (instant: string) => {
-  clock.set(new Date(instant));
-  return createBotCore({
-    model: createTestModel(),
-    repository,
-    meter: createTestUsageMeter(),
-    clock,
-  }).isScheduled(turn);
-};
+const isScheduledAt = async (instant: string) =>
+  scheduleAllows(repository.behaviour, new Date(instant));
 
 beforeEach(() => {
   repository = createTestBotRepository();
@@ -62,11 +43,5 @@ describe("schedule eligibility", () => {
       hours: { ...repository.behaviour.hours, saturday: { opens: "20:00", closes: "23:00" } },
     };
     expect(await isScheduledAt("2026-03-15T00:30:00.000Z")).toBe(false);
-  });
-
-  test("reads the settings saved now, so a schedule change applies to the next check", async () => {
-    expect(await isScheduledAt("2026-03-10T15:00:00.000Z")).toBe(false);
-    repository.behaviour = { ...repository.behaviour, schedule: "always" };
-    expect(await isScheduledAt("2026-03-10T15:00:00.000Z")).toBe(true);
   });
 });
