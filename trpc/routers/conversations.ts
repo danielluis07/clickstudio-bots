@@ -115,7 +115,7 @@ export const contactsRouter = createTRPCRouter({
     }),
 });
 
-const handoffProcedure = (command: keyof HandoffControls) =>
+const handoffProcedure = (command: Exclude<keyof HandoffControls, "bulkReturnToBot">) =>
   tenantProcedure
     .input(z.object({ conversationId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
@@ -128,5 +128,14 @@ const handoffProcedure = (command: keyof HandoffControls) =>
 export const handoffRouter = createTRPCRouter({
   takeOver: handoffProcedure("takeOver"),
   returnToBot: handoffProcedure("returnToBot"),
+  bulkReturnToBot: tenantProcedure
+    .input(z.strictObject({ conversationIds: z.array(z.string().min(1)).min(1).max(100) }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await createHandoffControls({
+        db: ctx.db,
+        notifier: ctx.notifier,
+      }).bulkReturnToBot(ctx.scope, input.conversationIds);
+      if (!result.ok) throw new TRPCError({ code: "NOT_FOUND" });
+    }),
   resolve: handoffProcedure("resolve"),
 });

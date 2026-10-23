@@ -306,6 +306,32 @@ describe("tRPC router", () => {
     });
   });
 
+  test("bulk return authorizes Members, refuses foreign Conversations and bounds the selection", async () => {
+    const input = { conversationIds: [conversationOfB] };
+    expect(await codeOf(callerFor(ownerA).handoff.bulkReturnToBot(input))).toBe("NOT_FOUND");
+    const attendant = callerFor({ userId: "attendant", activeTenantId: "tenant-b" });
+    await attendant.handoff.takeOver({ conversationId: conversationOfB });
+    expect(await codeOf(attendant.handoff.bulkReturnToBot(input))).toBe("OK");
+    expect(await attendant.conversations.get({ conversationId: conversationOfB })).toMatchObject({
+      owner: "bot",
+      waiting: true,
+      handoffReason: "assumida",
+    });
+    for (const conversationIds of [[], [""], Array(101).fill(conversationOfB)]) {
+      expect(await codeOf(attendant.handoff.bulkReturnToBot({ conversationIds }))).toBe(
+        "BAD_REQUEST",
+      );
+    }
+    expect(
+      await codeOf(
+        callByPath(attendant, "handoff.bulkReturnToBot", {
+          ...input,
+          tenantId: "tenant-a",
+        }),
+      ),
+    ).toBe("BAD_REQUEST");
+  });
+
   test("Contact deletion refuses non-owners and foreign Contacts, and authorizes the owner", async () => {
     const input = { contactId: contactOfB };
     expect(

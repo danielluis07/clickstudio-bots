@@ -78,11 +78,11 @@ const setup = async () => {
   model.script({ text: "O corte custa R$ 80." });
   await createBotSandbox({ db, clock, model }).respond(scope, { text: "Preço?", history: [] });
   await activation.activate(scope);
-  const receive = async (text: string) => {
+  const receive = async (text: string, from = contactPhone) => {
     clock.advance(1000);
     return (await recordInboundTextMessage(db, route, {
       wamid: crypto.randomUUID(),
-      from: contactPhone,
+      from,
       profileName: "Ana",
       text,
       sentAt: clock.now(),
@@ -289,6 +289,89 @@ test("any Member can return the Bot, which answers only the next Contact message
     .messages.filter((entry) => entry.role === "user")
     .map((entry) => ("text" in entry ? entry.text : ""));
   expect(contactTexts.at(-1)).toBe("Vocês abrem sábado?");
+});
+
+test("a Member bulk returns selected Handoffs without backlog replies, answering only new messages", async () => {
+  const { scope, model, sender, conversationId, receive, worker, controls, repository, notifier } =
+    await setup();
+  const secondPhone = "5511999990002";
+  const secondId = await receive("Olá", secondPhone);
+  const unselectedId = await receive("Oi", "5511999990003");
+  for (const id of [conversationId, secondId, unselectedId]) await controls.takeOver(scope, id);
+  await receive("Alguém aí?");
+  await receive("Estou aguardando", secondPhone);
+  const attendant = await addAttendant(scope.tenantId);
+  notifier.pings.length = 0;
+
+  expect(await controls.bulkReturnToBot(attendant, [conversationId, secondId])).toEqual({
+    ok: true,
+  });
+  for (const id of [conversationId, secondId]) {
+    expect(await repository.getConversation(id)).toMatchObject({
+      owner: "bot",
+      handoffReason: "assumida",
+      waiting: true,
+    });
+    expect(await worker.run(id)).toBe("skipped");
+  }
+  expect(sender.sent).toEqual([]);
+  expect(await repository.getConversation(unselectedId)).toMatchObject({ owner: "team" });
+  expect(notifier.pings.map(({ ping }) => ping)).toEqual(
+    expect.arrayContaining([{ conversationId }, { conversationId: secondId }]),
+  );
+
+  await receive("Vocês abrem sábado?");
+  model.script({ text: "Abrimos sim." });
+  await worker.run(conversationId);
+  await receive("E domingo?", secondPhone);
+  model.script({ text: "Domingo fechamos." });
+  await worker.run(secondId);
+  expect(sender.sent.map(({ to, text }) => ({ to, text }))).toEqual([
+    { to: contactPhone, text: "Abrimos sim." },
+    { to: secondPhone, text: "Domingo fechamos." },
+  ]);
+});
+
+test("bulk return refuses a mixed-Tenant or missing selection without changing any Conversation", async () => {
+  const { scope, clock, conversationId, controls, repository, notifier } = await setup();
+  const other = await seedLiveBot(db);
+  const foreignId = (await recordInboundTextMessage(db, other.route, {
+    wamid: "wamid.FOREIGN",
+    from: contactPhone,
+    profileName: "Ana",
+    text: "Oi",
+    sentAt: clock.now(),
+  }))!;
+  const foreignRepository = createConversationRepository(db, other.scope);
+  await controls.takeOver(scope, conversationId);
+  await controls.takeOver(other.scope, foreignId);
+  notifier.pings.length = 0;
+
+  for (const unavailable of [foreignId, crypto.randomUUID()]) {
+    expect(await controls.bulkReturnToBot(scope, [conversationId, unavailable])).toEqual({
+      ok: false,
+      error: "not_found",
+    });
+    expect(await repository.getConversation(conversationId)).toMatchObject({ owner: "team" });
+    expect(await foreignRepository.getConversation(foreignId)).toMatchObject({ owner: "team" });
+  }
+  expect(notifier.pings).toEqual([]);
+});
+
+test("bulk return tolerates duplicate and already-returned selections without settling a live Bot turn", async () => {
+  const { scope, model, sender, conversationId, receive, worker, controls, repository } =
+    await setup();
+  const secondId = await receive("Oi", "5511999990002");
+  await controls.takeOver(scope, secondId);
+
+  expect(await controls.bulkReturnToBot(scope, [conversationId, secondId, secondId])).toEqual({
+    ok: true,
+  });
+  expect(await repository.getConversation(secondId)).toMatchObject({ owner: "bot", waiting: true });
+  model.script({ text: "O corte custa R$ 80." });
+  await worker.run(conversationId);
+  await worker.run(secondId);
+  expect(sender.sent.map(({ text }) => text)).toEqual(["O corte custa R$ 80."]);
 });
 
 test("Resolvida returns the Bot and clears the waiting item", async () => {
