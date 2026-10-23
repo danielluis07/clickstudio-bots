@@ -3,7 +3,7 @@ import { z } from "zod";
 import type {
   AppContact,
   ImportedHistory,
-  InboundTextMessage,
+  InboundMessage,
   MessageChange,
   MessageEcho,
   MessageStatusUpdate,
@@ -148,36 +148,49 @@ const recipientIdSchema = z
   .regex(/^\+?\d{1,20}$/)
   .transform((phone) => phone.replace("+", ""));
 
-const textMessageEventSchema = z.object({
+const inboundMessageEventSchema = z.object({
   field: z.literal("messages"),
   value: z.object({
     contacts: z
       .array(z.object({ wa_id: z.string(), profile: z.object({ name: z.string() }).optional() }))
       .optional(),
     messages: z.tuple([
-      z.object({
+      z.looseObject({
         from: waIdSchema,
         id: z.string().min(1),
         timestamp: timestampSchema,
-        type: z.literal("text"),
-        text: textSchema,
+        type: z.string().min(1),
+        text: textSchema.optional(),
         ...notInGroup,
       }),
     ]),
   }),
 });
 
-// The Contact's text message an inbox event carries, if it carries one.
-export const readInboundTextMessage = (payload: unknown): InboundTextMessage | null => {
-  const parsed = textMessageEventSchema.safeParse(payload);
+const mediaTypeSchema = z.enum(["audio", "image", "video", "document", "sticker", "unsupported"]);
+const captionSchema = z.object({ caption: z.string().optional() });
+
+// The Contact's live message, without fetching or retaining media content.
+export const readInboundMessage = (payload: unknown): InboundMessage | null => {
+  const parsed = inboundMessageEventSchema.safeParse(payload);
   if (!parsed.success) return null;
   const [inbound] = parsed.data.value.messages;
+  if (referencingTypes.has(inbound.type) || (inbound.type === "text" && !inbound.text)) return null;
+  const type =
+    inbound.type === "text" ? "text" : mediaTypeSchema.catch("unsupported").parse(inbound.type);
+  const media = captionSchema.safeParse(inbound[inbound.type]);
   const sender = parsed.data.value.contacts?.find((candidate) => candidate.wa_id === inbound.from);
   return {
     wamid: inbound.id,
     from: inbound.from,
     profileName: sender?.profile?.name ?? null,
-    text: inbound.text.body,
+    type,
+    text:
+      type === "text"
+        ? inbound.text!.body
+        : type !== "audio" && media.success
+          ? media.data.caption?.trim() || null
+          : null,
     sentAt: inbound.timestamp,
   };
 };

@@ -21,6 +21,22 @@ message in an activated, subscribed, unpaused Channel and a Bot-owned Conversati
 Imported history, delivery statuses and app echoes do not start turns. Queue
 failure leaves the inbox event unsettled so its idempotent processing can retry.
 
+Unsupported media ([#61](https://github.com/danielluis07/clickstudio-bots/issues/61))
+is filed with its kind and optional caption. The Conversation shows a pt-BR
+placeholder directing the Member to WhatsApp. Voice notes of any duration and
+other media without a caption hand off immediately as **O Bot não soube responder**, in the
+same transaction as the inbound message, even when the Bot is paused or inactive.
+They send no Bot reply and use no reply allowance. Required Contact capture does
+not delay this Handoff. A duplicate inbound write cannot reverse a Member's return
+to the Bot.
+
+Other media with captions can start normal Bot turns. Only caption text reaches
+the Model, marked as an unavailable attachment; the Bot answers if the caption
+alone suffices and otherwise uses the existing Handoff flow. Channel eligibility,
+Schedule and reply gates still apply. Media arriving during generation hands off
+before the pending reply can pass its send checks. No attachment is downloaded or
+stored, and no transcription or media-understanding adapter is configured.
+
 QStash signs delivery to `/api/jobs/run-bot-turn`; the route verifies both the
 body and destination and rejects extra fields. Jobs carry only a Conversation
 id. The handler loads the Channel and resolves its `ChannelRoute` from the saved

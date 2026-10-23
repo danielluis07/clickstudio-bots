@@ -122,7 +122,10 @@ export const message = pgTable(
     authorMemberId: text("author_member_id").references(() => member.id, { onDelete: "set null" }),
     // Delivery of an outbound message; null for inbound ones. Only moves forward.
     status: text("status", { enum: ["pending", "sent", "delivered", "read", "failed"] }),
-    type: text("type", { enum: ["text"] }).notNull(),
+    // Media keeps only its kind and optional caption, never the attachment.
+    type: text("type", {
+      enum: ["text", "audio", "image", "video", "document", "sticker", "unsupported"],
+    }).notNull(),
     text: text("text"),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull(),
     // Shared from the WhatsApp Business app's history after onboarding. Never a

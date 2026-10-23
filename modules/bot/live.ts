@@ -25,6 +25,15 @@ export type BotJob = { type: "run-bot-turn"; conversationId: string };
 export interface BotJobQueue {
   enqueue(jobs: readonly BotJob[]): Promise<void>;
 }
+
+// A caption is text context, never evidence of what an attachment contains.
+const messageText = (row: { type: string; text: string | null }) => {
+  if (!row.text) return "";
+  return row.type === "text"
+    ? row.text
+    : `[Unsupported ${row.type} attachment; caption only]\n${row.text}`;
+};
+
 export const createLiveBot = ({
   db,
   clock,
@@ -96,7 +105,7 @@ export const createLiveBot = ({
         // bounded historical replay cannot silently discard any current question.
         const currentText = snapshot.current
           .filter((row) => !row.revokedAt)
-          .map((row) => row.text ?? "")
+          .map(messageText)
           .filter(Boolean)
           .join("\n\n");
         if (!currentText) {
@@ -134,7 +143,7 @@ export const createLiveBot = ({
                 .map((row): ContextMessage => ({
                   author:
                     row.origin === "contact" ? "contact" : row.origin === "bot" ? "bot" : "member",
-                  text: row.text ?? "",
+                  text: messageText(row),
                   sentAt: row.sentAt,
                 })),
               { author: "contact" as const, text: currentText, sentAt: turnAt },

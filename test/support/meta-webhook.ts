@@ -32,6 +32,42 @@ export const textMessageChange = ({
   },
 });
 
+export const mediaMessageChange = ({
+  type,
+  caption,
+  duration,
+  ...input
+}: Parameters<typeof textMessageChange>[0] & {
+  type: string;
+  caption?: string;
+  duration?: number;
+}) => {
+  const change = textMessageChange(input);
+  const [original] = change.value.messages;
+  return {
+    ...change,
+    value: {
+      ...change.value,
+      messages: [
+        {
+          from: original.from,
+          id: original.id,
+          timestamp: original.timestamp,
+          type,
+          [type]: {
+            id: "synthetic-media-id",
+            mime_type: "application/octet-stream",
+            sha256: "synthetic-media-hash",
+            caption,
+            duration,
+            voice: type === "audio",
+          },
+        },
+      ],
+    },
+  };
+};
+
 export const statusChange = ({
   phoneNumberId,
   wamid,
