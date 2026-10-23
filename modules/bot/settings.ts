@@ -2,9 +2,9 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
 import { botSettings, member, organization, user } from "@/db/schema";
+import { createOwnerSavedSettings } from "@/modules/bot/owner-saved-settings";
 import type { BehaviourSettings, BotTurn } from "@/modules/bot/repository";
 import { botSchedules, weekdays, type BusinessHours } from "@/modules/bot/schedule";
-import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 
 // The longest each setting may be, in characters. They bound the prompt's
@@ -75,12 +75,6 @@ const settingsSchema = z
     ({ schedule, hours }) => schedule === "always" || weekdays.some((day) => hours[day]),
   ) satisfies z.ZodType<BehaviourSettings>;
 
-const invalid = { ok: false as const, error: "invalid" as const };
-const forbidden = { ok: false as const, error: "forbidden" as const };
-
-// Only the owner edits; every Member may read how the Bot behaves.
-const isOwner = (scope: TenantScope) => scope.role === "owner";
-
 type SavedSettings = typeof botSettings.$inferSelect;
 
 // What the Bot uses until the owner first saves. The schedule is always on,
@@ -149,24 +143,22 @@ export const readBehaviour = async (
   scope: BotTurn["scope"],
 ): Promise<BehaviourSettings> => (await loadSettings(db, scope.tenantId)).settings;
 
-export const createBotSettingsEditor = ({ db, clock }: { db: Database; clock: Clock }) => ({
-  getSettings: (scope: TenantScope) => loadSettings(db, scope.tenantId),
-
-  // Replaces every setting at once. Saving never touches Conversations: a
-  // schedule change only affects whether the Bot may send its next reply.
-  async saveSettings(scope: TenantScope, input: BehaviourSettings) {
-    if (!isOwner(scope)) return forbidden;
-    const parsed = settingsSchema.safeParse(input);
-    if (!parsed.success) return invalid;
-    const values = {
-      ...parsed.data,
-      updatedByMemberId: scope.memberId,
-      updatedAt: clock.now(),
-    };
-    await db
-      .insert(botSettings)
-      .values({ tenantId: scope.tenantId, ...values })
-      .onConflictDoUpdate({ target: botSettings.tenantId, set: values });
-    return { ok: true as const };
-  },
-});
+export const createBotSettingsEditor = ({ db, clock }: { db: Database; clock: Clock }) => {
+  const settings = createOwnerSavedSettings({
+    clock,
+    schema: settingsSchema,
+    load: (tenantId) => loadSettings(db, tenantId),
+    persist: async (scope, values) => {
+      await db
+        .insert(botSettings)
+        .values({ tenantId: scope.tenantId, ...values })
+        .onConflictDoUpdate({ target: botSettings.tenantId, set: values });
+    },
+  });
+  return {
+    getSettings: settings.get,
+    // Saving never touches Conversations: a schedule change only affects
+    // whether the Bot may send its next reply.
+    saveSettings: settings.save,
+  };
+};

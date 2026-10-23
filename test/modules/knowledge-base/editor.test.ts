@@ -1,13 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { channel, member, organization, user } from "@/db/schema";
-import { createBotCore } from "@/modules/bot";
+import { createBotCore, readBotConfiguration } from "@/modules/bot";
 import { resolveChannelPhoneNumber } from "@/modules/channels";
-import {
-  createKnowledgeBaseEditor,
-  readKnowledgeBase,
-  type NewKnowledgeBaseEntry,
-} from "@/modules/knowledge-base";
+import { createKnowledgeBaseEditor, type NewKnowledgeBaseEntry } from "@/modules/knowledge-base";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { createTestBotRepository, createTestUsageMeter } from "@/test/support/bot";
 import { createTestClock, type TestClock } from "@/test/support/clock";
@@ -132,7 +128,7 @@ describe("what the Bot reads", () => {
     repository.messages = [
       { author: "contact", text: "Quanto custa o corte?", sentAt: clock.now() },
     ];
-    repository.getKnowledgeBase = (turn) => readKnowledgeBase(db, turn.scope);
+    repository.getConfiguration = (turn) => readBotConfiguration(db, turn.scope);
     return createBotCore({ model, repository, meter: createTestUsageMeter(), clock });
   };
 

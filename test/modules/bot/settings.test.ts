@@ -5,6 +5,7 @@ import {
   botSettingsLimits,
   createBotCore,
   createBotSettingsEditor,
+  readBotConfiguration,
   readBehaviour,
   scheduleAllows,
   type BehaviourSettings,
@@ -68,7 +69,7 @@ const instructionsOfNextTurn = async (scope: TenantScope | ChannelRoute = routeA
   model.script({ text: "Olá." });
   const repository = createTestBotRepository();
   repository.messages = [{ author: "contact", text: "Oi", sentAt: clock.now() }];
-  repository.getBehaviour = (turn) => readBehaviour(db, turn.scope);
+  repository.getConfiguration = (turn) => readBotConfiguration(db, turn.scope);
   await createBotCore({ model, repository, meter: createTestUsageMeter(), clock }).respond({
     scope,
     conversationId: "conversation-a",

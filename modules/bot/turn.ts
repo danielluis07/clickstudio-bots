@@ -59,11 +59,8 @@ export const createBotCore = ({
   // gate.
   async respond(turn: BotTurn): Promise<TurnOutcome> {
     const window = contextWindow(clock.now(), context);
-    const [behaviour, knowledgeBase, capture, links, details, recent] = await Promise.all([
-      repository.getBehaviour(turn),
-      repository.getKnowledgeBase(turn),
-      repository.getCapture(turn),
-      repository.getLinks(turn),
+    const [{ behaviour, knowledgeBase, capture, links }, details, recent] = await Promise.all([
+      repository.getConfiguration(turn),
       repository.getContactDetails(turn),
       repository.listRecentMessages(turn, window),
     ]);

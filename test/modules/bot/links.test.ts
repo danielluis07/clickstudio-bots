@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { member, organization, user } from "@/db/schema";
-import { createLinkSettingsEditor, readLinks, type LinkSettings } from "@/modules/bot";
+import { createLinkSettingsEditor, readBotConfiguration, type LinkSettings } from "@/modules/bot";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { createTestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
@@ -56,11 +56,11 @@ test("a malformed URL is refused without throwing or replacing the saved list", 
       links: [{ ...booking.links[0], url: "not a URL" }],
     }),
   ).toEqual({ ok: false, error: "invalid" });
-  expect(await readLinks(db, ownerA)).toEqual(booking);
+  expect((await readBotConfiguration(db, ownerA)).links).toEqual(booking);
 });
 
 test("links start disabled; only the owner changes their Tenant's labelled list", async () => {
-  expect(await readLinks(db, ownerA)).toEqual({ enabled: false, links: [] });
+  expect((await readBotConfiguration(db, ownerA)).links).toEqual({ enabled: false, links: [] });
   expect(await editor.saveLinks(attendantA, booking)).toEqual({ ok: false, error: "forbidden" });
   expect(await editor.saveLinks(ownerA, booking)).toEqual({ ok: true });
   expect(await editor.getLinks(attendantA)).toEqual({
@@ -68,14 +68,14 @@ test("links start disabled; only the owner changes their Tenant's labelled list"
     updatedAt: clock.now(),
     updatedBy: "owner-a",
   });
-  expect(await readLinks(db, ownerB)).toEqual({ enabled: false, links: [] });
+  expect((await readBotConfiguration(db, ownerB)).links).toEqual({ enabled: false, links: [] });
   const other = {
     ...booking,
     links: [{ ...booking.links[0], label: "Catálogo", url: "https://other.example/catalogo" }],
   };
   await editor.saveLinks(ownerB, other);
-  expect(await readLinks(db, ownerA)).toEqual(booking);
-  expect(await readLinks(db, ownerB)).toEqual(other);
+  expect((await readBotConfiguration(db, ownerA)).links).toEqual(booking);
+  expect((await readBotConfiguration(db, ownerB)).links).toEqual(other);
 });
 
 test("the owner edits, removes and disables links while retaining the list and stable IDs", async () => {
@@ -103,11 +103,11 @@ test("the owner edits, removes and disables links while retaining the list and s
       { ...booking.links[0], label: "Reservas", url: "https://booking.example/novo?origem=bot" },
     ],
   };
-  expect(await readLinks(db, ownerA)).toEqual(saved);
+  expect((await readBotConfiguration(db, ownerA)).links).toEqual(saved);
   await editor.saveLinks(ownerA, { ...saved, enabled: false });
-  expect(await readLinks(db, ownerA)).toEqual({ ...saved, enabled: false });
+  expect((await readBotConfiguration(db, ownerA)).links).toEqual({ ...saved, enabled: false });
   await editor.saveLinks(ownerA, { enabled: false, links: [] });
-  expect(await readLinks(db, ownerA)).toEqual({ enabled: false, links: [] });
+  expect((await readBotConfiguration(db, ownerA)).links).toEqual({ enabled: false, links: [] });
 });
 
 test.each([
@@ -150,7 +150,7 @@ test.each([
     ok: false,
     error: "invalid",
   });
-  expect(await readLinks(db, ownerA)).toEqual({ enabled: false, links: [] });
+  expect((await readBotConfiguration(db, ownerA)).links).toEqual({ enabled: false, links: [] });
 });
 
 test("the full documented list and text bounds accept valid HTTP(S) links", async () => {
@@ -161,5 +161,5 @@ test("the full documented list and text bounds accept valid HTTP(S) links", asyn
   }));
   const input = { enabled: true, links };
   expect(await editor.saveLinks(ownerA, input)).toEqual({ ok: true });
-  expect(await readLinks(db, ownerA)).toEqual(input);
+  expect((await readBotConfiguration(db, ownerA)).links).toEqual(input);
 });

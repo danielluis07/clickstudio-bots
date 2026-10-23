@@ -12,7 +12,7 @@ provider probe.
 
 Each reply calls `createBotCore` with the same `Model` contract, prompt rendering,
 context limits and capability validation used by production and evaluation.
-`readBehaviour` and `readKnowledgeBase` load the current saved data for every turn.
+`readBotConfiguration` loads the current saved data for every turn.
 Unsaved edits do not apply. The sandbox deliberately previews replies regardless
 of the production Schedule, Channel pause or Conversation ownership.
 
@@ -90,6 +90,26 @@ owner authorization and the pt-BR cap refusal. The [production reply allowance](
 is separate; isolation is enforced by never supplying its meter or send path to
 the sandbox.
 
+## Saved configuration
+
+Live turns, sandbox turns and provider evaluation supply the core with one
+`BotRepository.getConfiguration` read: `{ behaviour, knowledgeBase, capture, links }`.
+The database adapters use `readBotConfiguration(db, scope)` for both Member and
+Channel proofs. It runs the existing four readers concurrently, without caching
+or a shared database snapshot. The Knowledge base stays behind its own module's
+reader, retaining its ordering and Tenant isolation. Adding a setting changes the
+configuration reader and its inferred `BotConfiguration` type, without adding a
+repository method or changing live and sandbox wiring.
+
+The repository also reads and saves Contact details and reads recent messages;
+the Contact detail write remains separate from configuration. Live Schedule
+checks still read only Behaviour settings at each reply checkpoint, including
+after the Model call.
+
+The three settings editors share owner authorization, schema validation and
+save metadata through an internal helper. Each keeps its own table, defaults,
+read query (including editor attribution), upsert, form and Server Action.
+
 ## Code entry points
 
 Start with the public module interface, then follow its exports to the relevant
@@ -99,6 +119,7 @@ implementation. Code outside the module imports its public interface, following
 | Work | Start here |
 | --- | --- |
 | Bot public interface | [`modules/bot/index.ts`](../modules/bot/index.ts) |
+| Per-turn saved configuration | [`modules/bot/configuration.ts`](../modules/bot/configuration.ts) |
 | Reply decisions, context and capability validation | [`modules/bot/turn.ts`](../modules/bot/turn.ts) |
 | Saved Behaviour settings and defaults | [`modules/bot/settings.ts`](../modules/bot/settings.ts) |
 | Saved Knowledge base reads | [`modules/knowledge-base/index.ts`](../modules/knowledge-base/index.ts), then its `readKnowledgeBase` export |

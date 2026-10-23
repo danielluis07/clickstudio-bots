@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
 import { botCaptureSettings, member, user } from "@/db/schema";
+import { createOwnerSavedSettings } from "@/modules/bot/owner-saved-settings";
 import type { BotTurn } from "@/modules/bot/repository";
 import {
   contactDetailFields,
@@ -9,7 +10,6 @@ import {
   type ContactDetailField,
   type ContactDetails,
 } from "@/modules/conversations";
-import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 
 // How the Bot treats one Contact detail: not asked for, captured when the
@@ -126,20 +126,17 @@ const loadCapture = async (db: Database, tenantId: string) => {
 export const readCapture = async (db: Database, scope: BotTurn["scope"]) =>
   (await loadCapture(db, scope.tenantId)).settings;
 
-export const createCaptureSettingsEditor = ({ db, clock }: { db: Database; clock: Clock }) => ({
-  // Every Member may see what the Bot captures.
-  getCapture: (scope: TenantScope) => loadCapture(db, scope.tenantId),
-
-  // Only the owner changes it.
-  async saveCapture(scope: TenantScope, input: CaptureSettings) {
-    if (scope.role !== "owner") return { ok: false as const, error: "forbidden" as const };
-    const parsed = captureSchema.safeParse(input);
-    if (!parsed.success) return { ok: false as const, error: "invalid" as const };
-    const values = { ...parsed.data, updatedByMemberId: scope.memberId, updatedAt: clock.now() };
-    await db
-      .insert(botCaptureSettings)
-      .values({ tenantId: scope.tenantId, ...values })
-      .onConflictDoUpdate({ target: botCaptureSettings.tenantId, set: values });
-    return { ok: true as const };
-  },
-});
+export const createCaptureSettingsEditor = ({ db, clock }: { db: Database; clock: Clock }) => {
+  const settings = createOwnerSavedSettings({
+    clock,
+    schema: captureSchema,
+    load: (tenantId) => loadCapture(db, tenantId),
+    persist: async (scope, values) => {
+      await db
+        .insert(botCaptureSettings)
+        .values({ tenantId: scope.tenantId, ...values })
+        .onConflictDoUpdate({ target: botCaptureSettings.tenantId, set: values });
+    },
+  });
+  return { getCapture: settings.get, saveCapture: settings.save };
+};

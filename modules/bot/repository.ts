@@ -1,5 +1,4 @@
-import type { CaptureSettings } from "@/modules/bot/capture";
-import type { LinkSettings } from "@/modules/bot/links";
+import type { BotConfiguration } from "@/modules/bot/configuration";
 import type { BotSchedule, BusinessHours } from "@/modules/bot/schedule";
 import type { ChannelRoute } from "@/modules/channels";
 import type { ContactDetails } from "@/modules/conversations";
@@ -51,10 +50,7 @@ export type ContextMessage = {
 export type ContextWindow = { since: Date; limit: number };
 
 export interface BotRepository {
-  getBehaviour(turn: BotTurn): Promise<BehaviourSettings>;
-  getKnowledgeBase(turn: BotTurn): Promise<KnowledgeBase>;
-  getCapture(turn: BotTurn): Promise<CaptureSettings>;
-  getLinks(turn: BotTurn): Promise<LinkSettings>;
+  getConfiguration(turn: BotTurn): Promise<BotConfiguration>;
   // The turn's Contact, never another: adapters resolve it from the turn's
   // Conversation under its scope.
   getContactDetails(turn: BotTurn): Promise<ContactDetails>;

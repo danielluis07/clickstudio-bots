@@ -2,8 +2,8 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
 import { botLinkSettings, member, user } from "@/db/schema";
+import { createOwnerSavedSettings } from "@/modules/bot/owner-saved-settings";
 import type { BotTurn } from "@/modules/bot/repository";
-import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 
 export type ConfiguredLink = { id: string; label: string; url: string };
@@ -69,17 +69,17 @@ const loadLinks = async (db: Database, tenantId: string) => {
 export const readLinks = async (db: Database, scope: BotTurn["scope"]) =>
   (await loadLinks(db, scope.tenantId)).settings;
 
-export const createLinkSettingsEditor = ({ db, clock }: { db: Database; clock: Clock }) => ({
-  getLinks: (scope: TenantScope) => loadLinks(db, scope.tenantId),
-  async saveLinks(scope: TenantScope, input: LinkSettings) {
-    if (scope.role !== "owner") return { ok: false as const, error: "forbidden" as const };
-    const parsed = settingsSchema.safeParse(input);
-    if (!parsed.success) return { ok: false as const, error: "invalid" as const };
-    const values = { ...parsed.data, updatedByMemberId: scope.memberId, updatedAt: clock.now() };
-    await db
-      .insert(botLinkSettings)
-      .values({ tenantId: scope.tenantId, ...values })
-      .onConflictDoUpdate({ target: botLinkSettings.tenantId, set: values });
-    return { ok: true as const };
-  },
-});
+export const createLinkSettingsEditor = ({ db, clock }: { db: Database; clock: Clock }) => {
+  const settings = createOwnerSavedSettings({
+    clock,
+    schema: settingsSchema,
+    load: (tenantId) => loadLinks(db, tenantId),
+    persist: async (scope, values) => {
+      await db
+        .insert(botLinkSettings)
+        .values({ tenantId: scope.tenantId, ...values })
+        .onConflictDoUpdate({ target: botLinkSettings.tenantId, set: values });
+    },
+  });
+  return { getLinks: settings.get, saveLinks: settings.save };
+};

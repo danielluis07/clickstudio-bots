@@ -1,9 +1,7 @@
 import type { Database } from "@/db/database";
-import { readCapture } from "@/modules/bot/capture";
+import { readBotConfiguration } from "@/modules/bot/configuration";
 import { recordBotReplyUsage } from "@/modules/bot/allowance";
-import { readLinks } from "@/modules/bot/links";
 import { createBotCore } from "@/modules/bot/turn";
-import { readBehaviour } from "@/modules/bot/settings";
 import { createReplyGate, type BotAllowance, type ReplyDecision } from "@/modules/bot/reply-gate";
 import type { Model } from "@/modules/bot/model";
 import type { ContextMessage } from "@/modules/bot/repository";
@@ -20,7 +18,6 @@ import {
   saveCapturedContactDetails,
   type WhatsAppSender,
 } from "@/modules/conversations";
-import { readKnowledgeBase } from "@/modules/knowledge-base";
 import type { Clock } from "@/platform/clock";
 import { notifyInbox, type Notifier } from "@/platform/notifier";
 
@@ -118,10 +115,7 @@ export const createLiveBot = ({
           clock,
           meter,
           repository: {
-            getBehaviour: ({ scope }) => readBehaviour(db, scope),
-            getKnowledgeBase: ({ scope }) => readKnowledgeBase(db, scope),
-            getCapture: ({ scope }) => readCapture(db, scope),
-            getLinks: ({ scope }) => readLinks(db, scope),
+            getConfiguration: ({ scope }) => readBotConfiguration(db, scope),
             getContactDetails: () =>
               readConversationContactDetails(db, initial.scope, conversationId),
             // Stored as soon as captured: the Contact stated them whether or

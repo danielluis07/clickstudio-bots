@@ -2,18 +2,15 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
 import { botActivation, botSandboxUsage } from "@/db/schema";
-import { readCapture } from "@/modules/bot/capture";
-import { readLinks } from "@/modules/bot/links";
+import { readBotConfiguration } from "@/modules/bot/configuration";
 import type { Model } from "@/modules/bot/model";
 import { botTimeZone } from "@/modules/bot/schedule";
-import { readBehaviour } from "@/modules/bot/settings";
 import { createBotCore } from "@/modules/bot/turn";
 import {
   contactDetailSchemas,
   noContactDetails,
   type ContactDetails,
 } from "@/modules/conversations";
-import { readKnowledgeBase } from "@/modules/knowledge-base";
 import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 
@@ -108,10 +105,7 @@ export const createBotSandbox = ({
         model,
         clock,
         repository: {
-          getBehaviour: (turn) => readBehaviour(db, turn.scope),
-          getKnowledgeBase: (turn) => readKnowledgeBase(db, turn.scope),
-          getCapture: (turn) => readCapture(db, turn.scope),
-          getLinks: (turn) => readLinks(db, turn.scope),
+          getConfiguration: (turn) => readBotConfiguration(db, turn.scope),
           getContactDetails: async () => contact,
           saveContactDetails: async (_turn, details) => {
             // As on a production Contact, a capture never replaces a name.
