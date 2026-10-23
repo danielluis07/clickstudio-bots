@@ -13,6 +13,7 @@
 # testing
 /coverage
 /evaluation-results/
+/tenant-exports/
 
 # next.js
 /.next/

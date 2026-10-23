@@ -1,7 +1,14 @@
 import { createHash } from "node:crypto";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
-import { contact, contactDeletion, conversation, message, messageChange } from "@/db/schema";
+import {
+  contact,
+  contactDeletion,
+  conversation,
+  message,
+  messageChange,
+  organization,
+} from "@/db/schema";
 import type { ChannelRoute } from "@/modules/channels";
 import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
@@ -97,6 +104,14 @@ export const withContactAdmission = <Event, Result>(
   }) => Promise<Result>,
 ): Promise<Result | null> =>
   db.transaction(async (tx) => {
+    // Share the Tenant row lock with cancellation/deletion. A job that already
+    // resolved a Channel must still finish before cancellation or be refused.
+    const [tenant] = await tx
+      .select({ canceledAt: organization.canceledAt })
+      .from(organization)
+      .where(eq(organization.id, route.tenantId))
+      .for("share");
+    if (!tenant || tenant.canceledAt) return null;
     const deletedAt = await lockContact(tx, route.tenantId, input.phone);
     const events = input.events.filter(
       (event) => !predatesDeletion(deletedAt, input.occurredAt(event), input.receivedAt),

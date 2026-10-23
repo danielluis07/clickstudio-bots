@@ -1,0 +1,1 @@
+CREATE INDEX "organization_canceled_at_idx" ON "organization" ("canceled_at");

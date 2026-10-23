@@ -18,6 +18,9 @@ export interface WhatsAppGateway {
   subscribe(
     input: WhatsAppCredentialContext & { credential: EncryptedWhatsAppToken },
   ): Promise<{ ok: true } | { ok: false; error: "missing_webhook_fields" | "subscription_failed" }>;
+  unsubscribe(
+    input: WhatsAppCredentialContext & { credential: EncryptedWhatsAppToken },
+  ): Promise<{ ok: boolean }>;
   // Asks Meta to deliver the app's contacts or message history as webhooks.
   // Meta accepts each only once per onboarding.
   requestAppSync(
