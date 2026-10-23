@@ -12,6 +12,7 @@ import {
 import {
   createConversationBotRepository,
   createConversationRepository,
+  handOffAndNotify,
   recordInboundTextMessage,
 } from "@/modules/conversations";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
@@ -152,7 +153,18 @@ suite("live turns on real Postgres", () => {
     expect(
       await foreign.reserve(conversationId, "foreign", ["foreign-key"], "Resposta", clock.now()),
     ).toBeNull();
-    await foreign.handoff(conversationId, "foreign", "bot_indisponivel");
+    expect(
+      await handOffAndNotify(
+        db,
+        createTestNotifier(),
+        other.route,
+        conversationId,
+        "bot_indisponivel",
+        {
+          leaseToken: "foreign",
+        },
+      ),
+    ).toBe(false);
     expect(await reader.getConversation(conversationId)).toMatchObject({
       owner: "bot",
       handoffReason: null,

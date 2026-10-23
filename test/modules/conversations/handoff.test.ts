@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
-import { member, user } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { conversation, member, user } from "@/db/schema";
 import { resolveTenantScope } from "@/modules/tenancy";
 import {
   createBotActivation,
@@ -13,6 +14,7 @@ import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import {
   createConversationRepository,
   createHandoffControls,
+  handOffAndNotify,
   createReplyService,
   recordInboundTextMessage,
 } from "@/modules/conversations";
@@ -405,4 +407,29 @@ test("a failed Bot send after Assumir keeps the Member's Handoff reason", async 
   await worker.run(conversationId);
 
   expect(await ownership()).toEqual({ owner: "team", handoffReason: "assumida", waiting: true });
+});
+
+test("a live turn's Handoff needs its lease, and only a change of hands notifies the inbox", async () => {
+  const { route, conversationId, notifier, ownership } = await setup();
+  await db
+    .update(conversation)
+    .set({ botLeaseToken: "holder" })
+    .where(eq(conversation.id, conversationId));
+  const pings = notifier.pings.length;
+  const handOff = (leaseToken: string, reason: "limite_atingido" | "bot_indisponivel") =>
+    handOffAndNotify(db, notifier, route, conversationId, reason, { leaseToken });
+
+  expect(await handOff("expired-holder", "limite_atingido")).toBe(false);
+  expect(await ownership()).toEqual({ owner: "bot", handoffReason: null, waiting: false });
+  expect(await handOff("holder", "limite_atingido")).toBe(true);
+  expect(await handOff("holder", "bot_indisponivel")).toBe(false);
+
+  expect(await ownership()).toEqual({
+    owner: "team",
+    handoffReason: "limite_atingido",
+    waiting: true,
+  });
+  expect(notifier.pings.slice(pings)).toEqual([
+    { tenantId: route.tenantId, ping: { conversationId } },
+  ]);
 });

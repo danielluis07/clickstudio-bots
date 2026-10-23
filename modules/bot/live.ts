@@ -11,6 +11,7 @@ import type { UsageMeter } from "@/modules/bot/usage";
 import type { ChannelRoute } from "@/modules/channels";
 import {
   createConversationRepository,
+  handOffAndNotify,
   recordBotReplySent,
   createConversationBotRepository,
   resolveBotConversation,
@@ -68,8 +69,9 @@ export const createLiveBot = ({
       // Every Handoff the gate decides is fenced by this turn's lease.
       const settle = async (decision: Exclude<ReplyDecision, { kind: "reply" }>) => {
         if (decision.kind === "skip") return "skipped" as const;
-        await repository.handoff(conversationId, token, decision.reason);
-        await notifyInbox(notifier, initial.tenantId, { conversationId });
+        await handOffAndNotify(db, notifier, initial.scope, conversationId, decision.reason, {
+          leaseToken: token,
+        });
         return "handoff" as const;
       };
       try {

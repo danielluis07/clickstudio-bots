@@ -4,7 +4,7 @@ import { conversation, message } from "@/db/schema";
 import type { ChannelRoute } from "@/modules/channels";
 import type { TenantScope } from "@/modules/tenancy";
 import { withContactAdmission } from "@/modules/conversations/contact-deletion";
-import { handOffFromBot } from "@/modules/conversations/handoff";
+import { handOff } from "@/modules/conversations/handoff";
 
 // A text a Member sent from the WhatsApp Business app or a companion
 // device, which coexistence echoes to the platform.
@@ -44,7 +44,7 @@ export const resolveUnresolvedEchoes = async (
   tx: Transaction,
   tenantId: string,
   conversationId: string,
-  { handOff }: { handOff: boolean },
+  { handOff: handsOff }: { handOff: boolean },
 ) => {
   const resolved = await tx
     .update(message)
@@ -57,8 +57,8 @@ export const resolveUnresolvedEchoes = async (
       ),
     )
     .returning({ id: message.id });
-  if (handOff && resolved.length)
-    await handOffFromBot(tx, { tenantId }, conversationId, "resposta_no_app");
+  if (handsOff && resolved.length)
+    await handOff(tx, { tenantId }, conversationId, "resposta_no_app");
 };
 
 // Gives the Tenant's sent message the wamid Meta answered with. Its echo may
@@ -186,8 +186,7 @@ export const recordMessageEcho = (db: Database, route: ChannelRoute, echo: Messa
           })
           .onConflictDoNothing({ target: [message.tenantId, message.wamid] })
           .returning({ origin: message.origin, conversationId: message.conversationId });
-        if (inserted && !botSending)
-          await handOffFromBot(tx, route, conversationId, "resposta_no_app");
+        if (inserted && !botSending) await handOff(tx, route, conversationId, "resposta_no_app");
         // A concurrent job stored the same wamid first.
         return classify(inserted ?? (await findStored()));
       },

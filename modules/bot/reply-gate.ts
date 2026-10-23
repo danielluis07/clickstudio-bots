@@ -3,7 +3,10 @@ import type { BotTurn } from "@/modules/bot/repository";
 import { scheduleAllows } from "@/modules/bot/schedule";
 import { readBehaviour } from "@/modules/bot/settings";
 import type { ChannelRoute } from "@/modules/channels";
-import { createConversationBotRepository } from "@/modules/conversations";
+import {
+  createConversationBotRepository,
+  type ConversationHandoffReason,
+} from "@/modules/conversations";
 import type { Clock } from "@/platform/clock";
 
 // Billing supplies this hook; live turns never infer allowance from sandbox usage.
@@ -20,7 +23,10 @@ export type ReplyCheckpoint = "enqueue" | "beforeModel" | "beforeSend";
 export type ReplyDecision =
   | { kind: "reply" }
   | { kind: "skip" }
-  | { kind: "handoff"; reason: "limite_atingido" | "bot_indisponivel" };
+  | {
+      kind: "handoff";
+      reason: Extract<ConversationHandoffReason, "limite_atingido" | "bot_indisponivel">;
+    };
 
 const reply: ReplyDecision = { kind: "reply" };
 const skip: ReplyDecision = { kind: "skip" };

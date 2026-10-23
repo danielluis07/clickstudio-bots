@@ -7,16 +7,22 @@ import {
   type LinkSettings,
 } from "@/modules/bot/links";
 import type { ModelTool, ModelToolCall, ModelToolRefusal } from "@/modules/bot/model";
-import type { ContactDetails } from "@/modules/conversations";
+import type { ContactDetails, ConversationHandoffReason } from "@/modules/conversations";
 
 export const captureToolName = "capture_contact_details";
 export const linkToolName = "send_configured_link";
 
-// Why the Bot stepped aside. The model chooses among these;
-// "bot_indisponivel" is the core's own, after a provider or tool failure.
-const modelHandoffReasons = ["sem_resposta", "pedido_do_contato", "regra_do_negocio"] as const;
+// Why the Bot stepped aside, among the reasons a Handoff stores. The model
+// chooses among these; "bot_indisponivel" is the core's own, after a provider
+// or tool failure.
+const modelHandoffReasons = [
+  "sem_resposta",
+  "pedido_do_contato",
+  "regra_do_negocio",
+] as const satisfies readonly ConversationHandoffReason[];
 
-export type HandoffReason = (typeof modelHandoffReasons)[number] | "bot_indisponivel";
+export type HandoffReason =
+  (typeof modelHandoffReasons)[number] | Extract<ConversationHandoffReason, "bot_indisponivel">;
 
 // Every Handoff reply ends with one of these, so the Contact always learns
 // the team will reply, whatever the model wrote.
