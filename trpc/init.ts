@@ -1,9 +1,18 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { Database } from "@/db/database";
-import type { ReplyService } from "@/modules/conversations";
-import type { BotSandbox, ReplyAllowance } from "@/modules/bot";
-import { resolveTenantScope } from "@/modules/tenancy";
+import type {
+  ContactDeletion,
+  HandoffControls,
+  ReplyService,
+  createConversationRepository,
+} from "@/modules/conversations";
+import type { BotActivation, BotSandbox, ReplyAllowance } from "@/modules/bot";
+import {
+  resolveTenantScope,
+  type TenantScope,
+  type createTenantRepository,
+} from "@/modules/tenancy";
 import type { AblyRealtime } from "@/platform/ably";
 import type { Notifier } from "@/platform/notifier";
 
@@ -20,6 +29,11 @@ export type TRPCContext = {
   notifier: Notifier;
   sandbox: BotSandbox;
   allowance: ReplyAllowance;
+  activation: BotActivation;
+  handoff: HandoffControls;
+  deleteContact: ContactDeletion;
+  conversations: (scope: TenantScope) => ReturnType<typeof createConversationRepository>;
+  tenants: (scope: TenantScope) => ReturnType<typeof createTenantRepository>;
 };
 
 const t = initTRPC.context<TRPCContext>().create({

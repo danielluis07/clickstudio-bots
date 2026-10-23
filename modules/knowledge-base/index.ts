@@ -8,4 +8,4 @@ export {
   type NewKnowledgeBaseEntry,
 } from "@/modules/knowledge-base/editor";
 export type { KnowledgeEntryKind } from "@/modules/knowledge-base/kinds";
-export { readKnowledgeBase } from "@/modules/knowledge-base/reader";
+export { readKnowledgeBase, readKnowledgeBaseReadiness } from "@/modules/knowledge-base/reader";

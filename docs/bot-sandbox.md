@@ -90,6 +90,28 @@ owner authorization and the pt-BR cap refusal. The [production reply allowance](
 is separate; isolation is enforced by never supplying its meter or send path to
 the sandbox.
 
+## Activation readiness
+
+`createBotActivation` owns `status`, `activate`, `setPaused` and `markTested`.
+After a successful turn, the sandbox calls `markTested` with the turn's start
+time. Provider failures do not mark testing complete. Marks never move backward,
+and an edit committed during generation still requires another test.
+
+Activation requires saved Behaviour settings, a nonempty Knowledge base, a test
+at least as recent as their latest edits, and a subscribed Channel. Knowledge
+base readiness comes from its module's metadata reader. Status and activation
+use short repeatable-read transactions so all readiness reads share one snapshot.
+Channels receives that transaction and a boolean, retaining the owner, Tenant
+and subscription fences on its flag write. No SQL expression crosses the boundary.
+Concurrent Channel updates can cause PostgreSQL to abort activation with a
+serialization failure rather than enable the Bot from stale Channel state.
+Activation retries the entire transaction up to twice, reading readiness again
+from a fresh snapshot. Other database failures propagate without retrying.
+
+`server/services.ts` builds activation once and shares it with the sandbox and
+tRPC context. Handoff controls and Contact deletion are also wired there; routers
+use the supplied services and clock.
+
 ## Saved configuration
 
 Live turns, sandbox turns and provider evaluation supply the core with one
@@ -119,6 +141,7 @@ implementation. Code outside the module imports its public interface, following
 | Work | Start here |
 | --- | --- |
 | Bot public interface | [`modules/bot/index.ts`](../modules/bot/index.ts) |
+| Activation readiness and tested marks | [`modules/bot/activation.ts`](../modules/bot/activation.ts) |
 | Per-turn saved configuration | [`modules/bot/configuration.ts`](../modules/bot/configuration.ts) |
 | Reply decisions, context and capability validation | [`modules/bot/turn.ts`](../modules/bot/turn.ts) |
 | Saved Behaviour settings and defaults | [`modules/bot/settings.ts`](../modules/bot/settings.ts) |

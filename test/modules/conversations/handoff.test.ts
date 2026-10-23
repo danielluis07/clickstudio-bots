@@ -76,7 +76,12 @@ const setup = async () => {
     body: "R$ 80",
   });
   model.script({ text: "O corte custa R$ 80." });
-  await createBotSandbox({ db, clock, model }).respond(scope, { text: "Preço?", history: [] });
+  await createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock,
+    model,
+  }).respond(scope, { text: "Preço?", history: [] });
   await activation.activate(scope);
   const receive = async (text: string, from = contactPhone) => {
     clock.advance(1000);

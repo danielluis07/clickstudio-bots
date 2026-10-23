@@ -1,13 +1,24 @@
 import { db } from "@/db";
 import { systemClock } from "@/platform/clock";
 import { env } from "@/platform/env";
-import { createMemberManagement, createTenantOnboarding } from "@/modules/tenancy";
+import {
+  createMemberManagement,
+  createTenantOnboarding,
+  createTenantRepository,
+} from "@/modules/tenancy";
 import { createResendMailer } from "@/platform/resend-mailer";
 import { createChannelService } from "@/modules/channels";
-import { createReplyService } from "@/modules/conversations";
+import {
+  createContactDeletion,
+  createConversationRepository,
+  createHandoffControls,
+  createReplyService,
+} from "@/modules/conversations";
+import type { TenantScope } from "@/modules/tenancy";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import {
   createBotSandbox,
+  createBotActivation,
   createBotAllowance,
   createBotSettingsEditor,
   createCaptureSettingsEditor,
@@ -61,6 +72,13 @@ export const knowledgeBaseEditor = createKnowledgeBaseEditor({ db, clock: system
 
 export const botSettingsEditor = createBotSettingsEditor({ db, clock: systemClock });
 
+export const botActivation = createBotActivation({ db, clock: systemClock });
+export const handoffControls = createHandoffControls({ db, notifier });
+export const contactDeletion = createContactDeletion({ db, clock: systemClock, notifier });
+export const conversationRepository = (scope: TenantScope) =>
+  createConversationRepository(db, scope);
+export const tenantRepository = (scope: TenantScope) => createTenantRepository(db, scope);
+
 export const captureSettingsEditor = createCaptureSettingsEditor({ db, clock: systemClock });
 export const linkSettingsEditor = createLinkSettingsEditor({ db, clock: systemClock });
 
@@ -92,6 +110,7 @@ export const botSandbox = createBotSandbox({
   db,
   clock: systemClock,
   model,
+  activation: botActivation,
 });
 
 export const replyService = createReplyService({

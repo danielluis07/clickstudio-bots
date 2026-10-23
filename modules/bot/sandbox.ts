@@ -1,7 +1,8 @@
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
-import { botActivation, botSandboxUsage } from "@/db/schema";
+import { botSandboxUsage } from "@/db/schema";
+import type { BotActivation } from "@/modules/bot/activation";
 import { readBotConfiguration } from "@/modules/bot/configuration";
 import type { Model } from "@/modules/bot/model";
 import { botTimeZone } from "@/modules/bot/schedule";
@@ -47,10 +48,12 @@ export const createBotSandbox = ({
   db,
   clock,
   model,
+  activation,
 }: {
   db: Database;
   clock: Clock;
   model: Model | null;
+  activation: Pick<BotActivation, "markTested">;
 }) => {
   const getAllowance = async (scope: TenantScope) => {
     const [usage] = await db
@@ -121,15 +124,7 @@ export const createBotSandbox = ({
         outcome.kind === "answer" ||
         (outcome.kind === "handoff" && outcome.reason !== "bot_indisponivel")
       ) {
-        await db
-          .insert(botActivation)
-          .values({ tenantId: scope.tenantId, testedAt: now })
-          .onConflictDoUpdate({
-            target: botActivation.tenantId,
-            set: {
-              testedAt: sql`greatest(${botActivation.testedAt}, ${now.toISOString()}::timestamptz)`,
-            },
-          });
+        await activation.markTested(scope, now);
       }
       return {
         ok: true as const,
