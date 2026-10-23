@@ -1,59 +1,47 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState, type FormEvent } from "react";
+import { characterCount, entrySize } from "@/modules/knowledge-base/allowance";
+import { normalizeEntryText } from "@/modules/knowledge-base/text";
+import type { KnowledgeEntryDraft } from "@/modules/knowledge-base/hooks/use-knowledge-base-editor";
 
-type EntryFormState =
-  | { status: "idle" }
-  | { status: "error"; message: string }
-  | { status: "success"; message: string };
-
-type SaveEntry = (previous: EntryFormState, formData: FormData) => Promise<EntryFormState>;
-
-// Counts as the server does once it trims the text: characters, not UTF-16
-// units. A textarea's value already holds single-character line breaks.
-const characterCount = (text: string) => [...text.trim()].length;
-
-// One entry's fields and the Knowledge base size they would make, so the
-// owner sees the allowance before saving. The server still enforces it.
 export const useKnowledgeEntryForm = ({
-  save,
-  initial,
+  draft,
   otherEntriesSize,
   cap,
-  onSaved,
+  titleMaxLength,
+  onSubmit,
 }: {
-  save: SaveEntry;
-  initial: { title: string; body: string };
-  // Characters taken by every other entry.
+  draft: KnowledgeEntryDraft;
   otherEntriesSize: number;
   cap: number;
-  onSaved?: () => void;
+  titleMaxLength: number;
+  onSubmit: (text: KnowledgeEntryDraft) => void;
 }) => {
-  const [title, setTitle] = useState(initial.title);
-  const [body, setBody] = useState(initial.body);
-  const [state, formAction, pending] = useActionState<EntryFormState, FormData>(
-    async (previous, formData) => {
-      const next = await save(previous, formData);
-      if (next.status === "success") {
-        setTitle(initial.title);
-        setBody(initial.body);
-        onSaved?.();
-      }
-      return next;
-    },
-    { status: "idle" },
-  );
-
-  const total = otherEntriesSize + characterCount(title) + characterCount(body);
+  const [attempted, setAttempted] = useState(false);
+  const text = { title: normalizeEntryText(draft.title), body: normalizeEntryText(draft.body) };
+  const total = otherEntriesSize + entrySize(text);
+  const titleError = !text.title
+    ? "Preencha este campo."
+    : characterCount(text.title) > titleMaxLength
+      ? `Use até ${titleMaxLength} caracteres.`
+      : null;
+  const bodyError = !text.body ? "Preencha este campo." : null;
+  const overCap = total > cap;
   return {
-    title,
-    setTitle,
-    body,
-    setBody,
     total,
-    overCap: total > cap,
-    state,
-    formAction,
-    pending,
+    overCap,
+    titleError: attempted ? titleError : null,
+    bodyError: attempted ? bodyError : null,
+    submit: (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setAttempted(true);
+      if (titleError || bodyError || overCap) {
+        const field = titleError ? "title" : "body";
+        event.currentTarget.querySelector<HTMLElement>(`[name="${field}"]`)?.focus();
+        return;
+      }
+      onSubmit(text);
+    },
   };
 };

@@ -46,6 +46,18 @@ _Avoid_: Escalation, transfer, takeover
 Everything a Tenant has told its Bot about the business. The Bot answers Contacts only from it.
 _Avoid_: Training data, training, context, documents
 
+**Knowledge entry**:
+One piece of business information in a Tenant's Knowledge base, expressed as an FAQ or a Text section.
+_Avoid_: Document, training item
+
+**FAQ**:
+A Knowledge entry consisting of a question and its answer.
+_Avoid_: Prompt, question alone
+
+**Text section**:
+A Knowledge entry consisting of a title and free-form text about the business.
+_Avoid_: Document, article
+
 ## Bot behaviour
 
 **Behaviour settings**:

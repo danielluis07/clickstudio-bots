@@ -56,8 +56,10 @@ export async function saveKnowledgeEntryAction(
   return saveMessage(result);
 }
 
-export async function deleteKnowledgeEntryAction(entryId: string) {
+export async function deleteKnowledgeEntryAction(entryId: string): Promise<FormState> {
   const scope = await requireTenantScope();
-  await knowledgeBaseEditor.deleteEntry(scope, entryId);
+  const result = await knowledgeBaseEditor.deleteEntry(scope, entryId);
+  if (!result.ok) return { status: "error", message: saveErrorMessages[result.error] };
   refresh();
+  return { status: "success", message: "Item excluído da base de conhecimento." };
 }
