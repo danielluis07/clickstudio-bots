@@ -30,6 +30,7 @@ export {
 } from "@/modules/conversations/echoes";
 export {
   createHandoffControls,
+  handOffAndNotify,
   type ConversationHandoffReason,
   type HandoffControls,
 } from "@/modules/conversations/handoff";

@@ -8,31 +8,59 @@ export type ConversationHandoffReason = NonNullable<
   (typeof conversation.$inferSelect)["handoffReason"]
 >;
 
-// What every Handoff writes. It joins the waiting list, which only
-// "Resolvida" leaves.
-export const handoffFields = (reason: ConversationHandoffReason) => ({
-  owner: "team" as const,
-  handoffReason: reason,
-  waiting: true,
-});
-
 const owns = (scope: { tenantId: string }, conversationId: string) =>
   and(eq(conversation.id, conversationId), eq(conversation.tenantId, scope.tenantId));
 
-// Hands a Bot-owned Conversation to the team. One already with the team keeps
-// the reason of the Handoff that put it there. True when it changed hands.
-export const handOffFromBot = async (
+// The Contact messages the Bot has yet to answer: a live turn answers them,
+// and resuming after a Handoff settles them.
+export const unansweredContactMessages = (scope: { tenantId: string }, conversationId: string) =>
+  and(
+    eq(message.tenantId, scope.tenantId),
+    eq(message.conversationId, conversationId),
+    eq(message.origin, "contact"),
+    eq(message.imported, false),
+    eq(message.botAnswered, false),
+  );
+
+// The only write of a Handoff. It hands a Bot-owned Conversation to the team
+// and puts it on the waiting list, which only "Resolvida" leaves. One already
+// with the team keeps the reason of the Handoff that put it there. With
+// `leaseToken`, only the live turn holding that lease may hand off. True when
+// it changed hands. Inside a transaction, the caller notifies the inbox after
+// it commits.
+export const handOff = async (
   db: Database | Transaction,
   scope: { tenantId: string },
   conversationId: string,
   reason: ConversationHandoffReason,
+  { leaseToken }: { leaseToken?: string } = {},
 ) => {
   const changed = await db
     .update(conversation)
-    .set(handoffFields(reason))
-    .where(and(owns(scope, conversationId), eq(conversation.owner, "bot")))
+    .set({ owner: "team", handoffReason: reason, waiting: true })
+    .where(
+      and(
+        owns(scope, conversationId),
+        eq(conversation.owner, "bot"),
+        leaseToken ? eq(conversation.botLeaseToken, leaseToken) : undefined,
+      ),
+    )
     .returning({ id: conversation.id });
   return changed.length > 0;
+};
+
+// A Handoff outside a transaction, published to the inbox once it is written.
+export const handOffAndNotify = async (
+  db: Database,
+  notifier: Notifier,
+  scope: { tenantId: string },
+  conversationId: string,
+  reason: ConversationHandoffReason,
+  options: { leaseToken?: string } = {},
+) => {
+  const changed = await handOff(db, scope, conversationId, reason, options);
+  if (changed) await notifyInbox(notifier, scope.tenantId, { conversationId });
+  return changed;
 };
 
 // Gives a Conversation back to the Bot. Contact messages sent during the
@@ -52,14 +80,7 @@ const resume = (db: Database, scope: TenantScope, conversationId: string, resolv
       await tx
         .update(message)
         .set({ botAnswered: true })
-        .where(
-          and(
-            eq(message.tenantId, scope.tenantId),
-            eq(message.conversationId, conversationId),
-            eq(message.origin, "contact"),
-            eq(message.botAnswered, false),
-          ),
-        );
+        .where(unansweredContactMessages(scope, conversationId));
     }
     await tx
       .update(conversation)
@@ -84,7 +105,7 @@ export const createHandoffControls = ({ db, notifier }: { db: Database; notifier
     // "Assumir": silences the Bot without sending anything.
     async takeOver(scope: TenantScope, conversationId: string) {
       const found =
-        (await handOffFromBot(db, scope, conversationId, "assumida")) ||
+        (await handOff(db, scope, conversationId, "assumida")) ||
         (await exists(scope, conversationId));
       return outcome(scope, conversationId, found);
     },

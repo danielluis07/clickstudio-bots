@@ -3,7 +3,7 @@ import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Database } from "@/db/database";
 import { contact, conversation, member, message, messageChange, user } from "@/db/schema";
 import { recordSentWamid } from "@/modules/conversations/echoes";
-import { handOffFromBot } from "@/modules/conversations/handoff";
+import { handOff } from "@/modules/conversations/handoff";
 import type { TenantScope } from "@/modules/tenancy";
 import type { ChannelRoute } from "@/modules/channels";
 import type { ContactDetails } from "@/modules/conversations/contact-details";
@@ -237,7 +237,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
           .where(
             and(eq(conversation.id, conversationId), eq(conversation.tenantId, scope.tenantId)),
           );
-        await handOffFromBot(tx, scope, conversationId, "resposta_no_painel");
+        await handOff(tx, scope, conversationId, "resposta_no_painel");
         return inserted;
       });
     },

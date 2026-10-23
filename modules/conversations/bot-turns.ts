@@ -2,11 +2,10 @@ import { and, asc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
 import { channel, conversation, message } from "@/db/schema";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
-import type { HandoffReason } from "@/modules/bot";
 import { resolveUnresolvedEchoes } from "@/modules/conversations/echoes";
 import {
-  handOffFromBot,
-  handoffFields,
+  handOff,
+  unansweredContactMessages,
   type ConversationHandoffReason,
 } from "@/modules/conversations/handoff";
 import {
@@ -80,12 +79,7 @@ export const createConversationBotRepository = (db: Database, scope: ChannelRout
       sql`exists(select 1 from ${conversation} where ${ownsConversation(conversationId)})`,
     );
   const unanswered = (conversationId: string) =>
-    and(
-      ownsMessages(conversationId),
-      eq(message.origin, "contact"),
-      eq(message.imported, false),
-      eq(message.botAnswered, false),
-    );
+    and(ownsMessages(conversationId), unansweredContactMessages(scope, conversationId));
 
   return {
     async load(conversationId: string) {
@@ -172,23 +166,11 @@ export const createConversationBotRepository = (db: Database, scope: ChannelRout
           .returning({ id: message.id });
         if (!failed.length) return false;
         // A Member's earlier Handoff keeps its reason.
-        await handOffFromBot(tx, scope, conversationId, "bot_indisponivel");
+        await handOff(tx, scope, conversationId, "bot_indisponivel");
         // Now with the team, whatever those echoes were.
         await resolveUnresolvedEchoes(tx, scope.tenantId, conversationId, { handOff: false });
         return true;
       });
-    },
-    async handoff(conversationId: string, token: string, reason: ConversationHandoffReason) {
-      await db
-        .update(conversation)
-        .set(handoffFields(reason))
-        .where(
-          and(
-            ownsConversation(conversationId),
-            eq(conversation.botLeaseToken, token),
-            eq(conversation.owner, "bot"),
-          ),
-        );
     },
     async reserve(
       conversationId: string,
@@ -196,7 +178,7 @@ export const createConversationBotRepository = (db: Database, scope: ChannelRout
       ids: string[],
       text: string,
       now: Date,
-      handoffReason?: HandoffReason,
+      handoffReason?: ConversationHandoffReason,
       beforeReserve?: (tx: Transaction) => Promise<void>,
     ) {
       return db.transaction(async (tx) => {
@@ -249,9 +231,10 @@ export const createConversationBotRepository = (db: Database, scope: ChannelRout
           .update(conversation)
           .set({
             lastMessageAt: sql`greatest(${conversation.lastMessageAt}, ${now.toISOString()}::timestamptz)`,
-            ...(handoffReason ? handoffFields(handoffReason) : {}),
           })
           .where(ownsConversation(conversationId));
+        // Durable before Meta is called, so a crash after sending keeps it.
+        if (handoffReason) await handOff(tx, scope, conversationId, handoffReason);
         return pending.id;
       });
     },

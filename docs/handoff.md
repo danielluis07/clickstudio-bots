@@ -25,6 +25,18 @@ pt-BR reason of the latest Handoff. **Aguardando equipe** above the list (URL
 | `resposta_no_painel` | Membro respondeu pelo painel | Dashboard reply |
 | `resposta_no_app` | Membro respondeu pelo app | Unmatched app echo |
 
+The schema enum is the single list of reasons, exported as
+`ConversationHandoffReason`. The Bot's Model reasons and its system reasons are
+declared as a type-checked subset of it.
+
+Every Handoff is written by `handOff` in `modules/conversations/handoff.ts`:
+**Assumir**, dashboard replies, app echoes, the live turn's Model Handoff in its
+reservation, failed sends and the reply gate's system Handoffs. It only moves a
+Bot-owned Conversation. A live turn passes its lease token, so a turn whose
+lease expired cannot hand off. Callers inside a transaction notify the inbox
+after they commit; others use `handOffAndNotify`, which notifies only when the
+Conversation changed hands.
+
 A Bot-initiated Handoff sends its short notice to the Contact through the
 normal reservation and send gates. System Handoffs (`bot_indisponivel`,
 `limite_atingido`) send nothing.
@@ -63,8 +75,9 @@ inactivity timer.
 - **Resolvida** returns ownership to the Bot, clears the reason and removes the
   waiting item. It is also offered for a Bot-owned Conversation still waiting.
 
-When a Conversation leaves the team, every Contact message still unanswered is
-settled for the Bot in the same transaction: those received during the Handoff,
+When a Conversation leaves the team, every live Contact message still unanswered
+(the same `unansweredContactMessages` a Bot turn answers) is settled for the Bot
+in the same transaction: those received during the Handoff,
 and any question the Bot had not answered before it, which the team now owns.
 They remain visible to the Model as Conversation history. The Bot answers only
 the next Contact message; it never replies to the Handoff backlog. Reservation
