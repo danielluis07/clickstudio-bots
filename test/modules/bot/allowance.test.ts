@@ -6,8 +6,9 @@ import { createBotAllowance, recordBotReplyUsage } from "@/modules/bot";
 import type { ChannelRoute } from "@/modules/channels";
 import {
   createConversationRepository,
+  countPendingBotReplies,
   deleteContact,
-  recordBotReplySent,
+  recordSentWamid,
   recordInboundTextMessage,
 } from "@/modules/conversations";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
@@ -18,9 +19,51 @@ import { createResendMailer } from "@/platform/resend-mailer";
 
 let db: Database;
 const acknowledgeReply = (scope: ChannelRoute, id: string, wamid: string, at: Date) =>
-  recordBotReplySent(db, scope, id, wamid, (tx) => recordBotReplyUsage(tx, scope, at));
+  db.transaction(async (tx) => {
+    if (await recordSentWamid(tx, scope, id, wamid)) await recordBotReplyUsage(tx, scope, at);
+  });
 afterEach(async () => {
   if (db) await closeTestDatabase(db);
+});
+
+test("pending reservations include only active production Bot text sends in the Tenant", async () => {
+  db = await createTestDatabase();
+  const { route, clock } = await seedLiveBot(db);
+  const other = await seedLiveBot(db);
+  for (const scope of [route, other.route]) {
+    const conversationId = (await recordInboundTextMessage(db, scope, {
+      wamid: crypto.randomUUID(),
+      from: "5511999990001",
+      profileName: null,
+      text: "Oi",
+      sentAt: clock.now(),
+    }))!;
+    await db.insert(message).values(
+      [
+        {},
+        { createdAt: new Date(clock.now().getTime() - 120_000) },
+        { imported: true },
+        { origin: "dashboard" as const },
+        { direction: "inbound" as const },
+        { type: sql`'template'` },
+        { status: "failed" as const },
+        { wamid: "already-acknowledged" },
+      ].map((entry) => ({
+        tenantId: scope.tenantId,
+        conversationId,
+        origin: "bot" as const,
+        direction: "outbound" as const,
+        type: "text" as const,
+        status: "pending" as const,
+        sentAt: clock.now(),
+        createdAt: clock.now(),
+        ...entry,
+      })),
+    );
+  }
+  expect(await db.transaction((tx) => countPendingBotReplies(tx, route, clock.now()))).toBe(1);
+  clock.advance(120_000);
+  expect(await db.transaction((tx) => countPendingBotReplies(tx, route, clock.now()))).toBe(0);
 });
 
 test("80% warns the owner exactly once per period across service instances", async () => {

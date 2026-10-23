@@ -2,6 +2,7 @@
 // messages in them.
 export {
   createConversationBotRepository,
+  countPendingBotReplies,
   resolveBotConversation,
   listBotRecoveryCandidates,
 } from "@/modules/conversations/bot-turns";
@@ -24,7 +25,7 @@ export {
 export { recordMessageChange, type MessageChange } from "@/modules/conversations/changes";
 export {
   recordMessageEcho,
-  recordBotReplySent,
+  recordSentWamid,
   type EchoClassification,
   type MessageEcho,
 } from "@/modules/conversations/echoes";

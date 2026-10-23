@@ -10,13 +10,13 @@ import {
   type BotJob,
   type BotAllowance,
 } from "@/modules/bot";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { botReplyUsage, conversation, message } from "@/db/schema";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import { createConversationRepository, recordInboundTextMessage } from "@/modules/conversations";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
-import { createTestUsageMeter, testBehaviour } from "@/test/support/bot";
+import { createTestBotAllowance, createTestUsageMeter, testBehaviour } from "@/test/support/bot";
 import { createTestModel } from "@/test/support/model";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
@@ -148,6 +148,27 @@ test("the last allowed reply counts once; new messages hand off at the limit and
   await worker.run(freshConversation);
   expect(await allowance.status(scope)).toMatchObject({ used: 1, exhausted: false });
   expect(sender.sent).toHaveLength(2);
+});
+
+test("a failed usage increment rolls back acknowledgment and a job retry never resends", async () => {
+  const { scope, clock, model, sender, activation, conversationId, worker, repository } =
+    await setup();
+  await activation.activate(scope);
+  await db.execute(
+    sql`alter table bot_reply_usage add constraint reject_usage check (replies = 0)`,
+  );
+  model.script({ text: "Resposta." });
+  await expect(worker.run(conversationId)).rejects.toThrow();
+  expect(sender.sent).toHaveLength(1);
+  expect((await repository.listMessages(conversationId))!.messages).toContainEqual(
+    expect.objectContaining({ origin: "bot", status: "pending", wamid: null }),
+  );
+  expect(
+    await createBotAllowance({ db, clock, mailer: createTestMailer() }).status(scope),
+  ).toMatchObject({ used: 0 });
+  await db.execute(sql`alter table bot_reply_usage drop constraint reject_usage`);
+  expect(await worker.run(conversationId)).toBe("handoff");
+  expect(sender.sent).toHaveLength(1);
 });
 
 test("sandbox output and an uncertain Meta send never consume production replies", async () => {
@@ -471,9 +492,9 @@ test("Handoff and service-window expiry during generation each block the send", 
 
 test("allowance is rechecked after generation before a live reply is reserved", async () => {
   let allowed = true;
-  const { scope, model, sender, activation, conversationId, worker, repository } = await setup({
-    canReply: async () => allowed,
-  });
+  const { scope, model, sender, activation, conversationId, worker, repository } = await setup(
+    createTestBotAllowance(async () => allowed),
+  );
   await activation.activate(scope);
   model.script(() => {
     allowed = false;

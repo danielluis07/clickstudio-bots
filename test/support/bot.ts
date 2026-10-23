@@ -5,6 +5,7 @@ import {
   type BehaviourSettings,
   type BotRepository,
   type BotTurn,
+  type BotAllowance,
   type CaptureSettings,
   type ContextMessage,
   type KnowledgeBase,
@@ -12,6 +13,15 @@ import {
   type UsageMeter,
 } from "@/modules/bot";
 import { noContactDetails, type ContactDetails } from "@/modules/conversations";
+
+// Complete allowance for tests that vary reply permission independently of usage.
+export const createTestBotAllowance = (
+  canReply: BotAllowance["canReply"] = async () => true,
+): BotAllowance => ({
+  canReply,
+  reserve: async () => {},
+  notifyWarning: async () => {},
+});
 
 export const testBehaviour: BehaviourSettings = {
   businessName: "Barbearia Navalha",

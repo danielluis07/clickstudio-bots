@@ -1,7 +1,8 @@
-import { and, asc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
 import { channel, conversation, message } from "@/db/schema";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
+import type { TenantScope } from "@/modules/tenancy";
 import { resolveUnresolvedEchoes } from "@/modules/conversations/echoes";
 import {
   handOff,
@@ -14,6 +15,31 @@ import {
 } from "@/modules/conversations/repository";
 
 export const botLeaseMs = 120_000;
+
+// Tenant-wide durable reservations that may still become acknowledged replies.
+// Read under the allowance counter's lock, in the send reservation transaction.
+export const countPendingBotReplies = async (
+  tx: Transaction,
+  scope: ChannelRoute | TenantScope,
+  now: Date,
+) => {
+  const [pending] = await tx
+    .select({ total: count() })
+    .from(message)
+    .where(
+      and(
+        eq(message.tenantId, scope.tenantId),
+        eq(message.origin, "bot"),
+        eq(message.direction, "outbound"),
+        eq(message.type, "text"),
+        eq(message.imported, false),
+        eq(message.status, "pending"),
+        isNull(message.wamid),
+        gt(message.createdAt, new Date(now.getTime() - botLeaseMs)),
+      ),
+    );
+  return pending!.total;
+};
 
 // The Bot may reply in a Conversation only while it owns it and its Channel is
 // activated, unpaused and subscribed. The reply gate reads this and the

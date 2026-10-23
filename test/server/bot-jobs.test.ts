@@ -10,7 +10,7 @@ import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
-import { createTestUsageMeter } from "@/test/support/bot";
+import { createTestBotAllowance, createTestUsageMeter } from "@/test/support/bot";
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
 import { qstashSigningKeys, signQStashRequest } from "@/test/support/qstash";
 
@@ -36,7 +36,7 @@ beforeAll(async () => {
     notifier: createTestNotifier(),
     getSender: createTestWhatsAppSender,
     meter: createTestUsageMeter(),
-    allowance: { canReply: async () => true },
+    allowance: createTestBotAllowance(),
   });
   jobs = createBotJobRoute({ bot, url, verifier: createQStashJobVerifier(qstashSigningKeys) });
   await db

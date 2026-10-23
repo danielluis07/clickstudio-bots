@@ -64,62 +64,50 @@ export const resolveUnresolvedEchoes = async (
 // Gives the Tenant's sent message the wamid Meta answered with. Its echo may
 // have been filed as an app reply before that answer; it was this message all
 // along, so the echo's row gives way and its delivery status carries over.
-export const recordSentWamid = (
-  db: Database,
+// Returns whether this is a newly acknowledged production Bot reply. The caller
+// records its usage in this same transaction, so neither write can commit alone.
+export const recordSentWamid = async (
+  tx: Transaction,
   scope: ChannelRoute | TenantScope,
   messageId: string,
   wamid: string,
-  onAcknowledged?: (tx: Transaction) => Promise<void>,
-) =>
-  db.transaction(async (tx) => {
-    const { tenantId } = scope;
-    await lockWamid(tx, tenantId, wamid);
-    const [sent] = await tx
-      .select({ origin: message.origin, conversationId: message.conversationId })
-      .from(message)
-      .where(and(eq(message.id, messageId), eq(message.tenantId, tenantId)));
-    if (sent) await lockConversation(tx, tenantId, sent.conversationId);
-    const [echoed] = await tx
-      .delete(message)
-      .where(
-        and(eq(message.tenantId, tenantId), eq(message.wamid, wamid), eq(message.origin, "app")),
-      )
-      .returning({ status: message.status });
-    const acknowledged = await tx
-      .update(message)
-      .set({
-        wamid,
-        status:
-          echoed?.status ??
-          sql`case when ${message.origin} = 'bot' then 'sent' else ${message.status} end`,
-      })
-      .where(and(eq(message.id, messageId), eq(message.tenantId, tenantId), isNull(message.wamid)))
-      .returning({
-        origin: message.origin,
-        direction: message.direction,
-        imported: message.imported,
-        type: message.type,
-      });
-    const reply = acknowledged[0];
-    if (
-      reply?.origin === "bot" &&
-      reply.direction === "outbound" &&
-      reply.type === "text" &&
-      !reply.imported
-    ) {
-      await onAcknowledged?.(tx);
-    }
-    if (sent?.origin === "bot")
-      await resolveUnresolvedEchoes(tx, tenantId, sent.conversationId, { handOff: true });
-  });
-
-export const recordBotReplySent = (
-  db: Database,
-  route: ChannelRoute,
-  messageId: string,
-  wamid: string,
-  onAcknowledged: (tx: Transaction) => Promise<void>,
-) => recordSentWamid(db, route, messageId, wamid, onAcknowledged);
+) => {
+  const { tenantId } = scope;
+  await lockWamid(tx, tenantId, wamid);
+  const [sent] = await tx
+    .select({ origin: message.origin, conversationId: message.conversationId })
+    .from(message)
+    .where(and(eq(message.id, messageId), eq(message.tenantId, tenantId)));
+  if (sent) await lockConversation(tx, tenantId, sent.conversationId);
+  const [echoed] = await tx
+    .delete(message)
+    .where(and(eq(message.tenantId, tenantId), eq(message.wamid, wamid), eq(message.origin, "app")))
+    .returning({ status: message.status });
+  const acknowledged = await tx
+    .update(message)
+    .set({
+      wamid,
+      status:
+        echoed?.status ??
+        sql`case when ${message.origin} = 'bot' then 'sent' else ${message.status} end`,
+    })
+    .where(and(eq(message.id, messageId), eq(message.tenantId, tenantId), isNull(message.wamid)))
+    .returning({
+      origin: message.origin,
+      direction: message.direction,
+      imported: message.imported,
+      type: message.type,
+    });
+  const reply = acknowledged[0];
+  if (sent?.origin === "bot")
+    await resolveUnresolvedEchoes(tx, tenantId, sent.conversationId, { handOff: true });
+  return (
+    reply?.origin === "bot" &&
+    reply.direction === "outbound" &&
+    reply.type === "text" &&
+    !reply.imported
+  );
+};
 
 const classify = (stored: { origin: string; conversationId: string }): EchoClassification => ({
   echo: stored.origin === "app" ? "app_reply" : "own_echo",

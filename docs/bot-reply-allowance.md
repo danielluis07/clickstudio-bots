@@ -19,6 +19,16 @@ survive Contact deletion and are removed with the Tenant. No external call holds
 a database lock. The migration backfills existing eligible replies using their
 stored send time, since they predate acknowledgment-time counting.
 
+Conversations owns the first-acknowledgment decision and the query for active
+pending Bot replies, whose lifetime follows its Bot lease. The live turn calls
+`recordSentWamid` and, only for a newly acknowledged production Bot reply,
+`recordBotReplyUsage` inside one transaction. The allowance owns the monthly
+aggregate, uses the Bot Schedule's `botTimeZone`, and asks tenancy for the warning
+recipient. Its live-turn port requires permission, reservation and warning
+methods; tests that isolate permission use the complete allowance fake in
+`test/support/bot.ts`. These ownership decisions implement
+[#115](https://github.com/danielluis07/clickstudio-bots/issues/115).
+
 Live turns check the allowance before generation and again before reserving a
 send. Their short reservation transactions lock the Tenant's monthly aggregate
 and include active pending Bot sends in the limit check, bounding overshoot to

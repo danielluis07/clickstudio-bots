@@ -9,7 +9,7 @@ import {
   type ReplyDecision,
 } from "@/modules/bot";
 import { recordInboundTextMessage } from "@/modules/conversations";
-import { testBehaviour } from "@/test/support/bot";
+import { createTestBotAllowance, testBehaviour } from "@/test/support/bot";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
 
@@ -32,7 +32,11 @@ const setup = async () => {
     sentAt: clock.now(),
   }))!;
   const state = { allowed: true };
-  const gate = createReplyGate({ db, clock, allowance: { canReply: async () => state.allowed } });
+  const gate = createReplyGate({
+    db,
+    clock,
+    allowance: createTestBotAllowance(async () => state.allowed),
+  });
   const turn = { scope: route, conversationId };
   return {
     clock,

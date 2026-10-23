@@ -13,5 +13,5 @@ export {
   type InvitationAcceptance,
   type NewTenant,
 } from "@/modules/tenancy/onboarding";
-export { createTenantRepository } from "@/modules/tenancy/repository";
+export { createTenantRepository, findTenantOwnerEmail } from "@/modules/tenancy/repository";
 export { resolveTenantScope, type TenantScope } from "@/modules/tenancy/scope";

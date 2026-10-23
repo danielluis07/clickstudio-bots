@@ -20,7 +20,7 @@ import {
 } from "@/modules/conversations";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
-import { createTestUsageMeter, testBehaviour } from "@/test/support/bot";
+import { createTestBotAllowance, createTestUsageMeter, testBehaviour } from "@/test/support/bot";
 import { createTestModel, type TestModel } from "@/test/support/model";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
@@ -97,7 +97,7 @@ const setup = async () => {
     notifier,
     getSender: () => sender,
     meter: createTestUsageMeter(),
-    allowance: { canReply: async () => true },
+    allowance: createTestBotAllowance(),
   });
   const repository = createConversationRepository(db, scope);
   const jobs = createTestJobQueue();
