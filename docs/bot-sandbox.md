@@ -61,17 +61,30 @@ if the displayed count is stale.
 ## Setup and verification
 
 Set `AI_GATEWAY_API_KEY` in the local `.env` or deployment environment to enable
-the existing AI SDK Model adapter through Vercel AI Gateway. Gateway uses
-`anthropic/claude-haiku-5.5`, with routing restricted to Anthropic and no model
-fallbacks. The current Haiku 5.5 model choice remains provisional pending provider
-evaluation. The same prompt cache markers, timeout and token metering apply.
+the existing AI SDK Model adapter through Vercel AI Gateway. Set the server-only
+`AI_MODEL_ID` to select a model for both the live Bot and the sandbox. With
+Gateway, use `provider/model` format; for example, local testing can use:
+
+```dotenv
+AI_MODEL_ID=google/gemini-2.5-flash-lite
+```
+
+Leave it unset to use `anthropic/claude-haiku-5.5`, or set that value explicitly
+in Vercel's Production environment. Local `.env` and deployment environments can
+choose different models. Routing is restricted to the provider prefix in the ID
+(for example, `google` or `anthropic`), so choose a model served by that provider.
+There are no model fallbacks or SDK retries. The model choice remains provisional
+pending provider evaluation. The same timeout, token cap and metering apply.
 
 `ANTHROPIC_API_KEY` remains supported for direct Anthropic access when no Gateway
-key is configured. If both are configured, Gateway takes precedence. A failed
+key is configured. For this route, `AI_MODEL_ID` must be a native Anthropic ID
+(for example, `claude-haiku-4-5`); unset, it defaults to `claude-haiku-5-5`.
+If both keys are configured, Gateway takes precedence. A failed
 Gateway call follows the core's safe Handoff path; it never retries via the direct
 key or another provider. With neither key, the UI explains in pt-BR that testing
 is temporarily unavailable and disables sending. Restart the development server
-after changing keys. No provider credentials reach the browser.
+after changing keys or `AI_MODEL_ID`; redeploy after changing deployment settings.
+No provider credentials or model configuration reach the browser.
 
 The Gateway key's team must have access to the selected model. Gateway can return
 HTTP 403 for Haiku 5.5 on its free tier, even when the key authenticates; enable

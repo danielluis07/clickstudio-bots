@@ -1,6 +1,7 @@
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { Client } from "pg";
-import { createBotModel } from "@/platform/ai-sdk-model";
+import { createGateway } from "ai";
+import { createAiSdkModel, createBotModel } from "@/platform/ai-sdk-model";
 import type { DatabaseReadiness, DoctorDependencies } from "@/scripts/doctor/checks";
 
 type DatabaseQuery = (statement: string) => Promise<Record<string, unknown>[]>;
@@ -62,11 +63,19 @@ export const createDoctorDependencies = (): DoctorDependencies => ({
     await response.body?.cancel();
     return response.status === 200;
   },
-  async probeProvider(environment) {
-    const model = createBotModel({
-      gatewayApiKey: environment.AI_GATEWAY_API_KEY,
-      anthropicApiKey: environment.ANTHROPIC_API_KEY,
-    });
+  async probeProvider(environment, modelId) {
+    // An explicit diagnostic override uses Gateway routing, never the direct key.
+    // Production keeps its own model and restricted provider selection.
+    const model = modelId
+      ? createAiSdkModel({
+          model: createGateway({ apiKey: environment.AI_GATEWAY_API_KEY })(modelId),
+          maxOutputTokens: 32,
+        })
+      : createBotModel({
+          gatewayApiKey: environment.AI_GATEWAY_API_KEY,
+          anthropicApiKey: environment.ANTHROPIC_API_KEY,
+          modelId: environment.AI_MODEL_ID,
+        });
     if (!model) throw new Error("Provider not configured");
     const result = await model.generate({
       tools: [],

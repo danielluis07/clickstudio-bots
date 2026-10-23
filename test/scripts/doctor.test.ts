@@ -174,6 +174,56 @@ test("a provider HTTP 403 explains model access without leaking the key or error
   expect(JSON.stringify(report)).not.toContain("secret-gateway");
 });
 
+test("an explicit alternative is passed to the probe and cannot verify the Bot model", async () => {
+  const modelId = "google/gemini-2.5-flash-lite";
+  const calls: (string | undefined)[] = [];
+  const report = await runDoctor({
+    environment,
+    probeProvider: true,
+    probeModelId: modelId,
+    dependencies: ready({
+      probeProvider: async (_, id) => {
+        calls.push(id);
+      },
+    }),
+  });
+  expect(calls).toEqual([modelId]);
+  expect(report.ok).toBe(true);
+  const probe = report.checks.find(({ name }) => name === "provider_probe");
+  expect(probe?.status).toBe("pass");
+  expect(probe?.message).toContain(`${modelId} respondeu`);
+  expect(probe?.message).toContain("O modelo do Bot não foi verificado");
+});
+
+test("alternative probes require opt-in, a Gateway key, a model ID and a non-CI environment", async () => {
+  let calls = 0;
+  const dependencies = ready({
+    probeProvider: async () => {
+      calls += 1;
+    },
+  });
+  for (const options of [
+    { environment, probeProvider: false, probeModelId: "google/gemini-2.5-flash-lite" },
+    { environment, probeProvider: true, probeModelId: "" },
+    { environment, probeProvider: true, probeModelId: "invalid-model" },
+    {
+      environment: { ...environment, AI_GATEWAY_API_KEY: "" },
+      probeProvider: true,
+      probeModelId: "google/gemini-2.5-flash-lite",
+    },
+    {
+      environment: { ...environment, CI: "true" },
+      probeProvider: true,
+      probeModelId: "google/gemini-2.5-flash-lite",
+    },
+  ]) {
+    const report = await runDoctor({ ...options, dependencies });
+    expect(report.ok).toBe(false);
+    expect(report.checks.find(({ name }) => name === "provider_probe")?.status).toBe("fail");
+  }
+  expect(calls).toBe(0);
+});
+
 test("CI refuses opt-in live probes and a missing key never triggers a call", async () => {
   let calls = 0;
   const dependencies = ready({

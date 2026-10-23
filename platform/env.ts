@@ -36,6 +36,7 @@ export const env = createEnv({
     CRON_SECRET: z.string().min(16).optional(),
     ANTHROPIC_API_KEY: z.string().min(1).optional(),
     AI_GATEWAY_API_KEY: z.string().min(1).optional(),
+    AI_MODEL_ID: z.string().trim().min(1).optional(),
   },
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
@@ -59,5 +60,6 @@ export const env = createEnv({
     CRON_SECRET: process.env.CRON_SECRET,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     AI_GATEWAY_API_KEY: process.env.AI_GATEWAY_API_KEY,
+    AI_MODEL_ID: process.env.AI_MODEL_ID,
   },
 });
