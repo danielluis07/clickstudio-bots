@@ -1,12 +1,11 @@
 import {
   disabledCapture,
   disabledLinks,
-  type LinkSettings,
   type BehaviourSettings,
   type BotRepository,
+  type BotConfiguration,
   type BotTurn,
   type BotAllowance,
-  type CaptureSettings,
   type ContextMessage,
   type KnowledgeBase,
   type TurnUsage,
@@ -50,19 +49,16 @@ export const testKnowledgeBase: KnowledgeBase = {
   sections: [{ title: "Pagamento", body: "Aceitamos PIX e cartão." }],
 };
 
-export type TestBotRepository = BotRepository & {
-  behaviour: BehaviourSettings;
-  knowledgeBase: KnowledgeBase;
-  capture: CaptureSettings;
-  links: LinkSettings;
-  // The turn's Contact as saved; captured details are merged in.
-  contact: ContactDetails;
-  // Every capture the core saved, in order.
-  captured: Partial<ContactDetails>[];
-  // Every message of the Conversation, whatever the core asks for.
-  messages: ContextMessage[];
-  turns: BotTurn[];
-};
+export type TestBotRepository = BotRepository &
+  BotConfiguration & {
+    // The turn's Contact as saved; captured details are merged in.
+    contact: ContactDetails;
+    // Every capture the core saved, in order.
+    captured: Partial<ContactDetails>[];
+    // Every message of the Conversation, whatever the core asks for.
+    messages: ContextMessage[];
+    turns: BotTurn[];
+  };
 
 // Hands the core one Conversation's saved settings, Knowledge base and
 // messages. It applies no caps, so the core must apply them itself.
@@ -76,13 +72,11 @@ export const createTestBotRepository = (): TestBotRepository => {
     captured: [],
     messages: [],
     turns: [],
-    getBehaviour: async (turn) => {
+    getConfiguration: async (turn) => {
       repository.turns.push(turn);
-      return repository.behaviour;
+      const { behaviour, knowledgeBase, capture, links } = repository;
+      return { behaviour, knowledgeBase, capture, links };
     },
-    getKnowledgeBase: async () => repository.knowledgeBase,
-    getCapture: async () => repository.capture,
-    getLinks: async () => repository.links,
     getContactDetails: async () => repository.contact,
     saveContactDetails: async (_turn, details) => {
       repository.captured.push(details);

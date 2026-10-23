@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { member, organization, user } from "@/db/schema";
-import { createCaptureSettingsEditor, readCapture, type CaptureSettings } from "@/modules/bot";
+import {
+  createCaptureSettingsEditor,
+  readBotConfiguration,
+  type CaptureSettings,
+} from "@/modules/bot";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { createTestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
@@ -45,7 +49,7 @@ beforeEach(async () => {
 afterEach(() => closeTestDatabase(db));
 
 test("capture is disabled, with every field off, until the owner saves", async () => {
-  expect(await readCapture(db, ownerA)).toEqual({
+  expect((await readBotConfiguration(db, ownerA)).capture).toEqual({
     enabled: false,
     fields: { name: "off", email: "off", city: "off", need: "off" },
   });
@@ -54,20 +58,23 @@ test("capture is disabled, with every field off, until the owner saves", async (
 test("the owner chooses the fields and which are required, for their Tenant only", async () => {
   expect(await editor.saveCapture(ownerA, nameAndEmail)).toEqual({ ok: true });
 
-  expect(await readCapture(db, ownerA)).toEqual(nameAndEmail);
+  expect((await readBotConfiguration(db, ownerA)).capture).toEqual(nameAndEmail);
   expect(await editor.getCapture(attendantA)).toMatchObject({
     settings: nameAndEmail,
     updatedAt: clock.now(),
     updatedBy: "owner-a",
   });
-  expect((await readCapture(db, ownerB)).enabled).toBe(false);
+  expect((await readBotConfiguration(db, ownerB)).capture.enabled).toBe(false);
 });
 
 test("the owner can disable capture and keep the field choices for later", async () => {
   await editor.saveCapture(ownerA, nameAndEmail);
   await editor.saveCapture(ownerA, { ...nameAndEmail, enabled: false });
 
-  expect(await readCapture(db, ownerA)).toEqual({ ...nameAndEmail, enabled: false });
+  expect((await readBotConfiguration(db, ownerA)).capture).toEqual({
+    ...nameAndEmail,
+    enabled: false,
+  });
 });
 
 test("other Members cannot change capture", async () => {
@@ -75,7 +82,7 @@ test("other Members cannot change capture", async () => {
     ok: false,
     error: "forbidden",
   });
-  expect((await readCapture(db, ownerA)).enabled).toBe(false);
+  expect((await readBotConfiguration(db, ownerA)).capture.enabled).toBe(false);
 });
 
 test.each([
@@ -94,5 +101,5 @@ test.each([
     ok: false,
     error: "invalid",
   });
-  expect((await readCapture(db, ownerA)).enabled).toBe(false);
+  expect((await readBotConfiguration(db, ownerA)).capture.enabled).toBe(false);
 });

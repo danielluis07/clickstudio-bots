@@ -86,11 +86,13 @@ export const runEvaluation = async ({
         },
       },
       repository: {
-        getBehaviour: async () => tenant.behaviour,
-        getKnowledgeBase: async () => item.knowledgeBase ?? tenant.knowledgeBase,
-        // The corpus predates capture: its capture cases expect a safe Handoff.
-        getCapture: async () => disabledCapture,
-        getLinks: async () => item.links ?? tenant.links ?? disabledLinks,
+        getConfiguration: async () => ({
+          behaviour: tenant.behaviour,
+          knowledgeBase: item.knowledgeBase ?? tenant.knowledgeBase,
+          // The corpus predates capture: its capture cases expect a safe Handoff.
+          capture: disabledCapture,
+          links: item.links ?? tenant.links ?? disabledLinks,
+        }),
         getContactDetails: async () => noContactDetails,
         saveContactDetails: async () => {},
         listRecentMessages: async () =>
