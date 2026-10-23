@@ -1,7 +1,16 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, max, count } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import { knowledgeBaseEntry } from "@/db/schema";
 import type { BotTurn, KnowledgeBase } from "@/modules/bot";
+
+// Readiness metadata without loading content or exposing table expressions.
+export const readKnowledgeBaseReadiness = async (db: Database, scope: BotTurn["scope"]) => {
+  const [saved] = await db
+    .select({ entries: count(), updatedAt: max(knowledgeBaseEntry.updatedAt) })
+    .from(knowledgeBaseEntry)
+    .where(eq(knowledgeBaseEntry.tenantId, scope.tenantId));
+  return { present: saved.entries > 0, updatedAt: saved.updatedAt };
+};
 
 // The Knowledge base as saved now, for a Bot turn's Tenant. Read on every
 // turn with no cache of its own, so a saved edit reaches the next reply; the

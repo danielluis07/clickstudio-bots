@@ -6,7 +6,11 @@ export {
   resolveBotConversation,
   listBotRecoveryCandidates,
 } from "@/modules/conversations/bot-turns";
-export { deleteContact } from "@/modules/conversations/contact-deletion";
+export {
+  createContactDeletion,
+  deleteContact,
+  type ContactDeletion,
+} from "@/modules/conversations/contact-deletion";
 export {
   contactDetailFields,
   contactDetailLimits,

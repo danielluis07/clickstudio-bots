@@ -1,5 +1,5 @@
-import { and, eq, type SQL } from "drizzle-orm";
-import type { Database } from "@/db/database";
+import { and, eq } from "drizzle-orm";
+import type { Database, Transaction } from "@/db/database";
 import { channel } from "@/db/schema";
 import type { TenantScope } from "@/modules/tenancy";
 
@@ -19,24 +19,19 @@ export const readChannelBotState = async (db: Database, scope: TenantScope) => {
   };
 };
 
-// Bot constructs its checklist predicate; Channels always adds its own scope,
-// authorization and subscription gates to the same atomic update.
+// Activation supplies readiness from the transaction's snapshot. Channels owns
+// the Tenant, owner and subscription fences on the flag write.
 export const activateChannelBot = async (
-  db: Database,
+  tx: Transaction,
   scope: TenantScope,
-  input: { ready: SQL<boolean>; at: Date },
+  input: { ready: boolean; at: Date },
 ) => {
   if (scope.role !== "owner") return { ok: false as const, error: "forbidden" as const };
-  const changed = await db
+  if (!input.ready) return { ok: false as const, error: "incomplete" as const };
+  const changed = await tx
     .update(channel)
     .set({ botEnabled: true, updatedAt: input.at })
-    .where(
-      and(
-        eq(channel.tenantId, scope.tenantId),
-        eq(channel.subscriptionStatus, "subscribed"),
-        input.ready,
-      ),
-    )
+    .where(and(eq(channel.tenantId, scope.tenantId), eq(channel.subscriptionStatus, "subscribed")))
     .returning({ id: channel.id });
   return changed.length
     ? { ok: true as const }

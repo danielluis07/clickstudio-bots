@@ -1,3 +1,4 @@
+import { createBotActivation } from "@/modules/bot";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { channel, contact, conversation, member, message, organization, user } from "@/db/schema";
@@ -58,7 +59,12 @@ test("Testar Bot reads its Tenant's saved links on each turn, including edits an
     new Error("A link must never be fetched"),
   );
   try {
-    const sandbox = createBotSandbox({ db, clock, model });
+    const sandbox = createBotSandbox({
+      activation: createBotActivation({ db, clock }),
+      db,
+      clock,
+      model,
+    });
     const send = (id: string) => ({
       id: "link",
       name: "send_configured_link",
@@ -89,7 +95,12 @@ test("Testar Bot reads its Tenant's saved links on each turn, including edits an
     await editor.saveLinks(owner, { enabled: false, links: [booking] });
     model.script({ toolCalls: [send(booking.id)] }, { toolCalls: [send(booking.id)] });
     expect(
-      await createBotSandbox({ db, clock, model }).respond(owner, {
+      await createBotSandbox({
+        activation: createBotActivation({ db, clock }),
+        db,
+        clock,
+        model,
+      }).respond(owner, {
         text: "Me envie novamente",
         history: [],
       }),
@@ -122,7 +133,12 @@ test.each([undefined, "test-direct-key"])(
     );
     try {
       const configured = createBotModel({ gatewayApiKey: "test-gateway-key", anthropicApiKey });
-      const sandbox = createBotSandbox({ db, clock, model: configured });
+      const sandbox = createBotSandbox({
+        activation: createBotActivation({ db, clock }),
+        db,
+        clock,
+        model: configured,
+      });
       expect(await sandbox.respond(owner, { text: "Qual o preço?", history: [] })).toMatchObject({
         ok: true,
         outcome: { kind: "answer", reply: "O corte custa R$ 80." },
@@ -154,6 +170,7 @@ test("a failed Gateway request hands off without retrying the direct key or anot
   );
   try {
     const sandbox = createBotSandbox({
+      activation: createBotActivation({ db, clock }),
       db,
       clock,
       model: createBotModel({
@@ -190,6 +207,7 @@ test("the direct Anthropic key still enables sandbox replies when no Gateway key
   );
   try {
     const sandbox = createBotSandbox({
+      activation: createBotActivation({ db, clock }),
       db,
       clock,
       model: createBotModel({ anthropicApiKey: "test-direct-key" }),
@@ -216,7 +234,12 @@ test("the owner tests saved settings and Knowledge base through the Bot's Model 
   });
   model.script({ text: "O corte custa R$ 80." });
 
-  const sandbox = createBotSandbox({ db, clock, model });
+  const sandbox = createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock,
+    model,
+  });
   expect(
     await sandbox.respond(owner, { text: "Quanto custa o corte?", history: [] }),
   ).toMatchObject({
@@ -240,7 +263,12 @@ test("the next sandbox reply uses edited Knowledge base and settings while prese
     body: "O corte custa R$ 80.",
   });
   if (!added.ok) throw new Error("expected saved FAQ");
-  const sandbox = createBotSandbox({ db, clock, model });
+  const sandbox = createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock,
+    model,
+  });
   model.script({ text: "O corte custa R$ 80." }, { text: "Agora custa R$ 90." });
   await sandbox.respond(owner, { text: "Qual o preço?", history: [] });
   await knowledge.editEntry(owner, added.entryId, {
@@ -273,12 +301,22 @@ test("the next sandbox reply uses edited Knowledge base and settings while prese
 
 test("50 attempts exhaust the Tenant's separate cap across service instances until midnight in São Paulo", async () => {
   clock.set(new Date("2026-10-23T02:59:59Z"));
-  const sandbox = createBotSandbox({ db, clock, model });
+  const sandbox = createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock,
+    model,
+  });
   for (let turn = 0; turn < 50; turn++) {
     model.script({ text: "Olá!" });
     expect((await sandbox.respond(owner, { text: "Oi", history: [] })).ok).toBe(true);
   }
-  const nextRequest = createBotSandbox({ db, clock, model });
+  const nextRequest = createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock,
+    model,
+  });
   expect(await nextRequest.respond(owner, { text: "Oi", history: [] })).toEqual({
     ok: false,
     error: "daily_cap",
@@ -296,9 +334,19 @@ test("50 attempts exhaust the Tenant's separate cap across service instances unt
 
 test("a delayed prior-day reservation cannot roll back or reset the new day's allowance", async () => {
   const priorDayClock = createTestClock(new Date("2026-10-23T02:59:59Z"));
-  const delayed = createBotSandbox({ db, clock: priorDayClock, model });
+  const delayed = createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock: priorDayClock,
+    model,
+  });
   clock.set(new Date("2026-10-23T03:00:00Z"));
-  const current = createBotSandbox({ db, clock, model });
+  const current = createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock,
+    model,
+  });
   model.script({ text: "Olá!" }, { text: "Olá!" });
   await current.respond(owner, { text: "Oi", history: [] });
   await delayed.respond(owner, { text: "Oi", history: [] });
@@ -344,7 +392,12 @@ test("sandbox Handoffs and refused capture/send calls make no network requests o
       db.select().from(channel),
     ]);
   const savedRecords = await snapshot();
-  const sandbox = createBotSandbox({ db, clock, model });
+  const sandbox = createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock,
+    model,
+  });
   model.script(
     { toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "pedido_do_contato" } }] },
     {
@@ -400,7 +453,12 @@ test("sandbox captures return to the browser and never reach production Contacts
     enabled: true,
     fields: { name: "required", email: "required", city: "off", need: "off" },
   });
-  const sandbox = createBotSandbox({ db, clock, model });
+  const sandbox = createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock,
+    model,
+  });
   model.script(
     {
       text: "Prazer, Bia!",
@@ -437,7 +495,12 @@ test("sandbox captures return to the browser and never reach production Contacts
 });
 
 test("the sandbox refuses test Contact details outside the catalog or bounds", async () => {
-  const sandbox = createBotSandbox({ db, clock, model });
+  const sandbox = createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock,
+    model,
+  });
   const details = { name: null, email: null, city: null, need: null };
   for (const contact of [
     { ...details, email: "não é e-mail" },
@@ -453,7 +516,12 @@ test("the sandbox refuses test Contact details outside the catalog or bounds", a
 });
 
 test("provider failures use the core's safe Handoff and still consume a sandbox attempt", async () => {
-  const sandbox = createBotSandbox({ db, clock, model });
+  const sandbox = createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock,
+    model,
+  });
   model.script(new Error("Provider unavailable"));
   expect(await sandbox.respond(owner, { text: "Oi", history: [] })).toMatchObject({
     ok: true,
@@ -463,7 +531,12 @@ test("provider failures use the core's safe Handoff and still consume a sandbox 
 });
 
 test("invalid input and an unconfigured Model consume no sandbox allowance", async () => {
-  const sandbox = createBotSandbox({ db, clock, model });
+  const sandbox = createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock,
+    model,
+  });
   for (const input of [
     { text: "  ", history: [] },
     { text: "a".repeat(4097), history: [] },
@@ -474,7 +547,12 @@ test("invalid input and an unconfigured Model consume no sandbox allowance", asy
     { text: "Oi", history: [], tenantId: "another-tenant" },
   ])
     expect(await sandbox.respond(owner, input)).toEqual({ ok: false, error: "invalid" });
-  const unconfigured = createBotSandbox({ db, clock, model: createBotModel({}) });
+  const unconfigured = createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock,
+    model: createBotModel({}),
+  });
   expect(await unconfigured.respond(owner, { text: "Oi", history: [] })).toEqual({
     ok: false,
     error: "unavailable",

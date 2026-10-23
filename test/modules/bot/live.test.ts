@@ -50,7 +50,12 @@ const setup = async (allowance?: BotAllowance) => {
     body: "R$ 80",
   });
   model.script({ text: "O corte custa R$ 80." });
-  await createBotSandbox({ db, clock, model }).respond(scope, { text: "Preço?", history: [] });
+  await createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock,
+    model,
+  }).respond(scope, { text: "Preço?", history: [] });
   const conversationId = (await recordInboundTextMessage(db, route, {
     wamid: crypto.randomUUID(),
     from: "5511999990001",

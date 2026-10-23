@@ -1,6 +1,6 @@
 // The Bot core: one turn decides a grounded answer or a Handoff, behind the
 // Model, repository and usage ports.
-export { createBotActivation } from "@/modules/bot/activation";
+export { createBotActivation, type BotActivation } from "@/modules/bot/activation";
 export { readBotConfiguration, type BotConfiguration } from "@/modules/bot/configuration";
 export {
   createLinkSettingsEditor,

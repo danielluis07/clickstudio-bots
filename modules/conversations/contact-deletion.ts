@@ -34,6 +34,13 @@ const predatesDeletion = (deletedAt: Date | null, occurredAt: Date, receivedAt?:
   deletedAt !== null &&
   (occurredAt <= deletedAt || (receivedAt !== undefined && receivedAt <= deletedAt));
 
+export const createContactDeletion =
+  (dependencies: { db: Database; notifier: Notifier; clock: Clock }) =>
+  (scope: TenantScope, contactId: string) =>
+    deleteContact({ ...dependencies, scope, contactId });
+
+export type ContactDeletion = ReturnType<typeof createContactDeletion>;
+
 // Only admitted events may create a Contact or advance a Conversation. This
 // stays private so filing never re-locks or re-checks a partially filtered batch.
 const fileConversation = async (

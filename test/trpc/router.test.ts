@@ -2,9 +2,22 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { TRPCError } from "@trpc/server";
 import type { Database } from "@/db/database";
 import { botReplyUsage, channel, member, organization, user } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { resolveChannelPhoneNumber } from "@/modules/channels";
-import { createBotAllowance, createBotSandbox } from "@/modules/bot";
-import { createReplyService, recordInboundTextMessage } from "@/modules/conversations";
+import {
+  createBotActivation,
+  createBotAllowance,
+  createBotSandbox,
+  createBotSettingsEditor,
+} from "@/modules/bot";
+import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
+import {
+  createContactDeletion,
+  createConversationRepository,
+  createHandoffControls,
+  createReplyService,
+  recordInboundTextMessage,
+} from "@/modules/conversations";
 import type { TRPCContext } from "@/trpc/init";
 import { appRouter } from "@/trpc/routers/_app";
 import { createTestClock } from "@/test/support/clock";
@@ -14,6 +27,9 @@ import { createAblyRealtime } from "@/platform/ably";
 import { createTestNotifier } from "@/test/support/notifier";
 import { createTestModel } from "@/test/support/model";
 import { createTestMailer } from "@/test/support/mailer";
+import { seedLiveBot } from "@/test/support/live-bot";
+import { createTenantRepository } from "@/modules/tenancy";
+import { testBehaviour } from "@/test/support/bot";
 
 let db: Database;
 let conversationOfB: string;
@@ -21,21 +37,28 @@ let contactOfB: string;
 const notifier = createTestNotifier();
 const sandboxModel = createTestModel();
 
-const callerFor = (session: TRPCContext["session"]) =>
-  appRouter.createCaller({
+const callerFor = (session: TRPCContext["session"], clock = createTestClock()) => {
+  const activation = createBotActivation({ db, clock });
+  return appRouter.createCaller({
     db,
     session,
     realtime: createAblyRealtime({ apiKey: "test.key:private-test-secret" }),
     notifier,
-    sandbox: createBotSandbox({ db, clock: createTestClock(), model: sandboxModel }),
-    allowance: createBotAllowance({ db, clock: createTestClock(), mailer: createTestMailer() }),
+    activation,
+    handoff: createHandoffControls({ db, notifier }),
+    deleteContact: createContactDeletion({ db, notifier, clock }),
+    conversations: (scope) => createConversationRepository(db, scope),
+    tenants: (scope) => createTenantRepository(db, scope),
+    sandbox: createBotSandbox({ activation, db, clock, model: sandboxModel }),
+    allowance: createBotAllowance({ db, clock, mailer: createTestMailer() }),
     replies: createReplyService({
       db,
-      clock: createTestClock(),
+      clock,
       notifier: createTestNotifier(),
       getSender: createTestWhatsAppSender,
     }),
   });
+};
 const ownerA = { userId: "owner-a", activeTenantId: "tenant-a" };
 const blank = { name: "", email: "", city: "", need: "" };
 
@@ -101,6 +124,23 @@ beforeAll(async () => {
 });
 
 describe("tRPC router", () => {
+  test("Bot activation and pause use the service clock from the context", async () => {
+    const { scope, clock } = await seedLiveBot(db);
+    const caller = callerFor({ userId: scope.userId, activeTenantId: scope.tenantId }, clock);
+    await createBotSettingsEditor({ db, clock }).saveSettings(scope, testBehaviour);
+    await createKnowledgeBaseEditor({ db, clock }).addEntry(scope, {
+      kind: "faq",
+      title: "Preço?",
+      body: "R$ 80",
+    });
+    await createBotActivation({ db, clock }).markTested(scope, clock.now());
+    expect(await caller.bot.activate()).toEqual({ ok: true });
+    clock.advance(1234);
+    expect(await caller.bot.setPaused({ paused: true })).toEqual({ ok: true });
+    expect(await caller.bot.status()).toMatchObject({ enabled: true, paused: true });
+    const [saved] = await db.select().from(channel).where(eq(channel.tenantId, scope.tenantId));
+    expect(saved.updatedAt).toEqual(clock.now());
+  });
   test("only an owner can read the current Tenant's reply usage without supplying a Tenant id", async () => {
     await db
       .insert(botReplyUsage)
