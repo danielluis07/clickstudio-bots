@@ -10,9 +10,10 @@ import {
   type BotJob,
 } from "@/modules/bot";
 import {
-  createConversationBotRepository,
   createConversationRepository,
   handOffAndNotify,
+  hasUnansweredContactMessages,
+  readBotEligibility,
   recordInboundTextMessage,
 } from "@/modules/conversations";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
@@ -149,16 +150,11 @@ suite("live turns on real Postgres", () => {
     ).toHaveLength(1);
   });
 
-  test("a ChannelRoute cannot claim or mutate another Tenant's Conversation", async () => {
+  test("a ChannelRoute cannot read or hand off another Tenant's Conversation", async () => {
     const { db, clock, conversationId, reader } = await setup();
     const other = await seedLiveBot(db);
-    const foreign = createConversationBotRepository(db, other.route);
-    expect(await foreign.load(conversationId)).toBeNull();
-    expect(await foreign.claim(conversationId, "foreign", clock.now())).toBe(false);
-    expect(await foreign.listUnanswered(conversationId)).toEqual([]);
-    expect(
-      await foreign.reserve(conversationId, "foreign", ["foreign-key"], "Resposta", clock.now()),
-    ).toBeNull();
+    expect(await readBotEligibility(db, other.route, conversationId, clock.now())).toBeNull();
+    expect(await hasUnansweredContactMessages(db, other.route, conversationId)).toBe(false);
     expect(
       await handOffAndNotify(
         db,

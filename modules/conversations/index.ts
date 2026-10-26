@@ -1,10 +1,15 @@
 // Contacts, their Conversations with a Tenant on one Channel, and the
 // messages in them.
 export {
-  createConversationBotRepository,
   countPendingBotReplies,
-  resolveBotConversation,
-  listBotRecoveryCandidates,
+  hasUnansweredContactMessages,
+  readBotEligibility,
+  recoverStaleBotTurns,
+  runBotTurn,
+  type BotTurnDependencies,
+  type BotTurnMessage,
+  type BotTurnSnapshot,
+  type LiveBotTurn,
 } from "@/modules/conversations/bot-turns";
 export {
   createContactDeletion,

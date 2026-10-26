@@ -38,6 +38,10 @@ _Avoid_: Agent, assistant, chatbot, AI
 One message the Bot sends to a Contact. Messages written by Members and template messages are not Bot replies.
 _Avoid_: Credit, interaction, message
 
+**Bot turn**:
+One pass of the Bot over a Conversation's unanswered Contact messages, ending in at most one Bot reply, a Handoff, or nothing. Only one Bot turn runs per Conversation at a time, and messages that arrive during it wait for the next one.
+_Avoid_: Job, run, cycle
+
 **Handoff**:
 The moment a Conversation passes from the Bot to the Tenant's Members, whether a Member takes over or the Bot steps aside.
 _Avoid_: Escalation, transfer, takeover
