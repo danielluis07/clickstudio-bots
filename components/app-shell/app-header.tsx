@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SignOutButton } from "@/components/app-shell/sign-out-button";
+import { ThemeToggle } from "@/components/app-shell/theme-toggle";
 
 export function AppHeader({ homeHref }: { homeHref: string }) {
   return (
@@ -8,7 +9,10 @@ export function AppHeader({ homeHref }: { homeHref: string }) {
         <Link href={homeHref} className="text-lg font-semibold tracking-tight">
           ClickStudio <span className="font-normal">Bots</span>
         </Link>
-        <SignOutButton />
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <SignOutButton />
+        </div>
       </div>
     </header>
   );

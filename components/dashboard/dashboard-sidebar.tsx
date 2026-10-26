@@ -1,4 +1,5 @@
 import { SignOutButton } from "@/components/app-shell/sign-out-button";
+import { ThemeToggle } from "@/components/app-shell/theme-toggle";
 import { SidebarUser } from "@/components/app-shell/sidebar-user";
 import { DashboardNavigation } from "@/components/dashboard/dashboard-navigation";
 import { DashboardSidebarTenant } from "@/components/dashboard/dashboard-sidebar-tenant";
@@ -23,6 +24,9 @@ export function DashboardSidebar() {
       <SidebarFooter>
         <SidebarUser />
         <SidebarMenu>
+          <SidebarMenuItem>
+            <ThemeToggle inSidebar />
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SignOutButton inSidebar />
           </SidebarMenuItem>
