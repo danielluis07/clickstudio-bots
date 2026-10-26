@@ -25,7 +25,7 @@ export {
   type ReplyDecision,
   type ReplyGate,
 } from "@/modules/bot/reply-gate";
-export type { ContextLimits } from "@/modules/bot/context";
+export { liveTurnContext, type ContextLimits } from "@/modules/bot/context";
 export type {
   Model,
   ModelMessage,

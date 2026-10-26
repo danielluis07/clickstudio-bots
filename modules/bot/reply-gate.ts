@@ -3,10 +3,7 @@ import type { BotTurn } from "@/modules/bot/repository";
 import { scheduleAllows } from "@/modules/bot/schedule";
 import { readBehaviour } from "@/modules/bot/settings";
 import type { ChannelRoute } from "@/modules/channels";
-import {
-  createConversationBotRepository,
-  type ConversationHandoffReason,
-} from "@/modules/conversations";
+import { readBotEligibility, type ConversationHandoffReason } from "@/modules/conversations";
 import type { Clock } from "@/platform/clock";
 
 // Billing supplies this hook; live turns never infer allowance from sandbox usage.
@@ -56,10 +53,7 @@ export const createReplyGate = ({
     available = true,
   ): Promise<ReplyDecision> {
     const now = clock.now();
-    const found = await createConversationBotRepository(db, turn.scope).eligibility(
-      turn.conversationId,
-      now,
-    );
+    const found = await readBotEligibility(db, turn.scope, turn.conversationId, now);
     if (!found?.eligible) return skip;
     // An exhausted allowance still runs a turn, so it can hand off.
     if (checkpoint === "enqueue") return reply;
