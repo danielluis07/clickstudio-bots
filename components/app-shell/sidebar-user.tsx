@@ -10,13 +10,13 @@ export function SidebarUser() {
 
   return (
     <div
-      className="flex min-w-0 items-center gap-2 overflow-hidden p-2"
+      className="flex max-w-48 min-w-0 items-center gap-2 overflow-hidden p-2 sm:max-w-64"
       aria-busy={isPending}
       aria-label={isPending ? "Carregando usuário" : undefined}
       title={user ? `${user.name} (${user.email})` : undefined}
     >
       <UserRoundIcon className="size-4 shrink-0" aria-hidden="true" />
-      <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
+      <div className="flex min-w-0 flex-col">
         {isPending ? (
           <div className="flex h-9 flex-col justify-center gap-1">
             <Skeleton className="h-4 w-28" />

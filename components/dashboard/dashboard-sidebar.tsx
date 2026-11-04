@@ -1,5 +1,4 @@
 import { SignOutButton } from "@/components/app-shell/sign-out-button";
-import { SidebarUser } from "@/components/app-shell/sidebar-user";
 import { DashboardNavigation } from "@/components/dashboard/dashboard-navigation";
 import { DashboardSidebarTenant } from "@/components/dashboard/dashboard-sidebar-tenant";
 import {
@@ -21,7 +20,6 @@ export function DashboardSidebar() {
         <DashboardNavigation />
       </SidebarContent>
       <SidebarFooter>
-        <SidebarUser />
         <SidebarMenu>
           <SidebarMenuItem>
             <SignOutButton inSidebar />

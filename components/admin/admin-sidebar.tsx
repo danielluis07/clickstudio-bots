@@ -1,6 +1,5 @@
 import { ShieldCheckIcon } from "lucide-react";
 import { AdminNavigation } from "@/components/admin/admin-navigation";
-import { SidebarUser } from "@/components/app-shell/sidebar-user";
 import { SignOutButton } from "@/components/app-shell/sign-out-button";
 import {
   Sidebar,
@@ -30,7 +29,6 @@ export function AdminSidebar() {
         <AdminNavigation />
       </SidebarContent>
       <SidebarFooter>
-        <SidebarUser />
         <SidebarMenu>
           <SidebarMenuItem>
             <SignOutButton inSidebar />
