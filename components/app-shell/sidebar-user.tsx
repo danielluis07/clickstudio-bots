@@ -10,7 +10,7 @@ export function SidebarUser() {
 
   return (
     <div
-      className="flex min-w-0 max-w-48 items-center gap-2 overflow-hidden p-2 sm:max-w-64"
+      className="flex max-w-48 min-w-0 items-center gap-2 overflow-hidden p-2 sm:max-w-64"
       aria-busy={isPending}
       aria-label={isPending ? "Carregando usuário" : undefined}
       title={user ? `${user.name} (${user.email})` : undefined}
