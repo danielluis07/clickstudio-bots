@@ -76,6 +76,7 @@ which is pending legal review before go-live.
 | `bun run db:generate` | Generate a migration in `drizzle/` from `db/schema`             |
 | `bun run db:migrate`  | Apply pending migrations to `DATABASE_URL`                      |
 | `bun run admin:create` | Create a platform administrator (see below)                    |
+| `bun run sweep:schedule` | Create or update the QStash schedule for the sweep ([guide](docs/inbox-operations.md#the-sweep)) |
 | `bun run db:seed`     | Recreate the demo Tenant on the dev database (see below)        |
 
 ## TypeScript and formatting

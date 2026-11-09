@@ -88,6 +88,23 @@ describe("QStash job queue", () => {
     ]);
   });
 
+  test("each job type publishes with an explicit delivery retry count", async () => {
+    received = [];
+    await createQStashJobQueue({
+      token: "token",
+      baseUrl: server.url.origin,
+      appUrl: "https://bots.example.com",
+    }).enqueue([
+      { type: "process-inbox-event", inboxEventId: "event-1" },
+      { type: "run-bot-turn", conversationId: "conversation-a" },
+    ]);
+    const jobs = received[0].body as { headers: Record<string, string> }[];
+    expect(jobs.map(({ headers }) => new Headers(headers).get("upstash-retries"))).toEqual([
+      "3",
+      "3",
+    ]);
+  });
+
   test("fails the enqueue when QStash refuses the batch", async () => {
     accept = false;
     const queue = createQStashJobQueue({

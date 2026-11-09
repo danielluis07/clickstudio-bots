@@ -3,6 +3,7 @@
 export {
   countPendingBotReplies,
   hasUnansweredContactMessages,
+  listStrandedBotConversations,
   readBotEligibility,
   recoverStaleBotTurns,
   runBotTurn,

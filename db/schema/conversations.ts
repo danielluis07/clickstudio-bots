@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { boolean, index, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { id, timestamps } from "@/db/columns";
 import { channel } from "@/db/schema/channels";
@@ -94,6 +95,10 @@ export const conversation = pgTable(
       t.lastMessageAt.desc(),
       t.id.desc(),
     ),
+    // The sweep's scan for expired leases; only a running turn holds one.
+    index("conversation_bot_lease_until_idx")
+      .on(t.botLeaseUntil)
+      .where(sql`${t.botLeaseUntil} is not null`),
   ],
 );
 
@@ -143,6 +148,14 @@ export const message = pgTable(
       t.answeredMessageId,
     ),
     index("message_conversation_id_sent_at_idx").on(t.conversationId, t.sentAt),
+    // The sweep's scans across all Tenants: Bot replies stuck before Meta
+    // answered, and Contact messages no Bot reply has covered yet.
+    index("message_pending_bot_reply_created_at_idx")
+      .on(t.createdAt)
+      .where(sql`${t.origin} = 'bot' and ${t.status} = 'pending' and ${t.wamid} is null`),
+    index("message_unanswered_contact_sent_at_idx")
+      .on(t.sentAt)
+      .where(sql`${t.origin} = 'contact' and ${t.imported} = false and ${t.botAnswered} = false`),
   ],
 );
 

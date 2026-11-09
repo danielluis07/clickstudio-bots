@@ -60,8 +60,9 @@ Handoff. When the send's wamid is stored, a matching echo row gives way as
 before; any unresolved echo left was a Member's app reply and hands off as
 `resposta_no_app`. A failed or stuck send already hands off as
 `bot_indisponivel`. If the worker crashes after reserving, the Conversation
-keeps showing **Bot** until the next turn or the daily `recover-bot-turns` task
-fails the stuck send; the Bot sends nothing meanwhile, because the pending row
+keeps showing **Bot** until the next turn or the
+[sweep](inbox-operations.md#the-sweep) fails the stuck send; the Bot sends
+nothing meanwhile, because the pending row
 blocks every retry. A Conversation row lock serializes echo filing with the
 send's outcome.
 

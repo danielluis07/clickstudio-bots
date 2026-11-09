@@ -16,7 +16,7 @@ export const errorClasses = [
 export type ErrorClass = (typeof errorClasses)[number];
 
 export type Diagnostic = {
-  kind: "inbox_processing_failed" | "inbox_dead_letter" | "daily_task_failed";
+  kind: "inbox_processing_failed" | "inbox_dead_letter" | "daily_task_failed" | "sweep_task_failed";
   errorClass?: ErrorClass;
   inboxEventId?: string;
   tenantId?: string;
@@ -30,7 +30,9 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 export const scrubDiagnostic = (input: unknown): Diagnostic => {
   const source = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
   const kind =
-    source.kind === "inbox_dead_letter" || source.kind === "daily_task_failed"
+    source.kind === "inbox_dead_letter" ||
+    source.kind === "daily_task_failed" ||
+    source.kind === "sweep_task_failed"
       ? source.kind
       : "inbox_processing_failed";
   const clean: Diagnostic = { kind };

@@ -14,7 +14,7 @@ import {
   type BotAllowance,
 } from "@/modules/bot";
 import { eq, sql } from "drizzle-orm";
-import { botReplyUsage, conversation, message } from "@/db/schema";
+import { botReplyUsage, channel, contact, conversation, message, organization } from "@/db/schema";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import {
   createConversationRepository,
@@ -697,7 +697,148 @@ test("a retry finding a pending reply without wamid never calls Meta", async () 
   });
 });
 
-test("cleanup fails stuck sends and clears expired leases", async () => {
+test("a Contact message whose Bot job never ran is answered after the next sweep", async () => {
+  const { scope, clock, model, sender, queue, activation, conversationId, worker } = await setup();
+  await activation.activate(scope);
+  model.script({ text: "O corte custa R$ 80." });
+  // The message was recorded, but its run-bot-turn job was lost.
+  clock.advance(2 * 60_000 - 1);
+  await worker.sweep();
+  expect(queue.take()).toEqual([]);
+
+  clock.advance(1);
+  await worker.sweep();
+  expect(queue.take()).toEqual([{ type: "run-bot-turn", conversationId }]);
+  await worker.run(conversationId);
+  expect(sender.sent.map(({ text }) => text)).toEqual(["O corte custa R$ 80."]);
+
+  // Running the sweep again changes nothing.
+  await worker.sweep();
+  expect(queue.take()).toEqual([]);
+});
+
+test("the sweep leaves a message skipped outside the Schedule, even once the Schedule opens after an hour", async () => {
+  const { scope, clock, queue, activation, worker } = await setup();
+  await activation.activate(scope);
+  // Thursday 09:00 in São Paulo: business hours, so the Bot stays quiet.
+  await createBotSettingsEditor({ db, clock }).saveSettings(scope, {
+    ...testBehaviour,
+    schedule: "outside_business_hours",
+  });
+  clock.advance(2 * 60_000);
+  await worker.sweep();
+  expect(queue.take()).toEqual([]);
+  // Saved back to always on, the message is now over an hour old.
+  await createBotSettingsEditor({ db, clock }).saveSettings(scope, testBehaviour);
+  clock.advance(58 * 60_000);
+  await worker.sweep();
+  expect(queue.take()).toEqual([]);
+});
+
+test("the sweep leaves a Conversation with a live turn or with the team", async () => {
+  const { scope, clock, queue, activation, conversationId, worker } = await setup();
+  await activation.activate(scope);
+  clock.advance(2 * 60_000);
+  await db
+    .update(conversation)
+    .set({ botLeaseToken: "healthy", botLeaseUntil: new Date(clock.now().getTime() + 60_000) })
+    .where(eq(conversation.id, conversationId));
+  await worker.sweep();
+  expect(queue.take()).toEqual([]);
+  await db
+    .update(conversation)
+    .set({ botLeaseToken: null, botLeaseUntil: null, owner: "team", handoffReason: "assumida" })
+    .where(eq(conversation.id, conversationId));
+  await worker.sweep();
+  expect(queue.take()).toEqual([]);
+});
+
+test("a crashed turn is recovered by the sweep and re-enqueued once", async () => {
+  const { scope, clock, queue, activation, conversationId, worker } = await setup();
+  await activation.activate(scope);
+  clock.advance(3 * 60_000);
+  await db
+    .update(conversation)
+    .set({ botLeaseToken: "crashed", botLeaseUntil: new Date(clock.now().getTime() - 1) })
+    .where(eq(conversation.id, conversationId));
+  await worker.sweep();
+  expect(queue.take()).toEqual([{ type: "run-bot-turn", conversationId }]);
+});
+
+test("a Tenant whose Schedule skips 100 Conversations cannot starve another Tenant's sweep", async () => {
+  const { scope, clock, queue, activation, conversationId, worker } = await setup();
+  await activation.activate(scope);
+  const quiet = await seedLiveBot(db);
+  await db.update(channel).set({ botEnabled: true }).where(eq(channel.id, quiet.route.channelId));
+  // Thursday 09:00 in São Paulo: business hours, so this Tenant's Bot stays quiet.
+  await createBotSettingsEditor({ db, clock }).saveSettings(quiet.scope, {
+    ...testBehaviour,
+    schedule: "outside_business_hours",
+  });
+  for (let index = 0; index < 100; index++)
+    await recordInboundTextMessage(db, quiet.route, {
+      wamid: crypto.randomUUID(),
+      from: `55119880${String(index).padStart(5, "0")}`,
+      profileName: null,
+      text: "Oi",
+      // Older than the other Tenant's message, so they come first.
+      sentAt: new Date(clock.now().getTime() - 60_000),
+    });
+  clock.advance(2 * 60_000);
+  await worker.sweep();
+  expect(queue.take()).toEqual([{ type: "run-bot-turn", conversationId }]);
+});
+
+test("expired leases in a canceled Tenant cannot block lease recovery for other Tenants", async () => {
+  const { scope, clock, queue, activation, conversationId, worker } = await setup();
+  await activation.activate(scope);
+  const canceled = await seedLiveBot(db);
+  const expired = new Date(clock.now().getTime() - 60_000);
+  const ids = Array.from({ length: 100 }, (_, index) => `canceled-${index}`);
+  await db
+    .insert(contact)
+    .values(ids.map((id, index) => ({ id, tenantId: canceled.route.tenantId, phone: `${index}` })));
+  await db.insert(conversation).values(
+    ids.map((id) => ({
+      id,
+      tenantId: canceled.route.tenantId,
+      channelId: canceled.route.channelId,
+      contactId: id,
+      lastMessageAt: expired,
+      botLeaseToken: "crashed",
+      // Earlier than the other Tenant's, so they come first.
+      botLeaseUntil: new Date(expired.getTime() - 1),
+    })),
+  );
+  await db
+    .update(organization)
+    .set({ canceledAt: clock.now() })
+    .where(eq(organization.id, canceled.route.tenantId));
+  await db
+    .update(conversation)
+    .set({ botLeaseToken: "crashed", botLeaseUntil: expired })
+    .where(eq(conversation.id, conversationId));
+  await worker.sweep();
+  expect(queue.take()).toEqual([{ type: "run-bot-turn", conversationId }]);
+});
+
+test("one sweep re-enqueues at most 100 Conversations", async () => {
+  const { scope, route, clock, queue, activation, worker } = await setup();
+  await activation.activate(scope);
+  for (let index = 0; index < 100; index++)
+    await recordInboundTextMessage(db, route, {
+      wamid: crypto.randomUUID(),
+      from: `55119880${String(index).padStart(5, "0")}`,
+      profileName: null,
+      text: "Oi",
+      sentAt: clock.now(),
+    });
+  clock.advance(2 * 60_000);
+  await worker.sweep();
+  expect(queue.take()).toHaveLength(100);
+});
+
+test("the sweep fails stuck sends and clears expired leases", async () => {
   const { scope, clock, sender, activation, conversationId, worker, repository } = await setup();
   await activation.activate(scope);
   await db
@@ -716,7 +857,7 @@ test("cleanup fails stuck sends and clears expired leases", async () => {
     sentAt: clock.now(),
     createdAt: new Date(clock.now().getTime() - 180_000),
   });
-  await worker.cleanup();
+  await worker.sweep();
   await worker.run(conversationId);
   expect(sender.sent).toHaveLength(0);
   expect(await repository.getConversation(conversationId)).toMatchObject({
@@ -775,7 +916,7 @@ test("allowance is rechecked after generation before a live reply is reserved", 
   });
 });
 
-test("cleanup preserves a live lease and its pending send", async () => {
+test("the sweep preserves a live lease and its pending send", async () => {
   const { scope, clock, conversationId, worker, repository } = await setup();
   await db
     .update(conversation)
@@ -792,7 +933,7 @@ test("cleanup preserves a live lease and its pending send", async () => {
     sentAt: clock.now(),
     createdAt: new Date(clock.now().getTime() - 180_000),
   });
-  await worker.cleanup();
+  await worker.sweep();
   expect((await repository.listMessages(conversationId))!.messages.at(-1)).toMatchObject({
     status: "pending",
   });
