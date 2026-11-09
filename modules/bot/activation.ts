@@ -21,16 +21,15 @@ const activateWithSnapshot = async <T>(db: Database, activate: (tx: Transaction)
   }
 };
 
+// Always called with a transaction, which is one pg client: read sequentially.
 const readChecklist = async (db: Database, scope: TenantScope) => {
-  const [rows, knowledge] = await Promise.all([
-    db
-      .select({ updatedAt: botSettings.updatedAt, testedAt: botActivation.testedAt })
-      .from(organization)
-      .leftJoin(botSettings, eq(botSettings.tenantId, organization.id))
-      .leftJoin(botActivation, eq(botActivation.tenantId, organization.id))
-      .where(eq(organization.id, scope.tenantId)),
-    readKnowledgeBaseReadiness(db, scope),
-  ]);
+  const rows = await db
+    .select({ updatedAt: botSettings.updatedAt, testedAt: botActivation.testedAt })
+    .from(organization)
+    .leftJoin(botSettings, eq(botSettings.tenantId, organization.id))
+    .leftJoin(botActivation, eq(botActivation.tenantId, organization.id))
+    .where(eq(organization.id, scope.tenantId));
+  const knowledge = await readKnowledgeBaseReadiness(db, scope);
   const saved = rows[0];
   const testedAt = saved?.testedAt;
   return {
@@ -47,10 +46,8 @@ export const createBotActivation = ({ db, clock }: { db: Database; clock: Clock 
   status: (scope: TenantScope) =>
     db.transaction(
       async (tx) => {
-        const [checklist, state] = await Promise.all([
-          readChecklist(tx, scope),
-          readChannelBotState(tx, scope),
-        ]);
+        const checklist = await readChecklist(tx, scope);
+        const state = await readChannelBotState(tx, scope);
         return { ...checklist, ...state };
       },
       { isolationLevel: "repeatable read", accessMode: "read only" },

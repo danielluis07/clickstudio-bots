@@ -280,40 +280,33 @@ const createConversationBotRepository = (db: Database, scope: ChannelRoute) => {
         .orderBy(asc(message.createdAt), asc(message.id));
       const reader = createConversationRepository(db, scope);
       // Read current edits/revokes for every pending Contact message, regardless
-      // of the normal history page size. All queries share the caller's snapshot.
-      const [history, current, [recipient]] = await Promise.all([
-        reader.listMessages(conversationId, { limit: 50 }),
-        pending.length
-          ? reader.listMessages(conversationId, {
-              messageIds: pending.map(({ id }) => id),
-              limit: pending.length,
-            })
-          : null,
-        db
-          .select({
-            tenantId: conversation.tenantId,
-            phoneNumberId: channel.phoneNumberId,
-            wabaId: channel.wabaId,
-            credential: channel.credential,
-            to: contact.phone,
+      // of the normal history page size. All queries share the caller's snapshot,
+      // a transaction on one pg client, so they run sequentially.
+      const history = await reader.listMessages(conversationId, { limit: 50 });
+      const current = pending.length
+        ? await reader.listMessages(conversationId, {
+            messageIds: pending.map(({ id }) => id),
+            limit: pending.length,
           })
-          .from(conversation)
-          .innerJoin(
-            channel,
-            and(
-              eq(channel.id, conversation.channelId),
-              eq(channel.tenantId, conversation.tenantId),
-            ),
-          )
-          .innerJoin(
-            contact,
-            and(
-              eq(contact.id, conversation.contactId),
-              eq(contact.tenantId, conversation.tenantId),
-            ),
-          )
-          .where(ownsConversation(conversationId)),
-      ]);
+        : null;
+      const [recipient] = await db
+        .select({
+          tenantId: conversation.tenantId,
+          phoneNumberId: channel.phoneNumberId,
+          wabaId: channel.wabaId,
+          credential: channel.credential,
+          to: contact.phone,
+        })
+        .from(conversation)
+        .innerJoin(
+          channel,
+          and(eq(channel.id, conversation.channelId), eq(channel.tenantId, conversation.tenantId)),
+        )
+        .innerJoin(
+          contact,
+          and(eq(contact.id, conversation.contactId), eq(contact.tenantId, conversation.tenantId)),
+        )
+        .where(ownsConversation(conversationId));
       return {
         pending,
         history: history?.messages ?? [],
