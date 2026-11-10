@@ -19,7 +19,7 @@
         "@vercel/functions": "^3.10.6",
         "ably": "^2.30.0",
         "ai": "^7.0.162",
-        "better-auth": "^1.7.16",
+        "better-auth": "1.7.16",
         "class-variance-authority": "^0.7.1",
         "cn": "^0.5.2",
         "dotenv": "^18.0.9",
