@@ -134,6 +134,38 @@ export const referencingChange = ({
       };
 };
 
+// The Contact's reaction to an earlier message; an empty emoji removes it.
+export const reactionChange = ({
+  phoneNumberId,
+  wamid,
+  reactedWamid,
+  from = "5511988887777",
+  emoji = "👍",
+  timestamp = "1792497900",
+}: Metadata & {
+  wamid: string;
+  reactedWamid: string;
+  from?: string;
+  emoji?: string;
+  timestamp?: string;
+}) => ({
+  field: "messages",
+  value: {
+    messaging_product: "whatsapp",
+    metadata: { display_phone_number: "5511999990000", phone_number_id: phoneNumberId },
+    contacts: [{ profile: { name: "Maria Teste" }, wa_id: from }],
+    messages: [
+      {
+        from,
+        id: wamid,
+        timestamp,
+        type: "reaction",
+        reaction: { message_id: reactedWamid, emoji },
+      },
+    ],
+  },
+});
+
 // A message the business sent from the WhatsApp Business app or a companion
 // device, echoed to the platform through coexistence.
 export const messageEchoChange = ({
