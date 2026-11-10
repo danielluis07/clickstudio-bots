@@ -189,9 +189,10 @@ export function TermsOfUse() {
         <p>
           A ClickStudio executará instruções de exclusão do negócio em até 15 dias nos sistemas
           ativos, inclusive de contatos, conversas e campos associados, e informará as retenções
-          residuais aplicáveis. Eventos brutos expiram em até 30 dias; backups são eliminados pelo
-          envelhecimento da janela de recuperação, sem uso para novas finalidades. Uma restauração
-          deve reaplicar as exclusões.
+          residuais aplicáveis. Os eventos brutos de um contato excluído perdem o conteúdo junto com
+          ele, e os demais expiram em até 30 dias; backups são eliminados pelo envelhecimento da
+          janela de recuperação, sem uso para novas finalidades. Uma restauração deve reaplicar as
+          exclusões.
         </p>
         <p>
           No cancelamento, o canal é desconectado e o Bot é interrompido. O negócio tem 30 dias para

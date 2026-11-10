@@ -34,6 +34,7 @@ import {
   metaDelivery,
   referencingChange,
   signMetaDelivery,
+  statusChange,
   textMessageChange,
 } from "@/test/support/meta-webhook";
 
@@ -137,7 +138,7 @@ test("a retained pre-deletion inbox event cannot recreate a Contact, including d
   await inbox.fail(job.inboxEventId, "failed-job");
   clock.advance(1000);
   expect(await remove(found.contact.id)).toEqual({ ok: true });
-  expect(await inbox.replay("admin", job.inboxEventId)).toEqual({ ok: true, status: "processed" });
+  expect(await inbox.replay("admin", job.inboxEventId)).toEqual({ ok: true, status: "ignored" });
   expect((await repository().listConversations()).conversations).toEqual([]);
 });
 
@@ -235,7 +236,7 @@ test("an event received before deletion stays suppressed even with a later messa
   const [job] = queue.take();
   clock.advance(1000);
   expect(await remove(found.contact.id)).toEqual({ ok: true });
-  expect(await inbox.process(job.inboxEventId)).toEqual({ ok: true, status: "processed" });
+  expect(await inbox.process(job.inboxEventId)).toEqual({ ok: true, status: "ignored" });
   expect((await repository().listConversations()).conversations).toEqual([]);
   clock.advance(30 * 24 * 60 * 60 * 1000);
   expect(await pruneInboxEvents(db, clock)).toBe(1);
@@ -286,7 +287,7 @@ test.each(["echo", "history", "edit", "contact_sync"] as const)(
     const messages = await repository().listMessages(freshId!);
     notifier.pings.length = 0;
 
-    expect(await inbox.process(job.inboxEventId)).toEqual({ ok: true, status: "processed" });
+    expect(await inbox.process(job.inboxEventId)).toEqual({ ok: true, status: "ignored" });
     expect(await repository().getConversation(freshId!)).toEqual(fresh);
     expect(await repository().listMessages(freshId!)).toEqual(messages);
     expect(await db.select().from(messageChange)).toEqual([]);
@@ -409,4 +410,97 @@ test("ambiguous deletion-second messages are suppressed; a message in the next s
     conversations: [fresh],
   } = await repository().listConversations();
   expect(fresh.contact.id).not.toBe(found.contact.id);
+});
+
+test("deletion erases the Contact's raw inbox events and settles their jobs, leaving other addresses", async () => {
+  await db
+    .insert(channel)
+    .values({
+      id: "other-channel",
+      tenantId: "other",
+      wabaId: "201",
+      phoneNumberId: "301",
+      displayPhoneNumber: "+5511999990001",
+      credential: { keyVersion: "v1", iv: "", ciphertext: "", tag: "" },
+      subscriptionFields: [],
+    })
+    .onConflictDoNothing();
+  const conversationId = await receive();
+  const found = (await repository().getConversation(conversationId!))!;
+  const processed = metaDelivery(
+    textMessageChange({ phoneNumberId: "300", wamid: "wamid.erase-text", body: "Meu CPF" }),
+    statusChange({ phoneNumberId: "300", wamid: "wamid.erase-reply", status: "read" }),
+    messageEchoChange({ phoneNumberId: "300", wamid: "wamid.erase-echo", to: `+${phone}` }),
+    referencingChange({
+      phoneNumberId: "300",
+      wamid: "wamid.erase-edit",
+      originalWamid: "wamid.erase-text",
+      type: "edit",
+      body: "Meu CPF editado",
+    }),
+    historyChange({
+      phoneNumberId: "300",
+      threads: [
+        {
+          id: phone,
+          messages: [{ wamid: "wamid.erase-history", from: phone, timestamp: "1792497600" }],
+        },
+      ],
+    }),
+    contactSyncChange({
+      phoneNumberId: "300",
+      contacts: [{ phone: `+${phone}`, fullName: "Ana Excluída" }],
+    }),
+    textMessageChange({ phoneNumberId: "300", wamid: "wamid.keep-other", from: "5511900000000" }),
+    textMessageChange({ phoneNumberId: "301", wamid: "wamid.keep-tenant", from: phone }),
+  );
+  await inbox.receive({ body: processed, signature: signMetaDelivery(processed) });
+  for (const job of queue.take()) await inbox.process(job.inboxEventId);
+  const unsettled = metaDelivery(
+    textMessageChange({ phoneNumberId: "300", wamid: "wamid.erase-pending" }),
+    textMessageChange({ phoneNumberId: "300", wamid: "wamid.erase-failed" }),
+  );
+  await inbox.receive({ body: unsettled, signature: signMetaDelivery(unsettled) });
+  const [, failedJob] = queue.take();
+  await inbox.fail(failedJob.inboxEventId, "failed-job");
+  const before = await db.select().from(inboxEvent);
+  expect(before.filter((event) => event.contactPhone === phone)).toHaveLength(9);
+
+  expect(await remove(found.contact.id)).toEqual({ ok: true });
+
+  const after = await db.select().from(inboxEvent);
+  expect(after.map(({ id }) => id).sort()).toEqual(before.map(({ id }) => id).sort());
+  expect(
+    after
+      .filter((event) => event.contactPhone !== null)
+      .map(({ dedupeKey }) => dedupeKey)
+      .sort(),
+  ).toEqual(["messages:wamid.keep-other", "messages:wamid.keep-tenant"]);
+  const erased = after.filter((event) => event.contactPhone === null);
+  expect(erased).toHaveLength(8);
+  for (const event of erased) expect(event.payload).toEqual({ erased: true });
+  expect(JSON.stringify(erased)).not.toContain(phone);
+  expect(JSON.stringify(erased)).not.toContain("CPF");
+  expect(
+    erased
+      .filter((event) => event.ignoredReason === "contact_deleted")
+      .map(({ status, errorClass, failedAt }) => ({ status, errorClass, failedAt })),
+  ).toEqual([
+    { status: "ignored", errorClass: null, failedAt: null },
+    { status: "ignored", errorClass: null, failedAt: null },
+  ]);
+
+  // A redelivery, a queued job and an administrator's replay restore nothing.
+  await inbox.receive({ body: processed, signature: signMetaDelivery(processed) });
+  await inbox.receive({ body: unsettled, signature: signMetaDelivery(unsettled) });
+  expect(queue.take()).toEqual([]);
+  expect(await inbox.process(failedJob.inboxEventId)).toEqual({ ok: true, status: "ignored" });
+  expect(await inbox.replay("admin", failedJob.inboxEventId)).toEqual({
+    ok: true,
+    status: "ignored",
+  });
+  expect(await db.select().from(inboxEvent)).toEqual(after);
+  expect(
+    (await repository().listConversations()).conversations.map(({ contact }) => contact.phone),
+  ).toEqual(["5511900000000"]);
 });
