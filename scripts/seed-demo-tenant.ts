@@ -120,8 +120,16 @@ await replies.sendReply(ownerScope, {
   conversationId: anaConversation.id,
   text: "Esta não chega: o Meta recusou.",
 });
-await recordMessageStatus(db, route, { wamid: "wamid.SEED.OUT1", status: "read" });
-await recordMessageStatus(db, route, { wamid: "wamid.SEED.OUT2", status: "delivered" });
+await recordMessageStatus(db, route, {
+  wamid: "wamid.SEED.OUT1",
+  status: "read",
+  receivedAt: new Date(),
+});
+await recordMessageStatus(db, route, {
+  wamid: "wamid.SEED.OUT2",
+  status: "delivered",
+  receivedAt: new Date(),
+});
 
 // Coexistence: our own send's echo adds nothing; a reply from the app does.
 const echo = (wamid: string, text: string, sentAt: Date) =>

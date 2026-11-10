@@ -201,3 +201,23 @@ export const messageChange = pgTable(
     index("message_change_tenant_id_contact_address_hash_idx").on(t.tenantId, t.contactAddressHash),
   ],
 );
+
+// A delivery status that arrived before the platform stored its message's
+// wamid. Applied when that wamid is recorded; one for a message the platform
+// never stores is pruned. Only moves forward, like the message's own status.
+export const earlyMessageStatus = pgTable(
+  "early_message_status",
+  {
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    wamid: text("wamid").notNull(),
+    status: text("status", { enum: ["sent", "delivered", "read", "failed"] }).notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("early_message_status_tenant_id_wamid_unique").on(t.tenantId, t.wamid),
+    // The daily prune's scan across all Tenants.
+    index("early_message_status_received_at_idx").on(t.receivedAt),
+  ],
+);

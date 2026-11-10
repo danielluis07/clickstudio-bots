@@ -5,6 +5,8 @@ import type { ChannelRoute } from "@/modules/channels";
 import type { TenantScope } from "@/modules/tenancy";
 import { withContactAdmission } from "@/modules/conversations/contact-deletion";
 import { handOff } from "@/modules/conversations/handoff";
+import { applyEarlyStatus } from "@/modules/conversations/statuses";
+import { lockWamid } from "@/modules/conversations/wamid-lock";
 
 // A text a Member sent from the WhatsApp Business app or a companion
 // device, which coexistence echoes to the platform.
@@ -24,11 +26,6 @@ export type EchoClassification = {
   echo: "app_reply" | "own_echo";
   conversationId: string;
 };
-
-// Serialises filing an echo with storing the wamid of the send it may echo,
-// until the transaction ends.
-const lockWamid = (tx: Transaction, tenantId: string, wamid: string) =>
-  tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${tenantId}:${wamid}`}, 0))`);
 
 // Serialises a Conversation's echo filing with its Bot reply's outcome.
 const lockConversation = (tx: Transaction, tenantId: string, conversationId: string) =>
@@ -99,6 +96,8 @@ export const recordSentWamid = async (
       type: message.type,
     });
   const reply = acknowledged[0];
+  // A status that won the race with Meta's answer was kept for this wamid.
+  if (reply) await applyEarlyStatus(tx, tenantId, wamid);
   if (sent?.origin === "bot")
     await resolveUnresolvedEchoes(tx, tenantId, sent.conversationId, { handOff: true });
   return (
@@ -174,6 +173,7 @@ export const recordMessageEcho = (db: Database, route: ChannelRoute, echo: Messa
           })
           .onConflictDoNothing({ target: [message.tenantId, message.wamid] })
           .returning({ origin: message.origin, conversationId: message.conversationId });
+        if (inserted) await applyEarlyStatus(tx, route.tenantId, echo.wamid);
         if (inserted && !botSending) await handOff(tx, route, conversationId, "resposta_no_app");
         // A concurrent job stored the same wamid first.
         return classify(inserted ?? (await findStored()));
