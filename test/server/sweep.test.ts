@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import type { Diagnostic } from "@/platform/diagnostics";
 import { createQStashJobVerifier } from "@/platform/qstash";
+import { createTestDiagnostics } from "@/test/support/diagnostics";
 import { createSweepRoute } from "@/server/sweep";
 import { qstashSigningKeys, signQStashRequest } from "@/test/support/qstash";
 
@@ -38,10 +38,10 @@ test("the sweep refuses unauthenticated calls without running a task", async () 
 
 test("a signed sweep runs every task, and one failure does not stop the others", async () => {
   const ran: string[] = [];
-  const logged: Diagnostic[] = [];
+  const diagnostics = createTestDiagnostics();
   const route = createSweepRoute({
     config: { verifier, url },
-    diagnostics: { log: (entry) => logged.push(entry) },
+    diagnostics,
     tasks: [
       {
         name: "first",
@@ -64,7 +64,16 @@ test("a signed sweep runs every task, and one failure does not stop the others",
     ],
   });
   expect(ran).toEqual(["first", "second"]);
-  expect(logged).toEqual([{ kind: "sweep_task_failed", errorClass: "TypeError" }]);
+  // A failed sweep task reaches Sentry, named by its task, without its message.
+  expect(diagnostics.alerts).toEqual([
+    {
+      kind: "sweep_task_failed",
+      errorClass: "TypeError",
+      operation: "first",
+      stack: expect.arrayContaining([expect.stringContaining("test/server/sweep.test.ts:")]),
+    },
+  ]);
+  expect(JSON.stringify(diagnostics.alerts)).not.toContain("5511988887777");
 });
 
 test("a sweep whose tasks all succeed answers 200", async () => {

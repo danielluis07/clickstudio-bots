@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { WebhookInbox } from "@/modules/webhook-inbox";
+import { logError } from "@/platform/diagnostics";
 import { formText, type FormState } from "@/server/actions/form-state";
 
 type AdminGuard = () => Promise<{ user: { id: string } }>;
@@ -34,7 +35,9 @@ export const createReplayInboxAction =
             ? "Evento ignorado: canal desconhecido ou tipo sem suporte."
             : "Evento reprocessado.",
       };
-    } catch {
+    } catch (error) {
+      // The administrator sees the failure; the log says why.
+      logError("inbox_replay_failed", error, { inboxEventId: id.data });
       return {
         status: "error",
         message: "Não foi possível reprocessar o evento. Tente novamente após corrigir a falha.",
@@ -68,7 +71,8 @@ export const createReplayFailuresAction =
       if (!result.ok)
         return { status: "error", message: "Você não tem permissão para reprocessar eventos." };
       return { status: "success", message: requeuedMessage(result.requeued) };
-    } catch {
+    } catch (error) {
+      logError("inbox_replay_failed", error, { operation: `replay-${scope}` });
       return {
         status: "error",
         message:

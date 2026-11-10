@@ -6,11 +6,51 @@ import {
   type ErrorEvent,
   type NodeOptions,
 } from "@sentry/node";
-import { isUsSentryDsn, scrubDiagnostic, type Diagnostic } from "@/platform/diagnostics";
+import {
+  isUsSentryDsn,
+  scrubDiagnostic,
+  type Diagnostic,
+  type Diagnostics,
+} from "@/platform/diagnostics";
 
+// `location` or `fn (location)`, as `stackFrames` writes them.
+const toSentryFrame = (frame: string) => {
+  const match = /^(?:(.+) \()?(.+):(\d+):(\d+)\)?$/.exec(frame);
+  if (!match) return [];
+  const [, fn, filename, lineno, colno] = match;
+  return [
+    {
+      ...(fn ? { function: fn } : {}),
+      filename,
+      lineno: Number(lineno),
+      colno: Number(colno),
+      in_app: !filename.startsWith("node_modules/"),
+    },
+  ];
+};
+
+// Frames travel as the event's stack trace, not as a tag.
+const toTags = (diagnostic: Diagnostic): Omit<Diagnostic, "stack"> => {
+  const tags = { ...diagnostic };
+  delete tags.stack;
+  return tags;
+};
+
+const diagnosticOf = (event: ErrorEvent) => {
+  const extra = event.extra;
+  return extra && typeof extra === "object" && "diagnostic" in extra
+    ? extra.diagnostic
+    : event.tags;
+};
+
+// Rebuilt from the scrubbed Diagnostic alone: nothing the SDK collected on its
+// own (request, user, breadcrumbs, frame variables or context lines) survives.
+// Stack frames are code locations and go to Sentry; messages never do.
 export const scrubSentryEvent = (event: ErrorEvent): ErrorEvent => {
-  const clean = scrubDiagnostic(event.tags);
+  const clean = scrubDiagnostic(diagnosticOf(event));
   const errorClass = clean.errorClass ?? "Error";
+  // Sentry lists the oldest call first.
+  const frames = (clean.stack ?? []).flatMap(toSentryFrame).reverse();
   return {
     type: undefined,
     ...(event.event_id && /^[a-f0-9]{32}$/i.test(event.event_id)
@@ -20,8 +60,16 @@ export const scrubSentryEvent = (event: ErrorEvent): ErrorEvent => {
     platform: "node",
     level: "error",
     message: clean.kind,
-    tags: { ...clean },
-    exception: { values: [{ type: errorClass, value: errorClass }] },
+    tags: toTags(clean),
+    exception: {
+      values: [
+        {
+          type: errorClass,
+          value: errorClass,
+          ...(frames.length ? { stacktrace: { frames } } : {}),
+        },
+      ],
+    },
   };
 };
 
@@ -33,7 +81,7 @@ export const createDiagnostics = ({
   dsn?: string;
   writeLog?: (entry: Diagnostic) => void;
   transport?: NodeOptions["transport"];
-} = {}) => {
+} = {}): Diagnostics => {
   if (dsn && !isUsSentryDsn(dsn)) throw new Error("Sentry requires a US project DSN");
   const deliveries = new Map<string, Set<() => void>>();
   // An isolated client with no integrations: no automatic request, console,
@@ -107,7 +155,12 @@ export const createDiagnostics = ({
       listeners.add(confirm);
       deliveries.set(eventId, listeners);
       try {
-        client.captureEvent({ event_id: eventId, level: "error", tags: { ...clean } });
+        client.captureEvent({
+          event_id: eventId,
+          level: "error",
+          tags: toTags(clean),
+          extra: { diagnostic: clean },
+        });
         // Draining the buffer alone does not prove Sentry accepted the event.
         if (!(await client.flush(2000))) throw new Error("Diagnostic delivery timed out");
         if (!delivered) throw new Error("Diagnostic delivery failed");

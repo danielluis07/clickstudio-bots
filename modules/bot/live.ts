@@ -18,6 +18,7 @@ import {
   type WhatsAppSender,
 } from "@/modules/conversations";
 import type { Clock } from "@/platform/clock";
+import { annotateError } from "@/platform/diagnostics";
 import type { Notifier } from "@/platform/notifier";
 
 export type BotJob = { type: "run-bot-turn"; conversationId: string };
@@ -125,13 +126,29 @@ export const createLiveBot = ({
 
   return {
     enqueue,
-    run: (conversationId: string) =>
-      runBotTurn({ db, clock, notifier }, conversationId, respond, async (scope, followUp) => {
-        if (followUp) await enqueue(scope, conversationId);
-        // Job retries also recover a warning after an interrupted acknowledgment,
-        // even when the Conversation has no unanswered messages or is with the team.
-        await allowance.notifyWarning({ scope, conversationId });
-      }),
+    async run(conversationId: string) {
+      // The job knows only the Conversation; a failure also names its Tenant.
+      let tenantId: string | undefined;
+      try {
+        return await runBotTurn(
+          { db, clock, notifier },
+          conversationId,
+          (turn) => {
+            tenantId = turn.scope.tenantId;
+            return respond(turn);
+          },
+          async (scope, followUp) => {
+            tenantId = scope.tenantId;
+            if (followUp) await enqueue(scope, conversationId);
+            // Job retries also recover a warning after an interrupted acknowledgment,
+            // even when the Conversation has no unanswered messages or is with the team.
+            await allowance.notifyWarning({ scope, conversationId });
+          },
+        );
+      } catch (error) {
+        throw annotateError(error, { tenantId, conversationId });
+      }
+    },
     // Every few minutes: recovers crashed turns, then re-enqueues Contact
     // messages whose job never ran. Idempotent; each scan is bounded.
     async sweep() {

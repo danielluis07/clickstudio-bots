@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import type { InboxDiagnostics } from "@/modules/webhook-inbox";
+import { reportError, type Diagnostics } from "@/platform/diagnostics";
 import { runMaintenanceTasks, type MaintenanceTask } from "@/server/maintenance-tasks";
 
 export const createDailyCronRoute = ({
@@ -9,7 +9,7 @@ export const createDailyCronRoute = ({
 }: {
   secret: string | null;
   tasks: readonly MaintenanceTask[];
-  diagnostics?: Pick<InboxDiagnostics, "log">;
+  diagnostics?: Diagnostics;
 }) => ({
   async GET(request: Request) {
     const headers = { "cache-control": "no-store" };
@@ -19,8 +19,10 @@ export const createDailyCronRoute = ({
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
       return new Response(null, { status: 401, headers });
     }
-    return runMaintenanceTasks(tasks, (errorClass) =>
-      diagnostics?.log({ kind: "daily_task_failed", errorClass }),
+    // Vercel does not retry a failed cron, so every failed task alerts: a
+    // Tenant deletion or inbox pruning that stops must not go unnoticed.
+    return runMaintenanceTasks(tasks, (error, operation) =>
+      reportError(diagnostics, "daily_task_failed", error, { operation }),
     );
   },
 });

@@ -1,6 +1,7 @@
 import { expect, onTestFinished, test } from "bun:test";
 import { inboxEvent } from "@/db/schema";
 import { createWebhookInbox, pruneInboxEvents } from "@/modules/webhook-inbox";
+import { createDiagnostics } from "@/platform/sentry";
 import { createDailyCronRoute } from "@/server/daily-cron";
 import { createTestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
@@ -112,4 +113,53 @@ test("cron fails closed without a secret and continues independent daily tasks a
       { name: "next", ok: true },
     ],
   });
+});
+
+test("a failed daily task produces a scrubbed Sentry event naming the task", async () => {
+  const envelopes: unknown[] = [];
+  const logs: unknown[] = [];
+  const diagnostics = createDiagnostics({
+    dsn: "https://publickey@o123.ingest.us.sentry.io/456",
+    writeLog: (entry) => logs.push(entry),
+    transport: () => ({
+      send: async (envelope) => {
+        envelopes.push(envelope);
+        return { statusCode: 200 };
+      },
+      flush: async () => true,
+    }),
+  });
+  const route = createDailyCronRoute({
+    secret: "cron-secret",
+    diagnostics,
+    tasks: [
+      {
+        name: "delete-canceled-tenants",
+        run: async () => {
+          throw new TypeError("Could not delete Maria Souza 5511988887777");
+        },
+      },
+    ],
+  });
+  const response = await route.GET(
+    new Request("https://bots.example.com/api/cron/daily", {
+      headers: { authorization: "Bearer cron-secret" },
+    }),
+  );
+  expect(response.status).toBe(500);
+  expect(envelopes).toHaveLength(1);
+  const serialized = JSON.stringify(envelopes);
+  for (const expected of ["daily_task_failed", "delete-canceled-tenants", "TypeError"])
+    expect(serialized).toContain(expected);
+  // Code locations reach Sentry as a stack trace; the message never does.
+  expect(serialized).toContain('"filename":"test/server/daily-cron.test.ts"');
+  for (const secret of ["Maria", "5511988887777", "Could not delete"])
+    expect(serialized).not.toContain(secret);
+  expect(logs).toEqual([
+    expect.objectContaining({
+      kind: "daily_task_failed",
+      errorClass: "TypeError",
+      operation: "delete-canceled-tenants",
+    }),
+  ]);
 });

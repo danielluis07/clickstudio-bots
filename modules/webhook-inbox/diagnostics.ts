@@ -1,6 +1,3 @@
-import type { Diagnostic } from "@/platform/diagnostics";
+import type { Diagnostics } from "@/platform/diagnostics";
 
-export interface InboxDiagnostics {
-  log(entry: Diagnostic): void;
-  alert(entry: Diagnostic): Promise<void>;
-}
+export type InboxDiagnostics = Diagnostics;

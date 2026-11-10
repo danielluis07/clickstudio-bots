@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { LiveBot } from "@/modules/bot";
+import { reportError, type Diagnostics } from "@/platform/diagnostics";
 
 const jobSchema = z.strictObject({ conversationId: z.string().min(1).max(64) });
 
@@ -11,9 +12,11 @@ export const createBotJobRoute = (
       verify(input: { signature: string | null; body: string; url: string }): Promise<boolean>;
     };
   } | null,
+  diagnostics?: Diagnostics,
 ) => ({
   async POST(request: Request) {
     if (!config) return new Response(null, { status: 503 });
+    let conversationId: string | undefined;
     try {
       const body = await request.text();
       if (
@@ -28,16 +31,20 @@ export const createBotJobRoute = (
       try {
         input = JSON.parse(body);
       } catch {
+        // A malformed job is refused, not a failure.
         return new Response(null, { status: 400 });
       }
       const parsed = jobSchema.safeParse(input);
       if (!parsed.success) return new Response(null, { status: 400 });
-      const result = await config.bot.run(parsed.data.conversationId);
+      conversationId = parsed.data.conversationId;
+      const result = await config.bot.run(conversationId);
       // A crashed holder's lease needs time to expire; acknowledge only after
       // a worker actually acquires it, so QStash retries contention.
       return new Response(null, { status: result === "busy" ? 503 : 200 });
-    } catch {
-      console.error("Bot turn job failed");
+    } catch (error) {
+      // The Bot's expected failures (Model, Meta) settle inside the turn; one
+      // that reaches the job is unexpected. The Tenant id comes with the error.
+      await reportError(diagnostics, "bot_job_failed", error, { conversationId });
       return new Response(null, { status: 500 });
     }
   },

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { logError } from "@/platform/diagnostics";
 import { env } from "@/platform/env";
 import { createWhatsAppAdapter } from "@/platform/whatsapp";
 
@@ -19,13 +20,21 @@ export const getWhatsAppSignupConfig = () => {
   };
 };
 
+// Callers treat a throw as "WhatsApp unavailable" and discard it. Missing
+// configuration is expected locally; configuration that is present but
+// invalid (malformed keys) is recorded, or every send would fail unseen.
 export const createWhatsAppGateway = () => {
   if (!getWhatsAppSignupConfig()) throw new Error("WhatsApp is not configured");
-  return createWhatsAppAdapter({
-    appId: env.META_APP_ID!,
-    appSecret: env.META_APP_SECRET!,
-    graphVersion: env.META_GRAPH_API_VERSION,
-    activeKeyVersion: env.WHATSAPP_TOKEN_KEY_VERSION!,
-    encryptionKeys: z.record(z.string(), z.string()).parse(JSON.parse(env.WHATSAPP_TOKEN_KEYS!)),
-  });
+  try {
+    return createWhatsAppAdapter({
+      appId: env.META_APP_ID!,
+      appSecret: env.META_APP_SECRET!,
+      graphVersion: env.META_GRAPH_API_VERSION,
+      activeKeyVersion: env.WHATSAPP_TOKEN_KEY_VERSION!,
+      encryptionKeys: z.record(z.string(), z.string()).parse(JSON.parse(env.WHATSAPP_TOKEN_KEYS!)),
+    });
+  } catch (error) {
+    logError("whatsapp_configuration_invalid", error);
+    throw error;
+  }
 };

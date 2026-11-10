@@ -6,7 +6,8 @@ import { createTestClock } from "@/test/support/clock";
 
 export const seedLiveBot = async (db: Database) => {
   const suffix = crypto.randomUUID();
-  const tenantId = `tenant-${suffix}`;
+  // A UUID, as onboarding creates them, so diagnostics keep it.
+  const tenantId = crypto.randomUUID();
   const userId = `owner-${suffix}`;
   await db.insert(user).values({ id: userId, name: "Owner", email: `${suffix}@example.com` });
   await db.insert(organization).values({ id: tenantId, name: "Barbearia", slug: suffix });
