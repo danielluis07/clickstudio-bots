@@ -1,7 +1,9 @@
 import type { Database } from "@/db/database";
 import {
+  recordAccountUpdate,
   recordHistoryDeclined,
   resolveChannelPhoneNumber,
+  resolveChannelWaba,
   type ChannelRoute,
 } from "@/modules/channels";
 import {
@@ -13,12 +15,14 @@ import {
   recordMessageStatus,
 } from "@/modules/conversations";
 import {
+  readAccountUpdate,
   readAppContact,
   readHistory,
   readInboundMessage,
   readMessageChange,
   readMessageEcho,
   readMessageStatus,
+  readWabaId,
   splitDelivery,
 } from "@/modules/webhook-inbox/deliveries";
 import type { JobQueue } from "@/modules/webhook-inbox/job-queue";
@@ -80,16 +84,21 @@ export const createWebhookInbox = ({
       );
   };
 
-  // Records what the event carries under the route's Tenant; null when it
-  // carries nothing the platform handles yet.
+  // Records what the event carries under the route's Tenant; "known_event"
+  // when Meta documents it but it changes nothing, and null when it carries
+  // nothing the platform handles yet.
   const recordEvent = async (
     route: ChannelRoute,
     payload: unknown,
     receivedAt: Date,
-  ): Promise<{
-    conversationId?: string | null;
-    contactId?: string | null;
-  } | null> => {
+  ): Promise<
+    | {
+        conversationId?: string | null;
+        contactId?: string | null;
+      }
+    | "known_event"
+    | null
+  > => {
     const inbound = readInboundMessage(payload);
     if (inbound)
       return {
@@ -118,7 +127,27 @@ export const createWebhookInbox = ({
     const appContact = readAppContact(payload);
     if (appContact)
       return { contactId: await recordAppContact(db, route, { ...appContact, receivedAt }) };
+    // Whether the Channel can still send (#145). Never a reason for a Bot
+    // turn or an inbox ping; the Painel reads the Channel's health.
+    const accountUpdate = readAccountUpdate(payload);
+    if (accountUpdate === "known") return "known_event";
+    if (accountUpdate) {
+      await recordAccountUpdate(db, route, accountUpdate, clock.now());
+      return {};
+    }
     return null;
+  };
+
+  // Events about a whole WABA, such as `account_update`, carry no phone
+  // number id; their signed entry id names the WABA instead.
+  const resolveRoute = (event: {
+    field: string;
+    phoneNumberId: string | null;
+    payload: unknown;
+  }) => {
+    if (event.phoneNumberId) return resolveChannelPhoneNumber(db, event.phoneNumberId);
+    const wabaId = event.field === "account_update" ? readWabaId(event.payload) : null;
+    return wabaId ? resolveChannelWaba(db, wabaId) : null;
   };
 
   // Replays share the exact same writes and Channel-derived Tenant route.
@@ -133,15 +162,13 @@ export const createWebhookInbox = ({
     let tenantId: string | undefined;
     let conversationId: string | undefined;
     try {
-      const route = event.phoneNumberId
-        ? await resolveChannelPhoneNumber(db, event.phoneNumberId)
-        : null;
+      const route = await resolveRoute(event);
       tenantId = route?.tenantId;
       const recorded = route && (await recordEvent(route, event.payload, event.receivedAt));
-      if (!recorded) {
+      if (!recorded || recorded === "known_event") {
         await repository.settle(inboxEventId, clock.now(), {
           status: "ignored",
-          ignoredReason: route ? "unsupported_event" : "unknown_channel",
+          ignoredReason: recorded || (route ? "unsupported_event" : "unknown_channel"),
         });
         return { ok: true as const, status: "ignored" as const };
       }

@@ -23,7 +23,11 @@ export const inboxEvent = pgTable(
     // an administrator's bulk replay, put it back on the queue (#135).
     autoRetries: integer("auto_retries").notNull().default(0),
     retriedAt: timestamp("retried_at", { withTimezone: true }),
-    ignoredReason: text("ignored_reason", { enum: ["unknown_channel", "unsupported_event"] }),
+    // `known_event`: an event Meta documents that never changes what the
+    // platform does, such as most `account_update` events.
+    ignoredReason: text("ignored_reason", {
+      enum: ["unknown_channel", "unsupported_event", "known_event"],
+    }),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
     processedAt: timestamp("processed_at", { withTimezone: true }),
   },

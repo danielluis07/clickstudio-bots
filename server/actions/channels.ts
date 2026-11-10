@@ -14,6 +14,8 @@ const connectErrors = {
     "O Canal já está conectado. Atualize a página ou entre em contato com o suporte.",
   signup_failed:
     "Não foi possível concluir a conexão com a Meta. Verifique as permissões e tente novamente.",
+  different_number:
+    "Selecione na Meta o mesmo número de WhatsApp Business que estava conectado. Para trocar de número, entre em contato com o suporte.",
 } as const;
 
 export async function connectWhatsAppAction(input: ChannelSignup): Promise<FormState> {
@@ -21,7 +23,12 @@ export async function connectWhatsAppAction(input: ChannelSignup): Promise<FormS
   const result = await channelService.connect(scope, input);
   if (!result.ok) return { status: "error", message: connectErrors[result.error] };
   refresh();
-  return { status: "success", message: "Canal conectado. O Bot continua desligado." };
+  return {
+    status: "success",
+    message: result.reconnected
+      ? "Canal reconectado. O Bot volta a responder se estiver ligado."
+      : "Canal conectado. O Bot continua desligado.",
+  };
 }
 
 export async function retryWhatsAppSubscriptionAction(): Promise<FormState> {

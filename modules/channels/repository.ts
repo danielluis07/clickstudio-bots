@@ -16,11 +16,13 @@ const channelSummary = {
   subscriptionAttemptedAt: channel.subscriptionAttemptedAt,
   subscriptionError: channel.subscriptionError,
   historySync: channel.historySync,
+  health: channel.health,
+  restrictedUntil: channel.restrictedUntil,
   createdAt: channel.createdAt,
 };
 
 type AppSync = "contactsSync" | "historySync";
-const activeTenant = sql`exists(select 1 from ${organization} where ${organization.id} = ${channel.tenantId} and ${organization.canceledAt} is null)`;
+export const activeTenant = sql`exists(select 1 from ${organization} where ${organization.id} = ${channel.tenantId} and ${organization.canceledAt} is null)`;
 
 export const createChannelRepository = (db: Database, scope: TenantScope) => ({
   async getChannel() {
@@ -181,8 +183,8 @@ export const findChannelCredential = async (
 declare const channelRouteBrand: unique symbol;
 
 // Proof that a signed Meta event addressed this Channel. Only
-// resolveChannelPhoneNumber can create one, so inbound data is never filed
-// under a Tenant id taken from anywhere else.
+// resolveChannelPhoneNumber and resolveChannelWaba can create one, so inbound
+// data is never filed under a Tenant id taken from anywhere else.
 export type ChannelRoute = {
   readonly channelId: string;
   readonly tenantId: string;
@@ -200,6 +202,22 @@ export const resolveChannelPhoneNumber = async (
     .from(channel)
     .innerJoin(organization, eq(organization.id, channel.tenantId))
     .where(and(eq(channel.phoneNumberId, phoneNumberId), isNull(organization.canceledAt)))
+    .limit(1);
+  return found ? (found as ChannelRoute) : null;
+};
+
+// The same proof for an event about the whole WhatsApp Business Account, such
+// as `account_update`, which names the WABA (the entry id) and no phone
+// number id. Each WABA belongs to at most one Channel.
+export const resolveChannelWaba = async (
+  db: Database,
+  wabaId: string,
+): Promise<ChannelRoute | null> => {
+  const [found] = await db
+    .select({ channelId: channel.id, tenantId: channel.tenantId })
+    .from(channel)
+    .innerJoin(organization, eq(organization.id, channel.tenantId))
+    .where(and(eq(channel.wabaId, wabaId), isNull(organization.canceledAt)))
     .limit(1);
   return found ? (found as ChannelRoute) : null;
 };

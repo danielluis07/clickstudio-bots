@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { Database } from "@/db/database";
+import type { ChannelHealth } from "@/db/schema";
+import { reconnectableHealth, reconnectChannel } from "@/modules/channels/health";
 import { createChannelRepository, resolveChannelPhoneNumber } from "@/modules/channels/repository";
 import type { WhatsAppGateway } from "@/modules/channels/whatsapp-gateway";
 import type { TenantScope } from "@/modules/tenancy";
@@ -18,6 +20,9 @@ const signupSchema = z.object({
 export type ChannelSignup = z.input<typeof signupSchema>;
 // Meta accepts the contacts and history requests within 24 hours of onboarding.
 const syncWindowMs = 24 * 60 * 60 * 1000;
+
+const isReconnectable = (health: ChannelHealth) =>
+  (reconnectableHealth as readonly ChannelHealth[]).includes(health);
 
 const appSyncs = [
   // Meta's order: contacts first, then history.
@@ -93,6 +98,8 @@ export const createChannelService = ({
     const windowClosed = createdAt <= syncWindowOpenedAfter();
     return {
       ...summary,
+      // The owner may run the signup again for this same number.
+      canReconnect: isReconnectable(summary.health),
       // Shown as "Histórico não importado": refused, declined or never requested in time.
       historyNotImported:
         historySync === "failed" ||
@@ -111,12 +118,33 @@ export const createChannelService = ({
       const parsed = signupSchema.safeParse(input);
       if (!parsed.success) return { ok: false as const, error: "invalid" as const };
       const repository = createChannelRepository(db, scope);
-      if (await repository.getChannel())
+      const existing = await repository.getChannel();
+      if (existing && !isReconnectable(existing.health))
         return { ok: false as const, error: "already_connected" as const };
       const exchanged = await Promise.resolve()
         .then(() => getWhatsApp().exchangeSignup({ ...parsed.data, tenantId: scope.tenantId }))
         .catch(() => null);
       if (!exchanged) return { ok: false as const, error: "signup_failed" as const };
+      if (existing) {
+        // Reconnecting keeps the Channel, its Conversations and history, so
+        // it must be the same number in the same WABA. The new credential is
+        // bound to them, as the first one was.
+        if (
+          parsed.data.wabaId !== existing.wabaId ||
+          exchanged.phoneNumberId !== existing.phoneNumberId
+        )
+          return { ok: false as const, error: "different_number" as const };
+        if (
+          !(await reconnectChannel(db, scope, {
+            credential: exchanged.credential,
+            at: clock.now(),
+          }))
+        )
+          return { ok: false as const, error: "already_connected" as const };
+        // Meta drops the app's subscription when the partner is removed.
+        await subscribe(scope);
+        return { ok: true as const, reconnected: true };
+      }
       // Unique constraints decide races without holding a transaction over Meta.
       const inserted = await repository.insert({
         ...exchanged,
@@ -126,7 +154,7 @@ export const createChannelService = ({
       });
       if (!inserted) return { ok: false as const, error: "channel_conflict" as const };
       await subscribe(scope);
-      return { ok: true as const };
+      return { ok: true as const, reconnected: false };
     },
     async retrySubscription(scope: TenantScope) {
       if (scope.role !== "owner") return { ok: false as const, error: "forbidden" as const };

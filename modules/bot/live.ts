@@ -7,7 +7,7 @@ import { createBotCore, type TurnTokens } from "@/modules/bot/turn";
 import { createReplyGate, type BotAllowance, type ReplyDecision } from "@/modules/bot/reply-gate";
 import type { Model } from "@/modules/bot/model";
 import { recordBotTurn, type BotTurnRecord } from "@/modules/bot/turn-records";
-import type { ChannelRoute } from "@/modules/channels";
+import { recordCredentialRejected, type ChannelRoute } from "@/modules/channels";
 import {
   hasUnansweredContactMessages,
   listStrandedBotConversations,
@@ -22,6 +22,7 @@ import type { Clock } from "@/platform/clock";
 import { annotateError, logError } from "@/platform/diagnostics";
 import type { Notifier } from "@/platform/notifier";
 import { RetryableError } from "@/platform/retryable";
+import { CredentialRejectedError } from "@/platform/whatsapp-credentials";
 
 export type BotJob = { type: "run-bot-turn"; conversationId: string; delaySeconds?: number };
 export interface BotJobQueue {
@@ -114,12 +115,27 @@ export const createLiveBot = ({
   };
 
   // Null when the send failed: Meta refused it on every try, or may have
-  // received it. Only a refusal is retried, with the same pending reply.
-  const send = async (sender: WhatsAppSender, input: Parameters<WhatsAppSender["sendText"]>[0]) => {
+  // received it. Only a refusal is retried, with the same pending reply. A
+  // rejected credential marks the Channel unhealthy, which stops new turns.
+  const send = async (
+    scope: ChannelRoute,
+    sender: WhatsAppSender,
+    input: Parameters<WhatsAppSender["sendText"]>[0],
+  ) => {
     for (const delay of [...sendRetryDelaysMs, null]) {
       try {
         return await sender.sendText(input);
       } catch (error) {
+        if (error instanceof CredentialRejectedError) {
+          // Best effort: the turn still fails its reply and hands off.
+          await recordCredentialRejected(db, scope, scope.channelId, clock.now()).catch(
+            (recordError: unknown) =>
+              logError("channel_health_record_failed", recordError, {
+                tenantId: scope.tenantId,
+              }),
+          );
+          return null;
+        }
         if (delay === null || !(error instanceof RetryableError)) return null;
         await sleep(delay);
       }
@@ -183,7 +199,7 @@ export const createLiveBot = ({
     if (!messageId) return { result: "skipped", tokens };
     // A pending row is the durable send barrier. Never retry a send that may
     // have reached Meta; a later turn fails a pending reply without a wamid.
-    const sent = await send(sender, { ...turn.recipient, text: outcome.reply });
+    const sent = await send(scope, sender, { ...turn.recipient, text: outcome.reply });
     if (!sent) {
       await turn.fail();
       // A Model-requested Handoff, already stored, keeps its reason.

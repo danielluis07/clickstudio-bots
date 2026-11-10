@@ -64,3 +64,11 @@ export const createWhatsAppTokenCipher = (
     },
   };
 };
+
+// Meta refused a call because the Channel's credential no longer grants
+// access: the token expired or was revoked, or a permission was removed (#145).
+// The call had no effect, and none succeeds until the owner reconnects.
+// Adapters throw it with the vendor error as its `cause`.
+export class CredentialRejectedError extends Error {
+  override name = "CredentialRejectedError";
+}

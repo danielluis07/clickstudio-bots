@@ -7,7 +7,14 @@ import { FormMessage } from "@/components/forms/form-message";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
-export function ConnectWhatsAppButton({ config }: { config: EmbeddedSignupConfig }) {
+export function ConnectWhatsAppButton({
+  config,
+  reconnect = false,
+}: {
+  config: EmbeddedSignupConfig;
+  // The same signup, run again for a Channel Meta stopped serving.
+  reconnect?: boolean;
+}) {
   const signup = useEmbeddedSignup(config, connectWhatsAppAction);
   return (
     <div className="flex flex-col items-start gap-3">
@@ -20,9 +27,13 @@ export function ConnectWhatsAppButton({ config }: { config: EmbeddedSignupConfig
       <Button type="button" onClick={signup.launch} disabled={!signup.ready || signup.busy}>
         {signup.busy && <Spinner data-icon="inline-start" />}
         {signup.busy
-          ? "Conectando…"
+          ? reconnect
+            ? "Reconectando…"
+            : "Conectando…"
           : signup.ready
-            ? "Conectar WhatsApp Business"
+            ? reconnect
+              ? "Reconectar WhatsApp Business"
+              : "Conectar WhatsApp Business"
             : "Carregando conexão…"}
       </Button>
       <FormMessage state={signup.state} />

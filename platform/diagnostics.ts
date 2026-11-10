@@ -26,6 +26,7 @@ export const errorClasses = [
   "TRPCError",
   "WhatsAppRequestError",
   "RetryableError",
+  "CredentialRejectedError",
   "AI_APICallError",
   "AI_RetryError",
   "AI_NoOutputGeneratedError",
@@ -60,6 +61,8 @@ export const diagnosticKinds = [
   "bot_turn_record_failed",
   "bot_handoff_spike",
   "inbox_queue_stale",
+  "channel_unhealthy",
+  "channel_health_record_failed",
   "meta_request_failed",
   "whatsapp_configuration_invalid",
   "email_send_failed",
@@ -76,6 +79,7 @@ export type DiagnosticKind = (typeof diagnosticKinds)[number];
 export const conditionKinds = [
   "bot_handoff_spike",
   "inbox_queue_stale",
+  "channel_unhealthy",
 ] as const satisfies readonly DiagnosticKind[];
 
 export type Diagnostic = {
@@ -93,7 +97,8 @@ export type Diagnostic = {
   fbtraceId?: string;
   providerStatus?: number;
   providerRequestId?: string;
-  // A code-defined name: the tRPC path, maintenance task or Meta call.
+  // A code-defined name: the tRPC path, maintenance task, Meta call or the
+  // Channel health an unhealthy Channel reached.
   operation?: string;
   inboxEventId?: string;
   tenantId?: string;

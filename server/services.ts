@@ -9,7 +9,7 @@ import {
   pruneCanceledTenants,
 } from "@/modules/tenancy";
 import { createResendMailer } from "@/platform/resend-mailer";
-import { createChannelService } from "@/modules/channels";
+import { createChannelService, sweepChannelHealth } from "@/modules/channels";
 import {
   createContactDeletion,
   createConversationRepository,
@@ -216,6 +216,10 @@ export const sweepRoute = createSweepRoute({
     {
       name: "alert-bot-handoff-spikes",
       run: () => alertBotHandoffSpikes({ db, clock: systemClock, diagnostics }),
+    },
+    {
+      name: "check-channel-health",
+      run: () => sweepChannelHealth({ db, clock: systemClock, diagnostics }),
     },
   ],
 });

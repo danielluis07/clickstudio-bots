@@ -1,11 +1,13 @@
 import { z } from "zod";
 import type { Database } from "@/db/database";
-import { findChannelCredential } from "@/modules/channels";
+import { findChannelCredential, recordCredentialRejected } from "@/modules/channels";
 import { createConversationRepository } from "@/modules/conversations/repository";
 import type { WhatsAppSender } from "@/modules/conversations/whatsapp-sender";
 import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
+import { logError } from "@/platform/diagnostics";
 import { notifyInbox, type Notifier } from "@/platform/notifier";
+import { CredentialRejectedError } from "@/platform/whatsapp-credentials";
 
 // WhatsApp's limit for a text message body.
 const replySchema = z.object({
@@ -61,7 +63,16 @@ export const createReplyService = ({
           text,
         }),
       )
-      .catch(() => null);
+      .catch(async (error: unknown) => {
+        if (error instanceof CredentialRejectedError)
+          await recordCredentialRejected(db, scope, channel.channelId, clock.now()).catch(
+            (recordError: unknown) =>
+              logError("channel_health_record_failed", recordError, {
+                tenantId: scope.tenantId,
+              }),
+          );
+        return null;
+      });
     await repository.recordReplySent(id, sent);
     await notifyInbox(notifier, scope.tenantId, { conversationId });
     return sent ? { ok: true as const } : { ok: false as const, error: "send_failed" as const };

@@ -121,6 +121,7 @@ export const createInboxRepository = (db: Database) => ({
     const [found] = await db
       .select({
         status: inboxEvent.status,
+        field: inboxEvent.field,
         phoneNumberId: inboxEvent.phoneNumberId,
         payload: inboxEvent.payload,
         receivedAt: inboxEvent.receivedAt,

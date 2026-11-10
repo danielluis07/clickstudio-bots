@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   createWhatsAppTokenCipher,
+  CredentialRejectedError,
   type EncryptedWhatsAppToken,
   type WhatsAppCredentialContext,
 } from "@/platform/whatsapp-credentials";
@@ -73,6 +74,17 @@ const isRetryableSend = (error: unknown) =>
   (error.httpStatus === 429 ||
     (error.metaCode !== undefined &&
       ((error.httpStatus ?? 0) >= 500 || transientMetaCodes.has(error.metaCode))));
+
+// Meta's codes for a credential that no longer grants access: an
+// authentication failure (0), an invalid, expired or revoked token (190, and
+// 102 for a session), and a permission removed from the app (10, 200-299,
+// and WhatsApp's 131005). Retrying does not help; the owner must reconnect.
+const credentialMetaCodes = new Set([0, 10, 102, 190, 131005]);
+
+export const isCredentialRejected = (error: unknown) =>
+  error instanceof WhatsAppRequestError &&
+  error.metaCode !== undefined &&
+  (credentialMetaCodes.has(error.metaCode) || (error.metaCode >= 200 && error.metaCode <= 299));
 
 // Every failed call is recorded here, as an expected failure that does not
 // alert, so callers may answer "unavailable" and discard the error.
@@ -271,6 +283,8 @@ export const createWhatsAppAdapter = (options: Options) => {
         return { wamid: sent.id };
       } catch (error) {
         recordFailure("sendText", error, input);
+        if (isCredentialRejected(error))
+          throw new CredentialRejectedError("WhatsApp credential rejected", { cause: error });
         if (isRetryableSend(error))
           throw new RetryableError("WhatsApp send refused", { cause: error });
         throw new Error("WhatsApp send failed", { cause: error });

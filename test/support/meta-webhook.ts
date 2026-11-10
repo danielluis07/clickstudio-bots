@@ -193,6 +193,14 @@ export const messageEchoChange = ({
 export const metaDelivery = (...changes: { field: string; value: unknown }[]) =>
   JSON.stringify({ object: "whatsapp_business_account", entry: [{ id: "200", changes }] });
 
+// A change to a whole WhatsApp Business Account. It names the WABA (the entry
+// id) and no phone number id.
+export const accountUpdateDelivery = (wabaId: string, value: Record<string, unknown>) =>
+  JSON.stringify({
+    object: "whatsapp_business_account",
+    entry: [{ id: wabaId, time: 1792497600, changes: [{ field: "account_update", value }] }],
+  });
+
 type HistoryMessage = {
   wamid: string;
   // The Contact's wa_id for their messages, the business number otherwise.

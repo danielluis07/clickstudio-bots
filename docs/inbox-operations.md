@@ -239,9 +239,14 @@ verifies the QStash signature against its own URL and returns 401 otherwise, or
    three **Bot indisponível** Handoffs, at least 20% of its turns that were not
    skipped, and at least twice its rate over the six days before. A Tenant with
    no earlier turns is judged on the first two conditions.
+8. Makes `restricted` Channels whose restriction has ended healthy, then
+   alerts `channel_unhealthy` once for each Channel that reached a new
+   [health](whatsapp-setup.md#channel-health), with the Tenant and the state
+   as `operation`. For `credential_rejected` and `removed`, ask the owner to
+   reconnect; for `banned` and `restricted`, the owner appeals to Meta.
 
-Both alerts repeat on every sweep while the condition holds; Sentry groups them
-into one issue per kind (and Tenant), so its issue alert fires once.
+The first two alerts repeat on every sweep while the condition holds; Sentry
+groups them into one issue per kind (and Tenant), so its issue alert fires once.
 
 Each task has its own failure boundary, as in the daily endpoint. A failed task
 logs `sweep_task_failed` with its error class only. Running the sweep again

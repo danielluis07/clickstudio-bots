@@ -16,7 +16,9 @@ import { getWhatsAppSignupConfig } from "@/server/whatsapp";
 export async function WhatsAppChannel({ scope }: { scope: TenantScope }) {
   const channel = await channelService.getChannel(scope);
   const isOwner = scope.role === "owner";
-  const config = isOwner && !channel ? getWhatsAppSignupConfig() : null;
+  // The owner connects a new Channel, or reconnects one Meta stopped serving.
+  const canConnect = isOwner && (!channel || channel.canReconnect);
+  const config = canConnect ? getWhatsAppSignupConfig() : null;
   return (
     <Card>
       <CardHeader>
@@ -34,10 +36,10 @@ export async function WhatsAppChannel({ scope }: { scope: TenantScope }) {
           </p>
         )}
       </CardContent>
-      {!channel && isOwner && (
+      {canConnect && (
         <CardFooter>
           {config ? (
-            <ConnectWhatsAppButton config={config} />
+            <ConnectWhatsAppButton config={config} reconnect={Boolean(channel)} />
           ) : (
             <p className="text-sm text-muted-foreground">
               A conexão com o WhatsApp ainda não está disponível. Entre em contato com o suporte.
