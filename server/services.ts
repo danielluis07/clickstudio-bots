@@ -43,7 +43,7 @@ import { createDailyCronRoute } from "@/server/daily-cron";
 import { createBotJobRoute } from "@/server/bot-jobs";
 import { createSweepRoute } from "@/server/sweep";
 
-const diagnostics = createDiagnostics({ dsn: env.SENTRY_DSN });
+export const diagnostics = createDiagnostics({ dsn: env.SENTRY_DSN });
 
 export const realtime = env.ABLY_API_KEY ? createAblyRealtime({ apiKey: env.ABLY_API_KEY }) : null;
 // Messaging continues when realtime has not been configured locally.
@@ -146,6 +146,7 @@ export const webhookInbox =
 export const whatsAppWebhookRoute = createWhatsAppWebhookRoute({
   inbox: webhookInbox,
   verifyToken: env.META_WEBHOOK_VERIFY_TOKEN ?? null,
+  diagnostics,
 });
 
 export const inboxJobRoute = createInboxJobRoute(
@@ -174,6 +175,7 @@ export const inboxFailureRoute = createInboxFailureRoute(
         sourceUrl: qstashJobUrl(env.APP_URL, "process-inbox-event"),
       }
     : null,
+  diagnostics,
 );
 
 export const dailyCronRoute = createDailyCronRoute({
@@ -218,4 +220,5 @@ export const botJobRoute = createBotJobRoute(
         }),
       }
     : null,
+  diagnostics,
 );

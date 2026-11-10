@@ -1,12 +1,10 @@
-import { classifyError, type ErrorClass } from "@/platform/diagnostics";
-
 export type MaintenanceTask = { name: string; run(): Promise<unknown> };
 
-// Runs independent tasks in order: one failure must not stop the next, and
-// errors reach `onFailure` only as their class, never their content.
+// Runs independent tasks in order: one failure must not stop the next.
+// `onFailure` records each failure (scrubbed) before the response is sent.
 export const runMaintenanceTasks = async (
   tasks: readonly MaintenanceTask[],
-  onFailure: (errorClass: ErrorClass) => void,
+  onFailure: (error: unknown, task: string) => Promise<void> | void,
 ) => {
   const results: { name: string; ok: boolean }[] = [];
   for (const task of tasks) {
@@ -14,7 +12,7 @@ export const runMaintenanceTasks = async (
       await task.run();
       results.push({ name: task.name, ok: true });
     } catch (error) {
-      onFailure(classifyError(error));
+      await onFailure(error, task.name);
       results.push({ name: task.name, ok: false });
     }
   }

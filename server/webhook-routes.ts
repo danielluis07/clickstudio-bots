@@ -4,7 +4,7 @@ import {
   type InboxDiagnostics,
   type WebhookInbox,
 } from "@/modules/webhook-inbox";
-import { classifyError } from "@/platform/diagnostics";
+import { logError, reportError } from "@/platform/diagnostics";
 
 type JobVerifier = {
   verify(request: { signature: string | null; body: string; url: string }): Promise<boolean>;
@@ -18,15 +18,18 @@ const receiveStatus = {
   enqueue_failed: 500,
 } as const;
 
-// Request adapters only. Failures are logged without detail: database errors
-// can echo event content, and logs must never carry message text or phones.
-// Each half works without the other: Meta's handshake needs only the token.
+// Request adapters only. Failures are recorded as scrubbed Diagnostics:
+// database errors can echo event content, and logs must never carry message
+// text or phones. Each half works without the other: Meta's handshake needs
+// only the token.
 export const createWhatsAppWebhookRoute = ({
   inbox,
   verifyToken,
+  diagnostics,
 }: {
   inbox: WebhookInbox | null;
   verifyToken: string | null;
+  diagnostics?: InboxDiagnostics;
 }) => ({
   GET(request: Request) {
     const params = new URL(request.url).searchParams;
@@ -54,8 +57,9 @@ export const createWhatsAppWebhookRoute = ({
       });
       // Anything but 200 makes Meta redeliver, which recovers a failed enqueue.
       return empty(result.ok ? 200 : receiveStatus[result.error]);
-    } catch {
-      console.error("WhatsApp webhook delivery could not be stored");
+    } catch (error) {
+      // Meta redelivers, but a delivery that cannot be stored is unexpected.
+      await reportError(diagnostics, "webhook_receive_failed", error);
       return empty(500);
     }
   },
@@ -66,6 +70,7 @@ const parseJson = (body: string): unknown => {
   try {
     return JSON.parse(body);
   } catch {
+    // Malformed input is the caller's 400, not a failure.
     return null;
   }
 };
@@ -88,12 +93,9 @@ export const createInboxJobRoute = (
       await config.inbox.process(inboxEventId);
       return empty(200);
     } catch (error) {
-      // QStash retries the job; repeated failures reach its dead-letter queue.
-      diagnostics?.log({
-        kind: "inbox_processing_failed",
-        inboxEventId,
-        errorClass: classifyError(error),
-      });
+      // QStash retries the job and the sweep replays it; only the dead letter
+      // alerts, so each attempt is logged without a Sentry event.
+      logError("inbox_processing_failed", error, { inboxEventId }, diagnostics?.log);
       return empty(500);
     }
   },
@@ -108,6 +110,7 @@ const failureSchema = z.object({
 
 export const createInboxFailureRoute = (
   config: { inbox: WebhookInbox; verifier: JobVerifier; url: string; sourceUrl: string } | null,
+  diagnostics?: InboxDiagnostics,
 ) => ({
   async POST(request: Request) {
     if (!config) return empty(503);
@@ -131,7 +134,9 @@ export const createInboxFailureRoute = (
       // is needed. Duplicate callbacks and already-settled events are no-ops.
       await config.inbox.fail(job.data.inboxEventId, callback.data.sourceMessageId);
       return empty(200);
-    } catch {
+    } catch (error) {
+      // The dead letter's own alert path failed; QStash retries the callback.
+      await reportError(diagnostics, "inbox_failure_callback_failed", error);
       return empty(500);
     }
   },

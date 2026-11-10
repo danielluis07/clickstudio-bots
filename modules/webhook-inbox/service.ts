@@ -25,7 +25,7 @@ import type { JobQueue } from "@/modules/webhook-inbox/job-queue";
 import { createInboxRepository } from "@/modules/webhook-inbox/repository";
 import { isValidDeliverySignature } from "@/modules/webhook-inbox/signature";
 import { isPlatformAdmin } from "@/modules/identity";
-import { classifyError } from "@/platform/diagnostics";
+import { annotateError, classifyError, logError } from "@/platform/diagnostics";
 import type { InboxDiagnostics } from "@/modules/webhook-inbox/diagnostics";
 import type { Clock } from "@/platform/clock";
 import type { Notifier } from "@/platform/notifier";
@@ -156,16 +156,9 @@ export const createWebhookInbox = ({
       await repository.settle(inboxEventId, clock.now(), { status: "processed" });
       return { ok: true as const, status: "processed" as const };
     } catch (error) {
-      const errorClass = classifyError(error);
-      await repository.recordFailure([inboxEventId], errorClass, clock.now());
-      diagnostics?.log({
-        kind: "inbox_processing_failed",
-        errorClass,
-        inboxEventId,
-        tenantId,
-        conversationId,
-      });
-      throw error;
+      await repository.recordFailure([inboxEventId], classifyError(error), clock.now());
+      // The caller records the failure once; these ids travel with it.
+      throw annotateError(error, { inboxEventId, tenantId, conversationId });
     }
   };
 
@@ -178,6 +171,7 @@ export const createWebhookInbox = ({
       try {
         delivery = JSON.parse(body);
       } catch {
+        // A signed but malformed delivery is Meta's 400, not a failure.
         return { ok: false as const, error: "invalid_payload" as const };
       }
       const events = splitDelivery(delivery);
@@ -194,7 +188,9 @@ export const createWebhookInbox = ({
             inboxEventId,
           })),
         );
-      } catch {
+      } catch (error) {
+        // Meta's redelivery recovers it; the record says why the queue refused.
+        logError("inbox_enqueue_failed", error, {}, diagnostics?.log);
         await repository.recordFailure(pendingIds, "QueueError", clock.now());
         return { ok: false as const, error: "enqueue_failed" as const };
       }

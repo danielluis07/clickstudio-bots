@@ -1,3 +1,5 @@
+import { logError } from "@/platform/diagnostics";
+
 // Realtime carries only identifiers. Readers still authorize and refetch
 // through the application; a ping never contains Contact or message data.
 export type InboxPing = { conversationId: string } | { contactId: string };
@@ -11,7 +13,10 @@ export type Notifier = {
 export const notifyInbox = async (notifier: Notifier, tenantId: string, ping: InboxPing) => {
   try {
     await notifier.publish(tenantId, ping);
-  } catch {
-    console.error("Inbox notification failed");
+  } catch (error) {
+    logError("notification_failed", error, {
+      tenantId,
+      conversationId: "conversationId" in ping ? ping.conversationId : undefined,
+    });
   }
 };

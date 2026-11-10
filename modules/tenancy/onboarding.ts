@@ -12,6 +12,7 @@ import {
   invitationUrl,
 } from "@/modules/tenancy/invitations";
 import type { Clock } from "@/platform/clock";
+import { logError } from "@/platform/diagnostics";
 import type { Mailer } from "@/platform/mailer";
 
 type TenantOnboardingDependencies = {
@@ -136,7 +137,11 @@ export const createTenantOnboarding = ({
           }),
         )
         .then(() => true)
-        .catch(() => false);
+        // The administrator is told to resend; the log says why the send failed.
+        .catch((error: unknown) => {
+          logError("email_send_failed", error, { tenantId, operation: "owner-invitation" });
+          return false;
+        });
 
       return {
         ok: true as const,

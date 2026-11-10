@@ -4,6 +4,7 @@ import {
   type EncryptedWhatsAppToken,
   type WhatsAppCredentialContext,
 } from "@/platform/whatsapp-credentials";
+import { logError } from "@/platform/diagnostics";
 
 // Delivery statuses arrive under `messages`; there is no `statuses` field.
 export const whatsAppWebhookFields = [
@@ -30,24 +31,74 @@ const phoneSchema = z.object({
   platform_type: z.string(),
 });
 
+// A failed Graph API call. It keeps only Meta's diagnostic codes: never the
+// vendor body, URL, header, token or a transport error's message.
+export class WhatsAppRequestError extends Error {
+  override name = "WhatsAppRequestError";
+  constructor(
+    readonly httpStatus?: number,
+    readonly metaCode?: number,
+    readonly metaSubcode?: number,
+    readonly fbtraceId?: string,
+    options?: ErrorOptions,
+  ) {
+    super("WhatsApp request failed", options);
+  }
+}
+
+const metaErrorSchema = z.object({
+  error: z.object({
+    code: z.number().int().optional().catch(undefined),
+    error_subcode: z.number().int().optional().catch(undefined),
+    fbtrace_id: z.string().optional().catch(undefined),
+  }),
+});
+
+const readMetaError = async (response: Response) => {
+  // Only the error's codes are kept; the message may echo the request.
+  const parsed = metaErrorSchema.safeParse(await response.json().catch(() => null));
+  return parsed.success ? parsed.data.error : {};
+};
+
+// Every failed call is recorded here, as an expected failure that does not
+// alert, so callers may answer "unavailable" and discard the error.
+// Takes only the Tenant id from the call's input, never the text or phone.
+const recordFailure = (operation: string, error: unknown, { tenantId }: { tenantId?: string }) =>
+  logError("meta_request_failed", error, { tenantId, operation });
+
 export const createWhatsAppAdapter = (options: Options) => {
   const cipher = createWhatsAppTokenCipher(options.activeKeyVersion, options.encryptionKeys);
   const http = options.fetch ?? globalThis.fetch;
   const baseUrl = `https://graph.facebook.com/${options.graphVersion}`;
 
   const request = async (path: string, init: RequestInit): Promise<unknown> => {
+    let response: Response;
     try {
-      const response = await http(`${baseUrl}/${path}`, {
+      response = await http(`${baseUrl}/${path}`, {
         ...init,
         cache: "no-store",
         redirect: "error",
         signal: AbortSignal.timeout(15_000),
       });
-      if (!response.ok) throw new Error();
+    } catch (error) {
+      // The cause's class (TimeoutError, TypeError) is recorded, not its message.
+      throw new WhatsAppRequestError(undefined, undefined, undefined, undefined, { cause: error });
+    }
+    if (!response.ok) {
+      const meta = await readMetaError(response);
+      throw new WhatsAppRequestError(
+        response.status,
+        meta.code,
+        meta.error_subcode,
+        meta.fbtrace_id ?? response.headers.get("x-fb-trace-id") ?? undefined,
+      );
+    }
+    try {
       return await response.json();
-    } catch {
-      // Never propagate a vendor body, URL, header, token or transport error.
-      throw new Error("WhatsApp request failed");
+    } catch (error) {
+      throw new WhatsAppRequestError(response.status, undefined, undefined, undefined, {
+        cause: error,
+      });
     }
   };
 
@@ -92,8 +143,9 @@ export const createWhatsAppAdapter = (options: Options) => {
           displayPhoneNumber: phone.display_phone_number,
           credential: cipher.encrypt(token, context),
         };
-      } catch {
-        throw new Error("WhatsApp signup failed");
+      } catch (error) {
+        recordFailure("exchangeSignup", error, { tenantId: input.tenantId });
+        throw new Error("WhatsApp signup failed", { cause: error });
       }
     },
 
@@ -137,7 +189,8 @@ export const createWhatsAppAdapter = (options: Options) => {
           throw new Error();
         }
         return { ok: true as const };
-      } catch {
+      } catch (error) {
+        recordFailure("subscribe", error, input);
         return { ok: false as const, error: "subscription_failed" as const };
       }
     },
@@ -149,7 +202,8 @@ export const createWhatsAppAdapter = (options: Options) => {
           headers: { Authorization: `Bearer ${cipher.decrypt(input.credential, input)}` },
         });
         return { ok: z.object({ success: z.literal(true) }).safeParse(result).success };
-      } catch {
+      } catch (error) {
+        recordFailure("unsubscribe", error, input);
         return { ok: false };
       }
     },
@@ -171,7 +225,8 @@ export const createWhatsAppAdapter = (options: Options) => {
         });
         // Acceptance only; whether the business shares its history arrives later.
         return { ok: z.object({ request_id: z.string().min(1) }).safeParse(result).success };
-      } catch {
+      } catch (error) {
+        recordFailure("requestAppSync", error, input);
         return { ok: false };
       }
     },
@@ -200,8 +255,9 @@ export const createWhatsAppAdapter = (options: Options) => {
           messages: [sent],
         } = z.object({ messages: z.tuple([z.object({ id: z.string().min(1) })]) }).parse(result);
         return { wamid: sent.id };
-      } catch {
-        throw new Error("WhatsApp send failed");
+      } catch (error) {
+        recordFailure("sendText", error, input);
+        throw new Error("WhatsApp send failed", { cause: error });
       }
     },
   };

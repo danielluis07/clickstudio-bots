@@ -12,6 +12,7 @@ import {
 import { createTenantRepository } from "@/modules/tenancy/repository";
 import type { TenantScope } from "@/modules/tenancy/scope";
 import type { Clock } from "@/platform/clock";
+import { logError } from "@/platform/diagnostics";
 import type { Mailer } from "@/platform/mailer";
 
 // The plan's Member allowance, owner included. Pending invitations that can
@@ -157,7 +158,14 @@ export const createMemberManagement = ({
           }),
         )
         .then(() => true)
-        .catch(() => false);
+        // The Member is told to resend; the log says why the send failed.
+        .catch((error: unknown) => {
+          logError("email_send_failed", error, {
+            tenantId: scope.tenantId,
+            operation: "member-invitation",
+          });
+          return false;
+        });
 
       return {
         ok: true as const,

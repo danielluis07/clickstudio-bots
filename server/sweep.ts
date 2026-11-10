@@ -1,4 +1,4 @@
-import type { InboxDiagnostics } from "@/modules/webhook-inbox";
+import { reportError, type Diagnostics } from "@/platform/diagnostics";
 import { runMaintenanceTasks, type MaintenanceTask } from "@/server/maintenance-tasks";
 
 type JobVerifier = {
@@ -15,7 +15,7 @@ export const createSweepRoute = ({
 }: {
   config: { verifier: JobVerifier; url: string } | null;
   tasks: readonly MaintenanceTask[];
-  diagnostics?: Pick<InboxDiagnostics, "log">;
+  diagnostics?: Diagnostics;
 }) => ({
   async POST(request: Request) {
     const headers = { "cache-control": "no-store" };
@@ -24,8 +24,9 @@ export const createSweepRoute = ({
     const signature = request.headers.get("upstash-signature");
     if (!(await config.verifier.verify({ signature, body, url: config.url })))
       return new Response(null, { status: 401, headers });
-    return runMaintenanceTasks(tasks, (errorClass) =>
-      diagnostics?.log({ kind: "sweep_task_failed", errorClass }),
+    // A sweep task only fails unexpectedly (its database or queue is down).
+    return runMaintenanceTasks(tasks, (error, operation) =>
+      reportError(diagnostics, "sweep_task_failed", error, { operation }),
     );
   },
 });

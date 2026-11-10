@@ -13,6 +13,7 @@ import { createTestNotifier } from "@/test/support/notifier";
 import { createTestBotAllowance, createTestUsageMeter } from "@/test/support/bot";
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
 import { qstashSigningKeys, signQStashRequest } from "@/test/support/qstash";
+import { createTestDiagnostics } from "@/test/support/diagnostics";
 
 const url = "https://bots.example.com/api/jobs/run-bot-turn";
 let db: Database;
@@ -64,6 +65,52 @@ test("Bot job signatures bind both body and destination; malformed jobs are reje
     expect(
       (await jobs.POST(request(invalid, signQStashRequest({ url, body: invalid })))).status,
     ).toBe(400);
+});
+
+test("a failed Bot job reports its error class, Conversation and Tenant without content", async () => {
+  const { route, clock } = await seedLiveBot(db);
+  const failingId = (await recordInboundTextMessage(db, route, {
+    wamid: "failing-job",
+    from: "5511999990002",
+    profileName: "Maria Souza",
+    text: "Oi, quero remarcar",
+    sentAt: clock.now(),
+  }))!;
+  const diagnostics = createTestDiagnostics();
+  const failing = createBotJobRoute(
+    {
+      bot: createLiveBot({
+        db,
+        clock,
+        model: null,
+        queue: createTestJobQueue<BotJob>(),
+        notifier: createTestNotifier(),
+        getSender: createTestWhatsAppSender,
+        meter: createTestUsageMeter(),
+        allowance: {
+          ...createTestBotAllowance(),
+          notifyWarning: async () => {
+            throw new RangeError("Maria Souza 5511999990002 Oi, quero remarcar");
+          },
+        },
+      }),
+      url,
+      verifier: createQStashJobVerifier(qstashSigningKeys),
+    },
+    diagnostics,
+  );
+  const body = JSON.stringify({ conversationId: failingId });
+  expect((await failing.POST(request(body, signQStashRequest({ url, body })))).status).toBe(500);
+  expect(diagnostics.alerts).toEqual([
+    expect.objectContaining({
+      kind: "bot_job_failed",
+      errorClass: "RangeError",
+      conversationId: failingId,
+      tenantId: route.tenantId,
+    }),
+  ]);
+  for (const secret of ["Maria", "5511999990002", "remarcar"])
+    expect(JSON.stringify(diagnostics.alerts)).not.toContain(secret);
 });
 
 test("a valid job retries a held lease and acknowledges a missing Conversation", async () => {

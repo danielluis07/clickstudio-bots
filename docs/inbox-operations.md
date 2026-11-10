@@ -24,21 +24,42 @@ are deployment steps. Without `SENTRY_DSN`, diagnostics go only to the scrubbed
 structured logger. Without `CRON_SECRET`, the daily endpoint returns 503 and
 does not delete anything. Use the DSN supplied by the US project.
 
-Sentry receives alerts only from the background dead-letter callback. Successful
-message processing and dashboard requests make no Sentry network calls. Its
-region affects alert delivery latency, not the successful messaging path. US
-storage avoids a cross-Atlantic route from the planned US East application
-deployment; no production latency benchmark is implied by this choice.
+Every boundary follows one rule (#136): catch, record a scrubbed diagnostic,
+then answer what the caller expects. Two kinds of failure are told apart:
+
+| Failure | Where it goes |
+| --- | --- |
+| Unexpected: the WhatsApp webhook cannot store a delivery, a Bot job or the inbox failure callback throws, a sweep or daily task fails, a tRPC procedure fails with an internal error, the dead letter | Structured log **and** Sentry |
+| Expected: a Meta call fails (4xx, 5xx, timeout), the Model fails and the turn hands off, an inbox job attempt fails (retries end in the dead letter), an invitation e-mail or realtime ping fails, the queue refuses an enqueue | Structured log only |
+
+Successful message processing and dashboard requests make no Sentry network
+calls. Its region affects alert delivery latency, not the successful messaging
+path. US storage avoids a cross-Atlantic route from the planned US East
+application deployment; no production latency benchmark is implied by this
+choice. A Sentry delivery failure never changes a route's answer: the record is
+already in the log, and a `diagnostic_delivery_failed` line follows it.
+
+A record (`platform/diagnostics.ts`) may carry: the diagnostic kind, the error
+class and the innermost known cause class, stack frames, Postgres SQLSTATE,
+Meta's HTTP status, `code`, `error_subcode` and `fbtrace_id`, the Model
+provider's status and request id, a code-defined operation name (tRPC path,
+task, Meta call) and the Tenant, Conversation and inbox event ids. It never
+carries error messages, request or response bodies, message text, names or
+phone numbers. Each field is rebuilt from an allowlist and validated, never
+copied. Stack frames are code locations only: they are read from what the
+runtime writes after the message, so a message cannot inject a frame, and
+paths are made relative to the project (or to `node_modules/`) so they do not
+name the machine's user.
 
 For Sentry SDK v11, PII collection is disabled through `dataCollection`: user
 information, cookies, HTTP headers/bodies, URL query parameters, GraphQL/AI data,
 database query data, queue arguments, stack variables and source context are all
 disabled. An isolated client has no automatic integrations or tracing. Only
-explicit dead-letter alerts are captured. `beforeSend` rebuilds each event from
-known diagnostic kinds, known error classes and validated identifiers, removing
-request data, users, breadcrumbs, contexts, extras, error messages/stacks/causes
-and attachments. Structured logs use the same allowlist. SDK buffering is flushed
-before the callback returns.
+explicit reports are captured. `beforeSend` rebuilds each event from the
+scrubbed diagnostic alone, removing request data, users, breadcrumbs, contexts,
+error messages and attachments; its frames become the event's stack trace.
+Structured logs use the same allowlist. SDK buffering is flushed before the
+route returns (tRPC reports after its response, through `waitUntil`).
 
 ## Find and replay an event
 

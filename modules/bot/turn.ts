@@ -24,6 +24,7 @@ import type { BotRepository, BotTurn } from "@/modules/bot/repository";
 import { checkToolCalls, handoffReply, modelTools, type HandoffReason } from "@/modules/bot/tools";
 import type { TurnUsage, UsageMeter } from "@/modules/bot/usage";
 import type { Clock } from "@/platform/clock";
+import { logError } from "@/platform/diagnostics";
 
 // A Handoff's reply tells the Contact the team will answer; with a mixed
 // question it also carries the answerable part.
@@ -150,12 +151,17 @@ export const createBotCore = ({
       }
     };
 
-    // A timeout or provider error never falls back to another provider.
-    const outcome = await decide().catch(() => handoff("bot_indisponivel"));
+    const ids = { tenantId: turn.scope.tenantId, conversationId: turn.conversationId };
+    // A timeout or provider error never falls back to another provider. It is
+    // expected, so it is logged with the provider's status but does not alert.
+    const outcome = await decide().catch((error: unknown) => {
+      logError("bot_decision_failed", error, ids);
+      return handoff("bot_indisponivel");
+    });
     // Metering must not lose a reply the model already produced.
     await meter
       .record(turn.scope, clock.now(), usage)
-      .catch(() => console.error("Bot usage metering failed"));
+      .catch((error: unknown) => logError("bot_usage_metering_failed", error, ids));
     return outcome;
   },
 });
