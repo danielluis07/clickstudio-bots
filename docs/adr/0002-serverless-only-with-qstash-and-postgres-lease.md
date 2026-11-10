@@ -12,4 +12,5 @@ The whole MVP (dashboard, Meta webhook, Bot loop) is one Next.js app on Vercel w
 
 - Delivery is at-least-once everywhere (Meta retries for up to 7 days, QStash retries jobs), so every handler is idempotent. Inbox rows dedupe by wamid or event hash. A Bot reply is stored as `pending` before sending, and a retry that finds `pending` without a wamid hands off instead of sending again.
 - Transactions are short and never wrap an LLM, transcription or Meta call.
+- Updated on 2026-11-09 (ADR 0007): a QStash schedule also calls a sweep every five minutes. It re-enqueues stuck inbox events and Bot turns, and it took over lease recovery from the daily cron.
 - Revisit only if Bot turns stop fitting function limits, or if QStash's cost or reliability becomes a problem. The core reaches the queue only through a `JobQueue` port.

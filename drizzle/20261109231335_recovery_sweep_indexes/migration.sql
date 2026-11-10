@@ -1,0 +1,3 @@
+CREATE INDEX "conversation_bot_lease_until_idx" ON "conversation" ("bot_lease_until") WHERE "bot_lease_until" is not null;--> statement-breakpoint
+CREATE INDEX "message_pending_bot_reply_created_at_idx" ON "message" ("created_at") WHERE "origin" = 'bot' and "status" = 'pending' and "wamid" is null;--> statement-breakpoint
+CREATE INDEX "message_unanswered_contact_sent_at_idx" ON "message" ("sent_at") WHERE "origin" = 'contact' and "imported" = false and "bot_answered" = false;

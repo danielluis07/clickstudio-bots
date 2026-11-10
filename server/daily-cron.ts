@@ -1,8 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { InboxDiagnostics } from "@/modules/webhook-inbox";
-import { classifyError } from "@/platform/diagnostics";
-
-type DailyTask = { name: string; run(): Promise<unknown> };
+import { runMaintenanceTasks, type MaintenanceTask } from "@/server/maintenance-tasks";
 
 export const createDailyCronRoute = ({
   secret,
@@ -10,7 +8,7 @@ export const createDailyCronRoute = ({
   diagnostics,
 }: {
   secret: string | null;
-  tasks: readonly DailyTask[];
+  tasks: readonly MaintenanceTask[];
   diagnostics?: Pick<InboxDiagnostics, "log">;
 }) => ({
   async GET(request: Request) {
@@ -21,19 +19,8 @@ export const createDailyCronRoute = ({
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
       return new Response(null, { status: 401, headers });
     }
-    const results: { name: string; ok: boolean }[] = [];
-    // Add later daily tasks here via composition; one failure must not stop
-    // independent cleanup tasks from running in the same invocation.
-    for (const task of tasks) {
-      try {
-        await task.run();
-        results.push({ name: task.name, ok: true });
-      } catch (error) {
-        diagnostics?.log({ kind: "daily_task_failed", errorClass: classifyError(error) });
-        results.push({ name: task.name, ok: false });
-      }
-    }
-    const ok = results.every((result) => result.ok);
-    return Response.json({ ok, tasks: results }, { status: ok ? 200 : 500, headers });
+    return runMaintenanceTasks(tasks, (errorClass) =>
+      diagnostics?.log({ kind: "daily_task_failed", errorClass }),
+    );
   },
 });

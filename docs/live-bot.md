@@ -91,10 +91,13 @@ reconciling an own echo that arrived first. Member Handoffs, resumption and the
 waiting list are described in [Handoff ownership and controls](handoff.md). A retry finding pending without a
 wamid marks it failed and hands off as **Bot indisponível**; it never resends.
 
-The daily cron's `recover-bot-turns` task fails stuck pending sends once their
-lease is absent or expired, hands off those Conversations, clears stale leases,
-and re-enqueues eligible unanswered messages from recovered leases. It preserves
-healthy leases and publishes inbox notifications for committed Handoffs.
+The [sweep](inbox-operations.md#the-sweep), every five minutes, fails stuck
+pending sends once their lease is absent or expired, hands off those
+Conversations, clears stale leases, and re-enqueues eligible unanswered messages
+from recovered leases. It preserves healthy leases and publishes inbox
+notifications for committed Handoffs. It also re-enqueues a Contact message
+whose job never ran, once it is two minutes old and for up to one hour, when the
+reply gate would not skip it.
 
 The gate asks `BotAllowance.canReply`; reservation calls `BotAllowance.reserve`
 in the same transaction. The monthly accounting is described in

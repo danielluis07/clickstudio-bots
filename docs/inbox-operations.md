@@ -147,9 +147,60 @@ after a failure. The response contains names and success flags only, returning
 check production cron logs and rerun the authenticated endpoint after fixing a
 failure. Scheduled invocations run only in production.
 
+## The sweep
+
+Issue: [#134](https://github.com/danielluis07/clickstudio-bots/issues/134).
+Decision: [ADR 0007](adr/0007-periodic-sweep-on-a-qstash-schedule.md).
+
+A QStash schedule calls `POST /api/jobs/sweep` every five minutes. The route
+verifies the QStash signature against its own URL and returns 401 otherwise, or
+503 without the QStash signing keys. Each run:
+
+1. Re-enqueues up to 100 inbox events still `pending` five minutes after they
+   were received, oldest first. An event whose job already failed waits until
+   35 minutes after its last failure, so QStash's own retries come first.
+   Failed events still wait for administrator replay.
+2. Fails Bot replies stuck without a wamid behind an expired lease, hands those
+   Conversations off and clears the expired leases. Then it re-enqueues eligible
+   unanswered messages from the recovered Conversations.
+3. Re-enqueues up to 100 Bot-owned, eligible Conversations with no live lease
+   whose newest unanswered Contact message was sent between two minutes and one
+   hour ago and passes the [reply gate](live-bot.md#reply-gate). A message
+   skipped outside the Schedule is never answered later by the sweep. The
+   Schedule and allowance are per Tenant, so a skip leaves that Tenant's other
+   Conversations out of the run, which scans up to three pages. Canceled
+   Tenants are left out of lease recovery.
+
+Each task has its own failure boundary, as in the daily endpoint. A failed task
+logs `sweep_task_failed` with its error class only. Running the sweep again
+right away does no harm: it may enqueue the same jobs twice, but they are
+idempotent and their second delivery changes nothing.
+
+QStash retries each job with an explicit count: three for
+`process-inbox-event` and `run-bot-turn`. The sweep itself is not retried; the
+next run comes five minutes later.
+
+Create or update the QStash schedule after the first deploy of an environment,
+and again whenever `APP_URL` or `QSTASH_URL` changes. Run it with that
+environment's public `APP_URL` and its QStash credentials, not the local
+`.env`: QStash cannot call `localhost`, and the script refuses a local
+`APP_URL`. Variables set in the shell take precedence over `.env`:
+
+```powershell
+$env:APP_URL = 'https://<production domain>'
+$env:QSTASH_TOKEN = '<production QStash token>'
+bun run sweep:schedule
+Remove-Item Env:APP_URL, Env:QSTASH_TOKEN
+```
+
+Set `QSTASH_URL` the same way if that environment uses another QStash region.
+Run `bun run db:migrate` first: the migration adds the partial indexes the
+sweep's scans use.
+
 ## References
 
 - [QStash callbacks and failure callbacks](https://upstash.com/docs/qstash/features/callbacks)
+- [QStash schedules](https://upstash.com/docs/qstash/features/schedules)
 - [Sentry data storage locations](https://docs.sentry.io/organization/data-storage-location/)
 - [Sentry Node configuration](https://docs.sentry.io/platforms/javascript/guides/node/configuration/options/)
 - [Vercel cron authentication and management](https://vercel.com/docs/cron-jobs/manage-cron-jobs)

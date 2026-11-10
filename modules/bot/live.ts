@@ -9,6 +9,7 @@ import type { UsageMeter } from "@/modules/bot/usage";
 import type { ChannelRoute } from "@/modules/channels";
 import {
   hasUnansweredContactMessages,
+  listStrandedBotConversations,
   readConversationContactDetails,
   recoverStaleBotTurns,
   runBotTurn,
@@ -23,6 +24,16 @@ export type BotJob = { type: "run-bot-turn"; conversationId: string };
 export interface BotJobQueue {
   enqueue(jobs: readonly BotJob[]): Promise<void>;
 }
+
+// The sweep recovers a Contact message whose Bot job never ran once it is two
+// minutes old, past any live turn's lease. After an hour it leaves it: a
+// message that old was skipped on purpose, outside the Schedule, and waits for
+// the Contact to write again.
+const strandedAfterMs = 2 * 60_000;
+const strandedUntilMs = 60 * 60_000;
+const strandedPerSweep = 100;
+// Pages a sweep may scan when the reply gate skips whole Tenants.
+const strandedPages = 3;
 
 export const createLiveBot = ({
   db,
@@ -121,7 +132,41 @@ export const createLiveBot = ({
         // even when the Conversation has no unanswered messages or is with the team.
         await allowance.notifyWarning({ scope, conversationId });
       }),
-    cleanup: () => recoverStaleBotTurns({ db, clock, notifier }, enqueue),
+    // Every few minutes: recovers crashed turns, then re-enqueues Contact
+    // messages whose job never ran. Idempotent; each scan is bounded.
+    async sweep() {
+      const recovered = new Set<string>();
+      await recoverStaleBotTurns({ db, clock, notifier }, async (scope, conversationId) => {
+        recovered.add(conversationId);
+        await enqueue(scope, conversationId);
+      });
+      const now = clock.now();
+      const skippedTenants = new Set<string>();
+      const seen = new Set(recovered);
+      const jobs: BotJob[] = [];
+      for (let page = 0; page < strandedPages && jobs.length < strandedPerSweep; page++) {
+        const stranded = await listStrandedBotConversations(db, now, {
+          sentAfter: new Date(now.getTime() - strandedUntilMs),
+          sentBy: new Date(now.getTime() - strandedAfterMs),
+          limit: strandedPerSweep - jobs.length,
+          except: { tenantIds: [...skippedTenants], conversationIds: [...seen] },
+        });
+        if (!stranded.length) break;
+        for (const candidate of stranded) {
+          seen.add(candidate.conversationId);
+          if (skippedTenants.has(candidate.scope.tenantId)) continue;
+          // The gate as the turn would see it, so a Schedule skip is not
+          // retried every sweep. Eligibility and the service window are in
+          // the scan; the Schedule and allowance are per Tenant, so one skip
+          // leaves the Tenant's other Conversations for the next page.
+          // An exhausted allowance still runs, to hand off.
+          if ((await gate.check(candidate, "beforeModel")).kind === "skip")
+            skippedTenants.add(candidate.scope.tenantId);
+          else jobs.push({ type: "run-bot-turn", conversationId: candidate.conversationId });
+        }
+      }
+      if (jobs.length) await queue.enqueue(jobs);
+    },
   };
 };
 

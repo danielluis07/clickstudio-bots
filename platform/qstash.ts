@@ -1,7 +1,12 @@
 import { Client, Receiver } from "@upstash/qstash";
 
+// Delivery retries per job type, never left to the plan's default. QStash
+// backs off about 12 s, 2.5 min, then 30 min: enough to outlast a crashed
+// Bot turn's two-minute lease. The sweep re-enqueues whatever is still stuck.
+const deliveryRetries = { "process-inbox-event": 3, "run-bot-turn": 3 } as const;
+
 // A job is its type plus ids; the type names the route that handles it.
-type QueuedJob = { type: string } & Record<string, string>;
+type QueuedJob = { type: keyof typeof deliveryRetries } & Record<string, string>;
 
 // Where QStash delivers a job, and so the URL its signature is bound to.
 export const qstashJobUrl = (appUrl: string, type: string) =>
@@ -32,6 +37,7 @@ export const createQStashJobQueue = ({
         jobs.map(({ type, ...ids }) => ({
           url: qstashJobUrl(appUrl, type),
           body: ids,
+          retries: deliveryRetries[type],
           ...(type === "process-inbox-event"
             ? { failureCallback: qstashJobUrl(appUrl, "inbox-event-failed") }
             : {}),
@@ -45,6 +51,27 @@ export const createQStashJobQueue = ({
       }
     },
   };
+};
+
+// Creates or updates the QStash schedule that calls the sweep (ADR 0007).
+// The fixed id makes it safe to run again. A failed run is not retried: the
+// next one is five minutes away.
+export const scheduleSweep = async ({
+  token,
+  baseUrl,
+  appUrl,
+}: {
+  token: string;
+  baseUrl: string;
+  appUrl: string;
+}) => {
+  const client = new Client({ token, baseUrl, devMode: false, enableTelemetry: false });
+  return client.schedules.create({
+    scheduleId: "sweep",
+    destination: qstashJobUrl(appUrl, "sweep"),
+    cron: "*/5 * * * *",
+    retries: 0,
+  });
 };
 
 export const createQStashJobVerifier = (keys: {

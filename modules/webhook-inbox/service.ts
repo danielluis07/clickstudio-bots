@@ -31,6 +31,14 @@ import type { Clock } from "@/platform/clock";
 import type { Notifier } from "@/platform/notifier";
 import type { LiveBot } from "@/modules/bot";
 
+// A pending event this old that never failed has no live job: QStash delivers
+// within seconds. One that failed may still be retried: QStash's last retry
+// comes about 30 minutes after the one before it.
+const stalledAfterMs = 5 * 60_000;
+const stalledAfterFailureMs = 35 * 60_000;
+// Bounds one sweep; the next one continues where it stopped.
+const stalledPerSweep = 100;
+
 // The inbox-first delivery contract of ADR 0002: store each signed event once,
 // enqueue it, and only then acknowledge the delivery.
 export const createWebhookInbox = ({
@@ -178,6 +186,24 @@ export const createWebhookInbox = ({
 
     // At-least-once: safe to run any number of times, concurrently included.
     process: (inboxEventId: string) => process(inboxEventId),
+
+    // The sweep: re-enqueues pending events whose job was lost, for example
+    // with its failure callback. Processing is idempotent, so a job that was
+    // only slow costs a duplicate delivery. Failed events wait for a replay.
+    async requeueStalled() {
+      const now = clock.now().getTime();
+      const ids = await repository.listPendingBefore(
+        {
+          receivedBy: new Date(now - stalledAfterMs),
+          failedBy: new Date(now - stalledAfterFailureMs),
+        },
+        stalledPerSweep,
+      );
+      await queue.enqueue(
+        ids.map((inboxEventId) => ({ type: "process-inbox-event" as const, inboxEventId })),
+      );
+      return ids.length;
+    },
 
     async fail(inboxEventId: string, jobId: string) {
       const failed = await repository.fail(inboxEventId, clock.now());

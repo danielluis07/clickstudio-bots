@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, expect, onTestFinished, test } from "bun:test";
 import type { Database } from "@/db/database";
 import {
   channel,
@@ -206,4 +206,119 @@ test("a failure callback can retry an interrupted alert without losing the faile
   ]);
   await inbox.fail(job.inboxEventId, "msg_retry");
   expect(alerts).toHaveLength(1);
+});
+
+const restoreClock = () => {
+  const start = clock.now();
+  onTestFinished(() => clock.set(start));
+};
+
+test("the sweep re-enqueues a pending event whose job was lost, once it is five minutes old", async () => {
+  restoreClock();
+  const body = metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.LOST" }));
+  await inbox.receive({ body, signature: signMetaDelivery(body) });
+  // QStash accepted the job, then lost it with its failure callback.
+  const [lost] = queue.take();
+
+  clock.advance(5 * 60_000 - 1);
+  expect(await inbox.requeueStalled()).toBe(0);
+  expect(queue.take()).toEqual([]);
+
+  clock.advance(1);
+  expect(await inbox.requeueStalled()).toBe(1);
+  const [requeued] = queue.take();
+  expect(requeued).toEqual({ type: "process-inbox-event", inboxEventId: lost.inboxEventId });
+  expect(await inbox.process(requeued.inboxEventId)).toEqual({ ok: true, status: "processed" });
+
+  const tenantA = (await resolveTenantScope(db, { userId: "owner-a" }))!;
+  const listed = await createConversationRepository(db, tenantA).listConversations();
+  expect(listed.conversations).toHaveLength(1);
+  // A second sweep finds nothing left to do.
+  expect(await inbox.requeueStalled()).toBe(0);
+  expect(queue.take()).toEqual([]);
+});
+
+test("the sweep leaves dead-lettered, settled and fresh events alone", async () => {
+  restoreClock();
+  const old = new Date(clock.now().getTime() - 60 * 60_000);
+  await db.insert(inboxEvent).values([
+    {
+      id: "failed",
+      dedupeKey: "failed",
+      field: "messages",
+      payload: {},
+      status: "failed",
+      receivedAt: old,
+    },
+    {
+      id: "processed",
+      dedupeKey: "processed",
+      field: "messages",
+      payload: {},
+      status: "processed",
+      receivedAt: old,
+    },
+    {
+      id: "ignored",
+      dedupeKey: "ignored",
+      field: "messages",
+      payload: {},
+      status: "ignored",
+      receivedAt: old,
+    },
+    { id: "fresh", dedupeKey: "fresh", field: "messages", payload: {}, receivedAt: clock.now() },
+  ]);
+  expect(await inbox.requeueStalled()).toBe(0);
+  expect(queue.take()).toEqual([]);
+});
+
+test("one sweep re-enqueues at most 100 stalled events, oldest first", async () => {
+  restoreClock();
+  const start = clock.now().getTime() - 60 * 60_000;
+  await db.insert(inboxEvent).values(
+    Array.from({ length: 101 }, (_, index) => ({
+      id: `stalled-${String(index).padStart(3, "0")}`,
+      dedupeKey: `stalled-${index}`,
+      field: "messages",
+      payload: {},
+      receivedAt: new Date(start + index * 1000),
+    })),
+  );
+  expect(await inbox.requeueStalled()).toBe(100);
+  const jobs = queue.take();
+  expect(jobs[0]).toEqual({ type: "process-inbox-event", inboxEventId: "stalled-000" });
+  expect(jobs.map(({ inboxEventId }) => inboxEventId)).not.toContain("stalled-100");
+});
+
+test("a queue failure fails the sweep run, and the next run retries the same events", async () => {
+  restoreClock();
+  await db.insert(inboxEvent).values({
+    id: "stalled",
+    dedupeKey: "stalled",
+    field: "messages",
+    payload: {},
+    receivedAt: new Date(clock.now().getTime() - 60 * 60_000),
+  });
+  queue.failing = true;
+  await expect(inbox.requeueStalled()).rejects.toThrow();
+  queue.failing = false;
+  expect(await inbox.requeueStalled()).toBe(1);
+});
+
+test("the sweep leaves a failing event to QStash's retries until 35 minutes after its last failure", async () => {
+  restoreClock();
+  const body = metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.RETRYING" }));
+  await inbox.receive({ body, signature: signMetaDelivery(body) });
+  const [job] = queue.take();
+  clock.advance(3 * 60_000);
+  // Its third attempt fails; QStash's last retry comes about 30 minutes later.
+  notifier.failNext();
+  await expect(inbox.process(job.inboxEventId)).rejects.toThrow();
+
+  clock.advance(35 * 60_000 - 1);
+  expect(await inbox.requeueStalled()).toBe(0);
+  // The last retry failed too, and its failure callback was lost.
+  clock.advance(1);
+  expect(await inbox.requeueStalled()).toBe(1);
+  expect(queue.take()).toEqual([{ type: "process-inbox-event", inboxEventId: job.inboxEventId }]);
 });

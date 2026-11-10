@@ -41,6 +41,7 @@ import type { Notifier } from "@/platform/notifier";
 import { createDiagnostics } from "@/platform/sentry";
 import { createDailyCronRoute } from "@/server/daily-cron";
 import { createBotJobRoute } from "@/server/bot-jobs";
+import { createSweepRoute } from "@/server/sweep";
 
 const diagnostics = createDiagnostics({ dsn: env.SENTRY_DSN });
 
@@ -183,12 +184,25 @@ export const dailyCronRoute = createDailyCronRoute({
     { name: "delete-canceled-tenants", run: () => pruneCanceledTenants(db, systemClock) },
     { name: "prune-inbox", run: () => pruneInboxEvents(db, systemClock) },
     { name: "retry-reply-warnings", run: () => botAllowance.retryWarnings() },
-    {
-      name: "recover-bot-turns",
-      run: async () => {
-        await liveBot?.cleanup();
-      },
-    },
+  ],
+});
+
+// Called every five minutes by a QStash schedule (ADR 0007).
+export const sweepRoute = createSweepRoute({
+  config:
+    env.QSTASH_CURRENT_SIGNING_KEY && env.QSTASH_NEXT_SIGNING_KEY
+      ? {
+          url: qstashJobUrl(env.APP_URL, "sweep"),
+          verifier: createQStashJobVerifier({
+            currentSigningKey: env.QSTASH_CURRENT_SIGNING_KEY,
+            nextSigningKey: env.QSTASH_NEXT_SIGNING_KEY,
+          }),
+        }
+      : null,
+  diagnostics,
+  tasks: [
+    { name: "requeue-inbox-events", run: async () => webhookInbox?.requeueStalled() },
+    { name: "sweep-bot-turns", run: async () => liveBot?.sweep() },
   ],
 });
 

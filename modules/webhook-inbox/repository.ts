@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import { inboxEvent } from "@/db/schema";
 import type { InboxEventInput } from "@/modules/webhook-inbox/deliveries";
@@ -18,6 +18,27 @@ export const createInboxRepository = (db: Database) => ({
       .select({ id: inboxEvent.id })
       .from(inboxEvent)
       .where(and(inArray(inboxEvent.dedupeKey, dedupeKeys), eq(inboxEvent.status, "pending")));
+    return found.map(({ id }) => id);
+  },
+
+  // Pending events received by `receivedBy` that never failed, or whose last
+  // failure was by `failedBy`. Oldest first, from the (status, received_at) index.
+  async listPendingBefore(
+    { receivedBy, failedBy }: { receivedBy: Date; failedBy: Date },
+    limit: number,
+  ) {
+    const found = await db
+      .select({ id: inboxEvent.id })
+      .from(inboxEvent)
+      .where(
+        and(
+          eq(inboxEvent.status, "pending"),
+          lte(inboxEvent.receivedAt, receivedBy),
+          or(isNull(inboxEvent.failedAt), lte(inboxEvent.failedAt, failedBy)),
+        ),
+      )
+      .orderBy(asc(inboxEvent.receivedAt), asc(inboxEvent.id))
+      .limit(limit);
     return found.map(({ id }) => id);
   },
 
