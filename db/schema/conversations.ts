@@ -82,6 +82,10 @@ export const conversation = pgTable(
     // On the waiting list for the team. Every Handoff adds it; only "Resolvida"
     // removes it, independently of who owns the Conversation.
     waiting: boolean("waiting").notNull().default(false),
+    // A "Bot indisponível" Handoff no Member has acted on since: the Contact's
+    // next message returns the Conversation to the Bot. Any Member Handoff
+    // clears it.
+    resumeOnContactMessage: boolean("resume_on_contact_message").notNull().default(false),
     botLeaseToken: text("bot_lease_token"),
     botLeaseUntil: timestamp("bot_lease_until", { withTimezone: true }),
     // When the latest message was sent; the inbox lists the most recent first.
@@ -99,6 +103,10 @@ export const conversation = pgTable(
     index("conversation_bot_lease_until_idx")
       .on(t.botLeaseUntil)
       .where(sql`${t.botLeaseUntil} is not null`),
+    // The sweep's scan for Handoffs quiet long enough to return to the Bot.
+    index("conversation_team_last_message_at_idx")
+      .on(t.lastMessageAt)
+      .where(sql`${t.owner} = 'team'`),
   ],
 );
 

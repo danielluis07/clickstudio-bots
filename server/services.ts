@@ -15,6 +15,7 @@ import {
   createConversationRepository,
   createHandoffControls,
   createReplyService,
+  returnQuietHandoffs,
 } from "@/modules/conversations";
 import type { TenantScope } from "@/modules/tenancy";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
@@ -207,6 +208,10 @@ export const sweepRoute = createSweepRoute({
     { name: "requeue-inbox-events", run: async () => webhookInbox?.requeueStalled() },
     { name: "retry-failed-inbox-events", run: async () => webhookInbox?.retryFailed() },
     { name: "sweep-bot-turns", run: async () => liveBot?.sweep() },
+    {
+      name: "return-quiet-handoffs",
+      run: () => returnQuietHandoffs({ db, clock: systemClock, notifier }),
+    },
     { name: "alert-stale-inbox", run: async () => webhookInbox?.alertStaleQueue() },
     {
       name: "alert-bot-handoff-spikes",

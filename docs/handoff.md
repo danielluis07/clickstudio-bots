@@ -5,7 +5,10 @@ Decision: [Handoff #29](https://github.com/danielluis07/clickstudio-bots/issues/
 
 Run `bun run db:migrate` before deploying. The migration adds the Conversation's
 `waiting` flag and the message's `echo_unresolved` flag. Conversations already
-with the team are put on the waiting list.
+with the team are put on the waiting list. The automatic return's migration
+(#139) adds `resume_on_contact_message`, false for existing rows: a
+`bot_indisponivel` Handoff from before it returns only after a quiet service
+window, since there is no telling whether a Member acted on it.
 
 ## What Members see
 
@@ -68,13 +71,32 @@ send's outcome.
 
 ## Resuming
 
-Any Member can resume, whoever took over. Resumption is dashboard-only, with no
-inactivity timer.
+Any Member can resume, whoever took over. A Conversation also returns to the
+Bot on its own in two cases
+([#139](https://github.com/danielluis07/clickstudio-bots/issues/139),
+[ADR 0008](adr/0008-automatic-return-to-the-bot.md)).
 
 - **Devolver ao Bot** returns ownership to the Bot. The Conversation stays on
   the waiting list with its reason.
 - **Resolvida** returns ownership to the Bot, clears the reason and removes the
   waiting item. It is also offered for a Bot-owned Conversation still waiting.
+- **The Contact writes after a `bot_indisponivel` Handoff** that no Member has
+  acted on. The provider has likely recovered; if not, the turn hands off
+  again. **Assumir**, a dashboard reply or an app echo after the Handoff is a
+  Member acting on it, even though the reason stays `bot_indisponivel`. The
+  Conversation's `resume_on_contact_message` flag tracks this: only a
+  `bot_indisponivel` change of hands sets it, and any Member Handoff or return
+  clears it. Only a new Contact message returns it, never a redelivery. An
+  audio or a media message with no caption returns the Conversation and then
+  hands it off again as `sem_resposta`.
+- **A service window passes with no message from either side.** The
+  [sweep](inbox-operations.md#the-sweep) returns any Handoff whose last message,
+  from the Contact, a Member or the Bot, is at least 24 hours old. This
+  applies to every reason, `bot_indisponivel` included. The Bot could not reply
+  outside the window anyway; it answers the Contact's next message.
+
+Both automatic returns behave as **Devolver ao Bot**: the Conversation stays on
+the waiting list with its reason, so the team still sees what happened.
 
 When a Conversation leaves the team, every live Contact message still unanswered
 (the same `unansweredContactMessages` a Bot turn answers) is settled for the Bot
@@ -84,6 +106,18 @@ They remain visible to the Model as Conversation history. The Bot answers only
 the next Contact message; it never replies to the Handoff backlog. Reservation
 requires every message in the turn's snapshot to still be unanswered, so a
 Handoff and resume during a turn's Model call cannot answer that backlog either.
+The quiet-window return settles the backlog the same way.
+
+The return on the Contact's next message is the exception. No Member acted
+during the Handoff, so nobody answered its backlog, and the Bot's next turn
+answers every Contact message still unanswered, including the one that
+returned the Conversation. A failed send or the Model's unavailability notice
+already covered the messages of the turn that handed off; a turn the reply
+gate handed off before reserving left them unanswered, and they are answered
+now.
+
+All four ways back to the Bot go through the one `resume` in
+`modules/conversations/handoff.ts`.
 
 ## Remaining race
 

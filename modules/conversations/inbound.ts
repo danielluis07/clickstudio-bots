@@ -2,7 +2,7 @@ import type { Database } from "@/db/database";
 import { message } from "@/db/schema";
 import type { ChannelRoute } from "@/modules/channels";
 import { withContactAdmission } from "@/modules/conversations/contact-deletion";
-import { handOff } from "@/modules/conversations/handoff";
+import { handOff, resumeOnContactMessage } from "@/modules/conversations/handoff";
 
 export type InboundTextMessage = {
   wamid: string;
@@ -47,6 +47,8 @@ export const recordInboundMessage = (db: Database, route: ChannelRoute, inbound:
         })
         .onConflictDoNothing({ target: [message.tenantId, message.wamid] })
         .returning({ id: message.id });
+      // A duplicate must not return a Conversation a Member since acted on.
+      if (inserted.length) await resumeOnContactMessage(tx, route, conversationId);
       // New unsupported content must reach the team even while the Bot is
       // paused or inactive. A duplicate must not undo a Member's resumption.
       if (

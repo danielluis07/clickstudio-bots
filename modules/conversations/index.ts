@@ -42,6 +42,7 @@ export {
 export {
   createHandoffControls,
   handOffAndNotify,
+  returnQuietHandoffs,
   type ConversationHandoffReason,
   type HandoffControls,
 } from "@/modules/conversations/handoff";

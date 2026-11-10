@@ -226,11 +226,15 @@ verifies the QStash signature against its own URL and returns 401 otherwise, or
    Schedule and allowance are per Tenant, so a skip leaves that Tenant's other
    Conversations out of the run, which scans up to three pages. Canceled
    Tenants are left out of lease recovery.
-5. Alerts `inbox_queue_stale` with its age in seconds while the oldest
+5. Returns to the Bot up to 100 Handoffs, oldest first, with no message from
+   either side for 24 hours, a whole service window. They stay on the waiting
+   list, and their backlog is settled as after **Devolver ao Bot**. See
+   [Resuming](handoff.md#resuming).
+6. Alerts `inbox_queue_stale` with its age in seconds while the oldest
    `pending` inbox event that never failed was received more than 15 minutes
    ago, past two requeues. Failed events alert on their own, after their last
    automatic replay.
-6. Alerts `bot_handoff_spike` with counts for each Tenant whose
+7. Alerts `bot_handoff_spike` with counts for each Tenant whose
    [turn records](live-bot.md#turn-records) in the last hour show at least
    three **Bot indisponível** Handoffs, at least 20% of its turns that were not
    skipped, and at least twice its rate over the six days before. A Tenant with
