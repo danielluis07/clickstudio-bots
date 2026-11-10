@@ -10,7 +10,8 @@ export const inboxEvent = pgTable(
   "inbox_event",
   {
     id: id(),
-    // `<field>:<wamid>` when the wamid identifies the event, otherwise a hash.
+    // `<field>:<phone-number-id>:<wamid>` when the wamid identifies the event,
+    // otherwise a hash.
     dedupeKey: text("dedupe_key").notNull().unique(),
     field: text("field").notNull(),
     phoneNumberId: text("phone_number_id"),

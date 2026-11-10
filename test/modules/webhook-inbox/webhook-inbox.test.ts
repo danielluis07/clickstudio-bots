@@ -319,6 +319,20 @@ describe("Webhook inbox", () => {
     ]);
   });
 
+  test("the same wamid on two numbers is two events, one for each Tenant", async () => {
+    await receive(
+      metaDelivery(
+        textMessageChange({ phoneNumberId: "300", wamid: "wamid.SHARED", body: "Para A" }),
+        textMessageChange({ phoneNumberId: "301", wamid: "wamid.SHARED", body: "Para B" }),
+      ),
+    );
+    expect(queue.jobs).toHaveLength(2);
+    await runJobs();
+
+    expect(await conversationsOf(tenantA)).toMatchObject([{ messages: [{ text: "Para A" }] }]);
+    expect(await conversationsOf(tenantB)).toMatchObject([{ messages: [{ text: "Para B" }] }]);
+  });
+
   test("edits and revokes reusing a message's wamid stay distinct, processable events", async () => {
     await receive(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1" })));
     await runJobs();

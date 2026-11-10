@@ -37,7 +37,9 @@ const historyThreads = (item: unknown): unknown[] => {
 };
 
 // Arrays that batch several events inside one change, per webhook field.
-// Items of `byWamid` arrays are identified by their own wamid; a status only
+// Items of `byWamid` arrays are identified by their own wamid on the number
+// that received or sent them, since Meta does not promise a wamid is unique
+// across numbers; a status only
 // refers to a message, so many distinct statuses share one wamid. `split`
 // divides an item further.
 const eventArrays: Record<
@@ -109,8 +111,8 @@ export const splitDelivery = (delivery: unknown): InboxEventInput[] => {
           const { id, type } = itemSchema.catch({}).parse(item);
           return {
             dedupeKey:
-              byWamid && id && !referencingTypes.has(type ?? "")
-                ? `${field}:${id}`
+              byWamid && id && phoneNumberId && !referencingTypes.has(type ?? "")
+                ? `${field}:${phoneNumberId}:${id}`
                 : hashKey({ field, phoneNumberId, [key]: item }),
             field,
             phoneNumberId,

@@ -475,7 +475,7 @@ test("deletion erases the Contact's raw inbox events and settles their jobs, lea
       .filter((event) => event.contactPhone !== null)
       .map(({ dedupeKey }) => dedupeKey)
       .sort(),
-  ).toEqual(["messages:wamid.keep-other", "messages:wamid.keep-tenant"]);
+  ).toEqual(["messages:300:wamid.keep-other", "messages:301:wamid.keep-tenant"]);
   const erased = after.filter((event) => event.contactPhone === null);
   expect(erased).toHaveLength(8);
   for (const event of erased) expect(event.payload).toEqual({ erased: true });
