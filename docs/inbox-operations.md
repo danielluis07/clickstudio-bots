@@ -49,6 +49,10 @@ phone numbers or Contact/message content into the view. It includes both
 processing failures awaiting a retry and failures to enqueue a stored delivery.
 Use **Atualizar** to load the current state.
 
+Failed events are replayed automatically first (#135; see
+[Automatic replay](#automatic-replay)). The **Situação** column shows when the
+next automatic replay is due, or **Tentativas esgotadas** once none are left.
+
 Correct the underlying cause, then choose **Reprocessar**. The action checks the
 session, validates the event ID, and checks the administrator's current database
 role again. It accepts no Tenant ID or event payload. Replay invokes the same
@@ -65,13 +69,39 @@ URL, requires the original inbox job endpoint, and decodes only its ID-only
 source body. Callback response bodies, headers and caller IPs are discarded.
 An event whose endpoint was unreachable has class `JobDeliveryError`.
 
-The callback marks an unsettled event failed and sends a scrubbed Sentry error.
-Successful alert delivery is recorded separately so a failed/interrupted alert
+The callback marks an unsettled event failed. While it has automatic replays
+left, that is all it does. After the last one, it also sends a scrubbed Sentry
+error. Successful alert delivery is recorded separately so a failed/interrupted alert
 can be retried by QStash. Buffer draining is not treated as delivery: only a
 successful HTTP ingestion response acknowledges the alert. Duplicate callbacks after acknowledgment do nothing;
 concurrent callbacks use a stable Sentry event ID. A callback arriving after
-successful processing cannot reopen the event. Automatic jobs do not process
-dead-lettered events; an administrator can replay them.
+successful processing cannot reopen the event. A delivered job does not process
+a failed event; only the sweep's automatic replay or an administrator does.
+
+### Automatic replay
+
+The sweep replays a failed event up to three times, 10 minutes, 1 hour and 4
+hours after the failure before each one. A replay puts the event back to
+`pending` and enqueues a normal job, so each one gets QStash's three retries
+and the failure callback again. With QStash's own backoff of about 33 minutes
+per job, an event that keeps failing alerts roughly seven and a half hours
+after it arrived. That outlasts an outage of several hours and leaves time to
+answer inside WhatsApp's 24-hour service window. A replayed message that is
+still recent can start a Bot turn, exactly as on its first delivery.
+
+If enqueuing a replay fails, the event stays `pending` and the stalled-event
+scan enqueues it 35 minutes later. Events alerted before this feature existed
+are not replayed automatically.
+
+### Bulk replay
+
+**Reprocessar esta página** replays the events listed on the current page;
+**Reprocessar todos** replays every listed failure. Both check the session and
+the administrator's current database role, and accept only event IDs (at most
+one page of 50) or no IDs at all, never a Tenant ID or payload. Each event goes
+back to `pending` with a fresh set of three automatic replays and a fresh
+alert, and is enqueued as a normal job, 100 per QStash batch. Refresh the page
+to see which ones are left.
 
 Jobs already published before this deployment do not acquire a callback
 retroactively. Previously recorded processing errors are not backfilled.
@@ -158,12 +188,14 @@ verifies the QStash signature against its own URL and returns 401 otherwise, or
 
 1. Re-enqueues up to 100 inbox events still `pending` five minutes after they
    were received, oldest first. An event whose job already failed waits until
-   35 minutes after its last failure, so QStash's own retries come first.
-   Failed events still wait for administrator replay.
-2. Fails Bot replies stuck without a wamid behind an expired lease, hands those
+   35 minutes after its last failure or replay, so QStash's own retries come
+   first.
+2. Replays up to 100 failed events whose next
+   [automatic replay](#automatic-replay) is due.
+3. Fails Bot replies stuck without a wamid behind an expired lease, hands those
    Conversations off and clears the expired leases. Then it re-enqueues eligible
    unanswered messages from the recovered Conversations.
-3. Re-enqueues up to 100 Bot-owned, eligible Conversations with no live lease
+4. Re-enqueues up to 100 Bot-owned, eligible Conversations with no live lease
    whose newest unanswered Contact message was sent between two minutes and one
    hour ago and passes the [reply gate](live-bot.md#reply-gate). A message
    skipped outside the Schedule is never answered later by the sweep. The

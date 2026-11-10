@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { FailedInboxEventRow } from "@/components/admin/failed-inbox-event-row";
+import { ReplayFailuresForm } from "@/components/admin/replay-failures-form";
 import { buttonVariants } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import {
@@ -10,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { replayInboxFailuresAction } from "@/server/actions/inbox";
 import { inboxFailurePage } from "@/server/inbox-administration";
 import { webhookInbox } from "@/server/services";
 
@@ -22,30 +24,41 @@ export async function FailedInboxEvents({ actorId, page }: { actorId: string; pa
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-semibold tracking-tight">Eventos com falha</h1>
         <p className="text-muted-foreground">
-          Corrija a causa da falha e reprocese o evento. Eventos concluídos permanecem concluídos.
-          Os horários são de Brasília.
+          Eventos com falha são reprocessados automaticamente três vezes, em até cerca de oito
+          horas. Depois disso, corrija a causa da falha e reprocesse o evento. Eventos concluídos
+          permanecem concluídos. Os horários são de Brasília.
         </p>
       </div>
       {failures?.ok ? (
         failures.events.length > 0 ? (
-          <Table>
-            <TableCaption>Eventos com erro de processamento ou envio para a fila.</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID do evento</TableHead>
-                <TableHead>Classe do erro</TableHead>
-                <TableHead>Situação</TableHead>
-                <TableHead>Recebido em</TableHead>
-                <TableHead>Última falha</TableHead>
-                <TableHead>Ação</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {failures.events.map((event) => (
-                <FailedInboxEventRow key={event.id} event={event} />
-              ))}
-            </TableBody>
-          </Table>
+          <>
+            <div className="flex flex-wrap items-start gap-2">
+              <ReplayFailuresForm
+                eventIds={failures.events.map((event) => event.id)}
+                label="Reprocessar esta página"
+                action={replayInboxFailuresAction}
+              />
+              <ReplayFailuresForm label="Reprocessar todos" action={replayInboxFailuresAction} />
+            </div>
+            <Table>
+              <TableCaption>Eventos com erro de processamento ou envio para a fila.</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID do evento</TableHead>
+                  <TableHead>Classe do erro</TableHead>
+                  <TableHead>Situação</TableHead>
+                  <TableHead>Recebido em</TableHead>
+                  <TableHead>Última falha</TableHead>
+                  <TableHead>Ação</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {failures.events.map((event) => (
+                  <FailedInboxEventRow key={event.id} event={event} />
+                ))}
+              </TableBody>
+            </Table>
+          </>
         ) : (
           <Empty>
             <EmptyHeader>

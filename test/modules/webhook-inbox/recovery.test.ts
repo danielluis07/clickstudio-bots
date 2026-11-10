@@ -12,7 +12,7 @@ import {
 } from "@/db/schema";
 import { createConversationRepository } from "@/modules/conversations";
 import { resolveTenantScope } from "@/modules/tenancy";
-import { createWebhookInbox } from "@/modules/webhook-inbox";
+import { autoRetryDelaysMs, createWebhookInbox } from "@/modules/webhook-inbox";
 import type { Diagnostic } from "@/platform/diagnostics";
 import { createTestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
@@ -100,6 +100,8 @@ test("only an administrator can inspect and replay a failed event, using its ori
         status: "pending",
         receivedAt: clock.now(),
         failedAt: clock.now(),
+        autoRetries: 0,
+        nextAutoRetryAt: null,
       },
     ],
   });
@@ -123,9 +125,8 @@ test("only an administrator can inspect and replay a failed event, using its ori
   ).toEqual([]);
 });
 
-test("exhausted jobs alert once without content, and duplicate callbacks cannot reopen a replayed event", async () => {
-  const alerts: Diagnostic[] = [];
-  inbox = createWebhookInbox({
+const alertingInbox = (alerts: Diagnostic[]) =>
+  createWebhookInbox({
     db,
     clock,
     queue,
@@ -138,11 +139,75 @@ test("exhausted jobs alert once without content, and duplicate callbacks cannot 
       },
     },
   });
+
+const restoreClock = () => {
+  const start = clock.now();
+  onTestFinished(() => clock.set(start));
+};
+
+test("an event that failed during an outage is replayed automatically once its backoff passes", async () => {
+  restoreClock();
+  const alerts: Diagnostic[] = [];
+  inbox = alertingInbox(alerts);
+  const body = metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.OUTAGE" }));
+  await inbox.receive({ body, signature: signMetaDelivery(body) });
+  const [job] = queue.take();
+  notifier.failNext();
+  await expect(inbox.process(job.inboxEventId)).rejects.toThrow();
+  // QStash's retries ran out during the outage.
+  await inbox.fail(job.inboxEventId, "msg_outage");
+  expect(alerts).toEqual([]);
+  expect(await inbox.listFailures("admin")).toMatchObject({
+    ok: true,
+    events: [
+      {
+        status: "failed",
+        autoRetries: 0,
+        nextAutoRetryAt: new Date(clock.now().getTime() + autoRetryDelaysMs[0]),
+      },
+    ],
+  });
+
+  clock.advance(autoRetryDelaysMs[0] - 1);
+  expect(await inbox.retryFailed()).toBe(0);
+  clock.advance(1);
+  expect(await inbox.retryFailed()).toBe(1);
+  // A second sweep before the job runs does not count another replay.
+  expect(await inbox.retryFailed()).toBe(0);
+  const [replayed] = queue.take();
+  expect(replayed).toEqual({ type: "process-inbox-event", inboxEventId: job.inboxEventId });
+  // The stalled-event scan leaves the replay to QStash's own retries.
+  expect(await inbox.requeueStalled()).toBe(0);
+  expect(await inbox.process(replayed.inboxEventId)).toEqual({ ok: true, status: "processed" });
+
+  const tenantA = (await resolveTenantScope(db, { userId: "owner-a" }))!;
+  expect(
+    (await createConversationRepository(db, tenantA).listConversations()).conversations,
+  ).toHaveLength(1);
+  expect(await inbox.listFailures("admin")).toEqual({ ok: true, events: [], hasMore: false });
+  expect(alerts).toEqual([]);
+});
+
+test("an event that keeps failing is replayed three times with backoff, then alerts once and stays listed", async () => {
+  restoreClock();
+  const alerts: Diagnostic[] = [];
+  inbox = alertingInbox(alerts);
   const body = metaDelivery(
     textMessageChange({ phoneNumberId: "300", wamid: "wamid.DEAD", body: "Privado 5511988887777" }),
   );
   await inbox.receive({ body, signature: signMetaDelivery(body) });
   const [job] = queue.take();
+  for (const delay of autoRetryDelaysMs) {
+    notifier.failNext();
+    await expect(inbox.process(job.inboxEventId)).rejects.toThrow();
+    await inbox.fail(job.inboxEventId, "msg_failed");
+    expect(alerts).toEqual([]);
+    clock.advance(delay - 1);
+    expect(await inbox.retryFailed()).toBe(0);
+    clock.advance(1);
+    expect(await inbox.retryFailed()).toBe(1);
+    expect(queue.take()).toEqual([{ type: "process-inbox-event", inboxEventId: job.inboxEventId }]);
+  }
   notifier.failNext();
   await expect(inbox.process(job.inboxEventId)).rejects.toThrow();
   await inbox.fail(job.inboxEventId, "msg_failed");
@@ -155,10 +220,15 @@ test("exhausted jobs alert once without content, and duplicate callbacks cannot 
       jobId: "msg_failed",
     },
   ]);
+  clock.advance(30 * 24 * 60 * 60_000 - 1);
+  expect(await inbox.retryFailed()).toBe(0);
+  expect(await inbox.requeueStalled()).toBe(0);
   expect(await inbox.listFailures("admin")).toMatchObject({
     ok: true,
-    events: [{ status: "failed", errorClass: "Error" }],
+    events: [{ status: "failed", errorClass: "Error", autoRetries: 3, nextAutoRetryAt: null }],
   });
+
+  // Duplicate callbacks cannot reopen an event the administrator replayed.
   expect(await inbox.process(job.inboxEventId)).toEqual({ ok: true, status: "failed" });
   expect(await inbox.replay("admin", job.inboxEventId)).toEqual({ ok: true, status: "processed" });
   const pings = [...notifier.pings];
@@ -167,6 +237,52 @@ test("exhausted jobs alert once without content, and duplicate callbacks cannot 
   expect(alerts).toHaveLength(1);
   expect(notifier.pings).toEqual(pings);
   expect(await inbox.listFailures("admin")).toEqual({ ok: true, events: [], hasMore: false });
+});
+
+test("automatic replay leaves events alerted before it existed to the administrator", async () => {
+  restoreClock();
+  const old = new Date(clock.now().getTime() - 24 * 60 * 60_000);
+  await db.insert(inboxEvent).values({
+    id: "alerted",
+    dedupeKey: "alerted",
+    field: "messages",
+    payload: {},
+    status: "failed",
+    errorClass: "Error",
+    receivedAt: old,
+    failedAt: old,
+    alertedAt: old,
+  });
+  expect(await inbox.retryFailed()).toBe(0);
+  expect(queue.take()).toEqual([]);
+  expect(await inbox.listFailures("admin")).toMatchObject({
+    ok: true,
+    events: [{ id: "alerted", nextAutoRetryAt: null }],
+  });
+});
+
+test("a queue failure leaves a replayed event pending for the stalled-event scan", async () => {
+  restoreClock();
+  const old = new Date(clock.now().getTime() - 60 * 60_000);
+  await db.insert(inboxEvent).values({
+    id: "retry",
+    dedupeKey: "retry",
+    field: "messages",
+    payload: {},
+    status: "failed",
+    errorClass: "Error",
+    receivedAt: old,
+    failedAt: old,
+  });
+  queue.failing = true;
+  await expect(inbox.retryFailed()).rejects.toThrow();
+  queue.failing = false;
+  expect(await inbox.retryFailed()).toBe(0);
+  clock.advance(35 * 60_000 - 1);
+  expect(await inbox.requeueStalled()).toBe(0);
+  clock.advance(1);
+  expect(await inbox.requeueStalled()).toBe(1);
+  expect(queue.take()).toEqual([{ type: "process-inbox-event", inboxEventId: "retry" }]);
 });
 
 test("a failure callback can retry an interrupted alert without losing the failed event", async () => {
@@ -191,6 +307,8 @@ test("a failure callback can retry an interrupted alert without losing the faile
   );
   await inbox.receive({ body, signature: signMetaDelivery(body) });
   const [job] = queue.take();
+  // Its automatic replays have run out.
+  await db.update(inboxEvent).set({ autoRetries: autoRetryDelaysMs.length });
   await expect(inbox.fail(job.inboxEventId, "msg_retry")).rejects.toThrow(
     "Diagnostics unavailable",
   );
@@ -207,11 +325,6 @@ test("a failure callback can retry an interrupted alert without losing the faile
   await inbox.fail(job.inboxEventId, "msg_retry");
   expect(alerts).toHaveLength(1);
 });
-
-const restoreClock = () => {
-  const start = clock.now();
-  onTestFinished(() => clock.set(start));
-};
 
 test("the sweep re-enqueues a pending event whose job was lost, once it is five minutes old", async () => {
   restoreClock();
@@ -321,4 +434,59 @@ test("the sweep leaves a failing event to QStash's retries until 35 minutes afte
   clock.advance(1);
   expect(await inbox.requeueStalled()).toBe(1);
   expect(queue.take()).toEqual([{ type: "process-inbox-event", inboxEventId: job.inboxEventId }]);
+});
+
+test("only an administrator can replay listed failures in bulk, each with a fresh set of automatic replays", async () => {
+  restoreClock();
+  const old = new Date(clock.now().getTime() - 24 * 60 * 60_000);
+  const ids = Array.from(
+    { length: 101 },
+    (_, index) => `019a0871-5e00-7000-8000-${String(index).padStart(12, "0")}`,
+  );
+  await db.insert(inboxEvent).values([
+    ...ids.map((id, index) => ({
+      id,
+      dedupeKey: id,
+      field: "messages",
+      payload: {},
+      status: index % 2 ? ("failed" as const) : ("pending" as const),
+      errorClass: "Error" as const,
+      receivedAt: old,
+      failedAt: old,
+      autoRetries: 3,
+      alertedAt: index % 2 ? old : null,
+    })),
+    {
+      id: "processed",
+      dedupeKey: "processed",
+      field: "messages",
+      payload: {},
+      status: "processed",
+      receivedAt: old,
+    },
+  ]);
+
+  for (const actor of ["owner-a", "missing", "banned-admin"])
+    expect(await inbox.replayFailures(actor)).toEqual({ ok: false, error: "forbidden" });
+  expect(queue.take()).toEqual([]);
+
+  expect(await inbox.replayFailures("admin", ids.slice(0, 2))).toEqual({ ok: true, requeued: 2 });
+  expect(queue.take().map(({ inboxEventId }) => inboxEventId)).toEqual(ids.slice(0, 2));
+  expect(await inbox.replayFailures("admin", ["processed"])).toEqual({ ok: true, requeued: 0 });
+  expect(await inbox.replayFailures("admin", [])).toEqual({ ok: true, requeued: 0 });
+
+  expect(await inbox.replayFailures("admin")).toEqual({ ok: true, requeued: 101 });
+  expect(new Set(queue.take().map(({ inboxEventId }) => inboxEventId))).toEqual(new Set(ids));
+
+  // Each one alerts again only after a new round of automatic replays.
+  const alerts: Diagnostic[] = [];
+  inbox = alertingInbox(alerts);
+  await inbox.fail(ids[1], "msg_again");
+  expect(alerts).toEqual([]);
+  const failures = await inbox.listFailures("admin");
+  expect(failures.ok && failures.events.find(({ id }) => id === ids[1])).toMatchObject({
+    status: "failed",
+    autoRetries: 0,
+    nextAutoRetryAt: new Date(clock.now().getTime() + autoRetryDelaysMs[0]),
+  });
 });
