@@ -19,10 +19,12 @@ export {
 } from "@/modules/bot/capture";
 export {
   botTurnAttempts,
+  burstWait,
   createLiveBot,
   type LiveBot,
   type BotJob,
   type BotJobQueue,
+  type BurstWait,
 } from "@/modules/bot/live";
 export {
   createReplyGate,

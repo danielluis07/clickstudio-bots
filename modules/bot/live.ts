@@ -23,10 +23,32 @@ import { annotateError, logError } from "@/platform/diagnostics";
 import type { Notifier } from "@/platform/notifier";
 import { RetryableError } from "@/platform/retryable";
 
-export type BotJob = { type: "run-bot-turn"; conversationId: string };
+export type BotJob = { type: "run-bot-turn"; conversationId: string; delaySeconds?: number };
 export interface BotJobQueue {
   enqueue(jobs: readonly BotJob[]): Promise<void>;
 }
+
+// People often send several short messages in a row. Each Contact message
+// enqueues its Bot job `delaySeconds` later, and a job whose newest unanswered
+// message is younger than `quietMs` waits for that message's own job, so a
+// burst gets one reply (#144). `quietMs` stays below the delay: Meta's
+// timestamps are truncated to the second, and a job must never wait on
+// itself. A Contact who keeps writing is answered once their oldest unanswered
+// message is `maxWaitMs` old. A single message waits only the delay.
+export type BurstWait = { delaySeconds: number; quietMs: number; maxWaitMs: number };
+export const burstWait: BurstWait = { delaySeconds: 3, quietMs: 2_000, maxWaitMs: 15_000 };
+
+// Whether a later Contact message's own job will answer this burst.
+const stillWriting = (
+  messages: readonly { sentAt: Date }[],
+  now: Date,
+  { quietMs, maxWaitMs }: BurstWait,
+) => {
+  if (!messages.length) return false;
+  const sent = messages.map(({ sentAt }) => sentAt.getTime());
+  const age = (at: number) => now.getTime() - at;
+  return age(Math.max(...sent)) < quietMs && age(Math.min(...sent)) < maxWaitMs;
+};
 
 // The sweep recovers a Contact message whose Bot job never ran once it is two
 // minutes old, past any live turn's lease. After an hour it leaves it: a
@@ -59,6 +81,7 @@ export const createLiveBot = ({
   getSender,
   allowance,
   sleep = wait,
+  burst = burstWait,
 }: {
   db: Database;
   clock: Clock;
@@ -68,12 +91,20 @@ export const createLiveBot = ({
   getSender: () => WhatsAppSender;
   allowance: BotAllowance;
   sleep?: (ms: number) => Promise<void>;
+  // Null answers every job at once.
+  burst?: BurstWait | null;
 }) => {
   const gate = createReplyGate({ db, clock, allowance });
   const enqueue = async (scope: ChannelRoute, conversationId: string) => {
     if ((await gate.check({ scope, conversationId }, "enqueue")).kind !== "reply") return;
     if (await hasUnansweredContactMessages(db, scope, conversationId))
-      await queue.enqueue([{ type: "run-bot-turn", conversationId }]);
+      await queue.enqueue([
+        {
+          type: "run-bot-turn",
+          conversationId,
+          ...(burst ? { delaySeconds: burst.delaySeconds } : {}),
+        },
+      ]);
   };
 
   type Ended = {
@@ -200,8 +231,12 @@ export const createLiveBot = ({
         return await runBotTurn(
           { db, clock, notifier },
           conversationId,
-          (turn) => {
+          async (turn) => {
             tenantId = turn.scope.tenantId;
+            // Nothing is answered or recorded: the newer message's job answers
+            // the whole burst, and the sweep recovers it if that job is lost.
+            if (burst && stillWriting(turn.snapshot.current, clock.now(), burst))
+              return "waiting" as const;
             return respond(turn, attempt < botTurnAttempts);
           },
           async (scope, followUp) => {

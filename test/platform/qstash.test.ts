@@ -48,6 +48,26 @@ describe("QStash job queue", () => {
       { conversationId: "conversation-b" },
     ]);
   });
+  test("a job's delay postpones its delivery and stays out of its body", async () => {
+    received = [];
+    await createQStashJobQueue({
+      token: "token",
+      baseUrl: server.url.origin,
+      appUrl: "https://bots.example.com",
+    }).enqueue([
+      { type: "run-bot-turn", conversationId: "conversation-a", delaySeconds: 3 },
+      { type: "run-bot-turn", conversationId: "conversation-b" },
+    ]);
+    const jobs = received[0].body as { headers: Record<string, string>; body: string }[];
+    expect(jobs.map(({ headers }) => new Headers(headers).get("upstash-delay"))).toEqual([
+      "3s",
+      null,
+    ]);
+    expect(jobs.map(({ body }) => JSON.parse(body))).toEqual([
+      { conversationId: "conversation-a" },
+      { conversationId: "conversation-b" },
+    ]);
+  });
   test("publishes each job to its route with a body of ids only", async () => {
     received = [];
     const queue = createQStashJobQueue({

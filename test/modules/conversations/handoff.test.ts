@@ -97,6 +97,7 @@ const setup = async () => {
   };
   const conversationId = await receive("Quanto custa?");
   const worker = createLiveBot({
+    burst: null,
     db,
     clock,
     model,

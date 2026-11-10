@@ -7,8 +7,13 @@ import { Client, Receiver } from "@upstash/qstash";
 // is still stuck.
 const deliveryRetries = { "process-inbox-event": 3, "run-bot-turn": 3 } as const;
 
-// A job is its type plus ids; the type names the route that handles it.
-type QueuedJob = { type: keyof typeof deliveryRetries } & Record<string, string>;
+// A job is its type plus ids; the type names the route that handles it. A
+// delay postpones delivery and never reaches the handler.
+type QueuedJob = {
+  type: keyof typeof deliveryRetries;
+  delaySeconds?: number;
+  [id: string]: string | number | undefined;
+};
 
 // Where QStash delivers a job, and so the URL its signature is bound to.
 export const qstashJobUrl = (appUrl: string, type: string) =>
@@ -36,10 +41,11 @@ export const createQStashJobQueue = ({
     async enqueue(jobs: readonly QueuedJob[]) {
       if (jobs.length === 0) return;
       const published = await client.batchJSON(
-        jobs.map(({ type, ...ids }) => ({
+        jobs.map(({ type, delaySeconds, ...ids }) => ({
           url: qstashJobUrl(appUrl, type),
           body: ids,
           retries: deliveryRetries[type],
+          ...(delaySeconds ? { delay: delaySeconds } : {}),
           ...(type === "process-inbox-event"
             ? { failureCallback: qstashJobUrl(appUrl, "inbox-event-failed") }
             : {}),
