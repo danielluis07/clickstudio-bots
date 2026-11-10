@@ -21,6 +21,8 @@ type Options = {
   appId: string;
   appSecret: string;
   graphVersion: string;
+  // Meta's Graph API origin. Only the browser suite replaces it, with a fake.
+  graphApiUrl?: string;
   activeKeyVersion: string;
   encryptionKeys: Record<string, string>;
   fetch?: (url: string | URL, init?: RequestInit) => Promise<Response>;
@@ -95,7 +97,7 @@ const recordFailure = (operation: string, error: unknown, { tenantId }: { tenant
 export const createWhatsAppAdapter = (options: Options) => {
   const cipher = createWhatsAppTokenCipher(options.activeKeyVersion, options.encryptionKeys);
   const http = options.fetch ?? globalThis.fetch;
-  const baseUrl = `https://graph.facebook.com/${options.graphVersion}`;
+  const baseUrl = `${options.graphApiUrl ?? "https://graph.facebook.com"}/${options.graphVersion}`;
 
   const request = async (path: string, init: RequestInit): Promise<unknown> => {
     let response: Response;
