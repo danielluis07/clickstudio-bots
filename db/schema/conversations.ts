@@ -77,15 +77,15 @@ export const conversation = pgTable(
     // Conversation still waits; "Resolvida" clears it.
     handoffReason: text("handoff_reason", {
       enum: [
-        "sem_resposta",
-        "pedido_do_contato",
-        "regra_do_negocio",
-        "bot_indisponivel",
-        "limite_atingido",
-        "limite_do_contato",
-        "assumida",
-        "resposta_no_painel",
-        "resposta_no_app",
+        "no_answer",
+        "contact_request",
+        "handoff_topic",
+        "bot_unavailable",
+        "allowance_exhausted",
+        "contact_cap_reached",
+        "claimed",
+        "dashboard_reply",
+        "app_reply",
       ],
     }),
     // On the waiting list for the team. Every Handoff adds it; only "Resolvida"

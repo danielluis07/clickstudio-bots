@@ -34,7 +34,7 @@ send. Their short reservation transactions lock the Tenant's monthly aggregate
 and include active pending Bot sends in the limit check, bounding overshoot to
 two replies. Contention retries the job without sending or counting. Once
 exhausted, the next eligible Contact message causes
-a Handoff with `limite_atingido`, displayed as **Limite de respostas atingido**
+a Handoff with `allowance_exhausted`, displayed as **Limite de respostas atingido**
 in the inbox. No overage charge is created. Month rollover opens a fresh counter;
 it never changes existing Conversation ownership or clears a Handoff.
 
@@ -54,7 +54,7 @@ Issue: [#143](https://github.com/danielluis07/clickstudio-bots/issues/143).
 
 Without it, one Contact writing in a loop could spend the whole Tenant's
 allowance in a few hours and leave every other Contact with a
-`limite_atingido` Handoff. So each Contact gets at most 30 Bot replies per day
+`allowance_exhausted` Handoff. So each Contact gets at most 30 Bot replies per day
 in `America/Sao_Paulo` (`dailyContactReplyLimit` in
 `modules/bot/contact-cap.ts`). The cap is the same for every Tenant.
 
@@ -64,7 +64,7 @@ in `America/Sao_Paulo` (`dailyContactReplyLimit` in
   output do not count.
 - The reply gate checks the cap after the Tenant's allowance and before the
   Schedule, at `beforeModel` and `beforeSend`. A capped Contact's next message
-  hands off as `limite_do_contato`, shown as **Limite diário do contato
+  hands off as `contact_cap_reached`, shown as **Limite diário do contato
   atingido**, without calling the Model and without sending. As with the
   allowance, this happens even outside the Schedule. Other Contacts of the
   Tenant are still answered.

@@ -132,7 +132,7 @@ describe("AI SDK model", () => {
             type: "tool-call",
             toolCallId: "call-1",
             toolName: "handoff",
-            input: JSON.stringify({ reason: "sem_resposta", tenantId: "x" }),
+            input: JSON.stringify({ reason: "no_answer", tenantId: "x" }),
           },
           { type: "tool-call", toolCallId: "call-2", toolName: "send_payment", input: "{}" },
           { type: "tool-call", toolCallId: "call-3", toolName: "handoff", input: "not json" },
@@ -142,7 +142,7 @@ describe("AI SDK model", () => {
     expect(await createAiSdkModel({ model: provider }).generate(request)).toEqual({
       text: "O corte custa R$ 80.",
       toolCalls: [
-        { id: "call-1", name: "handoff", input: { reason: "sem_resposta", tenantId: "x" } },
+        { id: "call-1", name: "handoff", input: { reason: "no_answer", tenantId: "x" } },
         { id: "call-2", name: "send_payment", input: {} },
         { id: "call-3", name: "handoff", input: "not json" },
       ],

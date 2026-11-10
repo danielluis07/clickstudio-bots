@@ -11,7 +11,7 @@ type HandoffInput = { conversationId: string } | { conversationIds: string[] };
 // What each control does to ownership, mirroring the server's commands.
 const changes = {
   takeOver: (found: Ownership): Ownership =>
-    found.owner === "bot" ? { owner: "team", handoffReason: "assumida", waiting: true } : found,
+    found.owner === "bot" ? { owner: "team", handoffReason: "claimed", waiting: true } : found,
   returnToBot: (found: Ownership): Ownership => ({ ...found, owner: "bot" }),
   resolve: (): Ownership => ({ owner: "bot", handoffReason: null, waiting: false }),
 };

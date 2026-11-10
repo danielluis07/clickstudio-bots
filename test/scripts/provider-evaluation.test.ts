@@ -70,13 +70,13 @@ test("a repaired call still fails the original schema and scope gates and counts
       usage: { inputTokens: 100 },
     },
     {
-      toolCalls: [{ id: "fixed", name: "handoff", input: { reason: "sem_resposta" } }],
+      toolCalls: [{ id: "fixed", name: "handoff", input: { reason: "no_answer" } }],
       usage: { inputTokens: 200 },
     },
   );
   const run = await runEvaluation({
     tenants: [tenant],
-    cases: [{ ...answer, expected: { ...answer.expected, handoff: "sem_resposta" } }],
+    cases: [{ ...answer, expected: { ...answer.expected, handoff: "no_answer" } }],
     model,
     pricing,
   });
@@ -95,15 +95,15 @@ test("human judgments, Handoff reasons, unnecessary Handoffs and complete-reply 
   const model = createTestModel();
   model.script(
     { text: "O corte custa R$ 80." },
-    { toolCalls: [{ id: "h", name: "handoff", input: { reason: "pedido_do_contato" } }] },
-    { toolCalls: [{ id: "h2", name: "handoff", input: { reason: "sem_resposta" } }] },
+    { toolCalls: [{ id: "h", name: "handoff", input: { reason: "contact_request" } }] },
+    { toolCalls: [{ id: "h2", name: "handoff", input: { reason: "no_answer" } }] },
   );
   const cases = [
     answer,
     {
       ...answer,
       id: "person",
-      expected: { ...answer.expected, answerable: false, handoff: "pedido_do_contato" as const },
+      expected: { ...answer.expected, answerable: false, handoff: "contact_request" as const },
     },
     { ...answer, id: "unnecessary" },
   ];
@@ -139,12 +139,12 @@ test("provider failures cannot satisfy required Handoffs or certify a complete c
   model.script(new Error("Provider unavailable"));
   const run = await runEvaluation({
     tenants: [tenant],
-    cases: [{ ...answer, expected: { ...answer.expected, handoff: "sem_resposta" } }],
+    cases: [{ ...answer, expected: { ...answer.expected, handoff: "no_answer" } }],
     model,
     pricing,
   });
   const score = scoreEvaluation(run);
-  expect(run.cases[0].outcome).toMatchObject({ kind: "handoff", reason: "bot_indisponivel" });
+  expect(run.cases[0].outcome).toMatchObject({ kind: "handoff", reason: "bot_unavailable" });
   expect(score.gates.requiredHandoffs).toMatchObject({ value: 0, pass: false });
   expect(score.usageComplete).toBe(false);
   expect(score.gates.modelCost.pass).toBeNull();
@@ -180,7 +180,7 @@ test("published gate boundaries are inclusive, and p95 uses nearest rank instead
   const cases: EvaluationCase[] = [];
   for (let i = 0; i < 30; i++) {
     const required = i < 20;
-    const reason = i === 19 ? "pedido_do_contato" : "sem_resposta";
+    const reason = i === 19 ? "contact_request" : "no_answer";
     const call = { id: `call-${i}`, name: "handoff", input: { reason } };
     cases.push({
       ...answer,
@@ -188,7 +188,7 @@ test("published gate boundaries are inclusive, and p95 uses nearest rank instead
       expected: {
         ...answer.expected,
         answerable: !required,
-        handoff: required ? "sem_resposta" : null,
+        handoff: required ? "no_answer" : null,
       },
     });
     model.script({
@@ -279,7 +279,7 @@ test("the corpus exercises configured links through the production core with no 
     const tenant = corpus.tenants.find(({ id }) => id === item.tenantId)!;
     if (item.expected.handoff) {
       model.script({
-        toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "sem_resposta" } }],
+        toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "no_answer" } }],
       });
     } else {
       const link = tenant.links!.links[item.tags.includes("link-payment") ? 1 : 0];
@@ -293,7 +293,7 @@ test("the corpus exercises configured links through the production core with no 
   expect(run.cases).toHaveLength(21);
   for (const item of run.cases) {
     if (item.expected.handoff)
-      expect(item.outcome).toMatchObject({ kind: "handoff", reason: "sem_resposta" });
+      expect(item.outcome).toMatchObject({ kind: "handoff", reason: "no_answer" });
     else {
       const tenant = corpus.tenants.find(({ id }) => id === item.tenantId)!;
       const link = tenant.links!.links[item.id.endsWith("link-payment") ? 1 : 0];
@@ -314,7 +314,7 @@ test("a scoped argument cannot disappear from scores when production strips an u
       {
         id: "scoped",
         name: "handoff",
-        input: { reason: "sem_resposta", extra: { tenant_id: "foreign" } },
+        input: { reason: "no_answer", extra: { tenant_id: "foreign" } },
       },
     ],
   });

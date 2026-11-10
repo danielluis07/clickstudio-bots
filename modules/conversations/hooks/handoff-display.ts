@@ -4,15 +4,15 @@ export const conversationOwnerLabels = { bot: "Bot", team: "Equipe" } as const;
 
 // Why the latest Handoff happened, as Members read it.
 export const handoffReasonLabels: Record<ConversationHandoffReason, string> = {
-  sem_resposta: "O Bot não soube responder",
-  pedido_do_contato: "O contato pediu atendimento",
-  regra_do_negocio: "Regra do negócio",
-  bot_indisponivel: "Bot indisponível",
-  limite_atingido: "Limite de respostas atingido",
-  limite_do_contato: "Limite diário do contato atingido",
-  assumida: "Assumida por um membro",
-  resposta_no_painel: "Membro respondeu pelo painel",
-  resposta_no_app: "Membro respondeu pelo app",
+  no_answer: "O Bot não soube responder",
+  contact_request: "O contato pediu atendimento",
+  handoff_topic: "Regra do negócio",
+  bot_unavailable: "Bot indisponível",
+  allowance_exhausted: "Limite de respostas atingido",
+  contact_cap_reached: "Limite diário do contato atingido",
+  claimed: "Assumida por um membro",
+  dashboard_reply: "Membro respondeu pelo painel",
+  app_reply: "Membro respondeu pelo app",
 };
 
 // The inbox's list filters, as kept in the URL.

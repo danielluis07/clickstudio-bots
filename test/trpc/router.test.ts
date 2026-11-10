@@ -332,12 +332,12 @@ describe("tRPC router", () => {
     };
 
     await ownerB.handoff.takeOver(input);
-    expect(await ownership()).toEqual({ owner: "team", handoffReason: "assumida", waiting: true });
+    expect(await ownership()).toEqual({ owner: "team", handoffReason: "claimed", waiting: true });
     expect(
       (await attendant.conversations.list({ waiting: true })).conversations.map(({ id }) => id),
     ).toEqual([conversationOfB]);
     await attendant.handoff.returnToBot(input);
-    expect(await ownership()).toEqual({ owner: "bot", handoffReason: "assumida", waiting: true });
+    expect(await ownership()).toEqual({ owner: "bot", handoffReason: "claimed", waiting: true });
     await attendant.handoff.resolve(input);
     expect(await ownership()).toEqual({ owner: "bot", handoffReason: null, waiting: false });
     expect(await attendant.conversations.list({ waiting: true })).toEqual({
@@ -355,7 +355,7 @@ describe("tRPC router", () => {
     expect(await attendant.conversations.get({ conversationId: conversationOfB })).toMatchObject({
       owner: "bot",
       waiting: true,
-      handoffReason: "assumida",
+      handoffReason: "claimed",
     });
     for (const conversationIds of [[], [""], Array(101).fill(conversationOfB)]) {
       expect(await codeOf(attendant.handoff.bulkReturnToBot({ conversationIds }))).toBe(

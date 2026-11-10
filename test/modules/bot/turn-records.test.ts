@@ -112,14 +112,14 @@ test("a sent reply records its outcome, tokens and duration under its Tenant", a
 test("a Handoff records its reason and the tokens spent before it", async () => {
   const { model, worker, conversationId } = await setup();
   model.script({
-    toolCalls: [{ id: "call-1", name: "handoff", input: { reason: "pedido_do_contato" } }],
+    toolCalls: [{ id: "call-1", name: "handoff", input: { reason: "contact_request" } }],
     usage: { inputTokens: 50, outputTokens: 5 },
   });
 
   await worker.run(conversationId);
 
   expect(await records()).toMatchObject([
-    { outcome: "handoff", handoffReason: "pedido_do_contato", inputTokens: 50, outputTokens: 5 },
+    { outcome: "handoff", handoffReason: "contact_request", inputTokens: 50, outputTokens: 5 },
   ]);
 });
 
@@ -130,7 +130,7 @@ test("a gate Handoff after the Model call keeps the turn's tokens", async () => 
   expect(await worker.run(conversationId)).toBe("handoff");
 
   expect(await records()).toMatchObject([
-    { outcome: "handoff", handoffReason: "bot_indisponivel", inputTokens: 70, outputTokens: 9 },
+    { outcome: "handoff", handoffReason: "bot_unavailable", inputTokens: 70, outputTokens: 9 },
   ]);
 });
 
@@ -172,7 +172,7 @@ test("a failed record write does not fail a turn whose reply was sent", async ()
 const insertRecords = async (
   tenantId: string,
   at: Date,
-  rows: { outcome: "sent" | "skipped" | "handoff"; handoffReason?: "bot_indisponivel" }[],
+  rows: { outcome: "sent" | "skipped" | "handoff"; handoffReason?: "bot_unavailable" }[],
 ) =>
   db.insert(botTurnRecord).values(
     rows.map((row, index) => ({
@@ -245,7 +245,7 @@ test("the daily task deletes records older than 13 months", async () => {
   expect(await records()).toMatchObject([{ outcome: "skipped" }]);
 });
 
-const unavailable = { outcome: "handoff", handoffReason: "bot_indisponivel" } as const;
+const unavailable = { outcome: "handoff", handoffReason: "bot_unavailable" } as const;
 
 const spikeSetup = async () => {
   db = await createTestDatabase();
@@ -319,7 +319,7 @@ test("Handoffs for other reasons, or a low rate, do not alert", async () => {
       tenantId: otherReason,
       at: new Date(minutesAgo(20).getTime() + index),
       outcome: "handoff" as const,
-      handoffReason: "pedido_do_contato" as const,
+      handoffReason: "contact_request" as const,
       inputTokens: 0,
       outputTokens: 0,
       cacheReadTokens: 0,

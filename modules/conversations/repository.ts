@@ -252,7 +252,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
           .where(
             and(eq(conversation.id, conversationId), eq(conversation.tenantId, scope.tenantId)),
           );
-        await handOff(tx, scope, conversationId, "resposta_no_painel");
+        await handOff(tx, scope, conversationId, "dashboard_reply");
         return inserted;
       });
     },

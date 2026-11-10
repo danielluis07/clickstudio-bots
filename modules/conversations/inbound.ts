@@ -56,7 +56,7 @@ export const recordInboundMessage = (db: Database, route: ChannelRoute, inbound:
         inbound.type !== "text" &&
         (inbound.type === "audio" || !inbound.text?.trim())
       )
-        await handOff(tx, route, conversationId, "sem_resposta");
+        await handOff(tx, route, conversationId, "no_answer");
       return conversationId;
     },
   );

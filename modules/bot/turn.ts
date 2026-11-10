@@ -147,7 +147,7 @@ export const createBotCore = ({
         const checked = checkToolCalls(response.toolCalls, capture, links);
         if (!checked.valid) {
           // A refused response's text is never sent, even beside a valid answer.
-          if (retried) return handoff("bot_indisponivel");
+          if (retried) return handoff("bot_unavailable");
           // One retry: the model sees why its calls were refused.
           retried = true;
           roundTrip(response, checked.errors);
@@ -168,7 +168,7 @@ export const createBotCore = ({
         }
         if (reply) return { kind: "answer", reply };
         // A capture alone gets one chance to write the reply it left out.
-        if (!checked.captured || continued) return handoff("bot_indisponivel");
+        if (!checked.captured || continued) return handoff("bot_unavailable");
         continued = true;
         roundTrip(
           response,
@@ -187,7 +187,7 @@ export const createBotCore = ({
     const decision = await decide().catch((error: unknown) => {
       logError("bot_decision_failed", error, ids);
       if (retryTransient && error instanceof RetryableError) throw error;
-      return handoff("bot_indisponivel");
+      return handoff("bot_unavailable");
     });
     return { ...decision, tokens: usage };
   },

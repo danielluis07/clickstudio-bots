@@ -77,7 +77,7 @@ export const alertBotHandoffSpikes = async ({
   const now = clock.now();
   const windowFrom = new Date(now.getTime() - limits.windowMs);
   const baselineFrom = new Date(windowFrom.getTime() - limits.baselineMs);
-  const unavailable = eq(botTurnRecord.handoffReason, "bot_indisponivel");
+  const unavailable = eq(botTurnRecord.handoffReason, "bot_unavailable");
   const candidates = await db
     .select({ tenantId: botTurnRecord.tenantId })
     .from(botTurnRecord)

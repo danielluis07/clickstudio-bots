@@ -25,7 +25,7 @@ export type ReplyDecision =
       kind: "handoff";
       reason: Extract<
         ConversationHandoffReason,
-        "limite_atingido" | "limite_do_contato" | "bot_indisponivel"
+        "allowance_exhausted" | "contact_cap_reached" | "bot_unavailable"
       >;
     };
 
@@ -64,11 +64,12 @@ export const createReplyGate = ({
     // An exhausted allowance still runs a turn, so it can hand off.
     if (checkpoint === "enqueue") return reply;
     if (!found.windowOpen) return skip;
-    if (!(await allowance.canReply(turn))) return { kind: "handoff", reason: "limite_atingido" };
+    if (!(await allowance.canReply(turn)))
+      return { kind: "handoff", reason: "allowance_exhausted" };
     if (await contactCapReached(db, turn, now))
-      return { kind: "handoff", reason: "limite_do_contato" };
+      return { kind: "handoff", reason: "contact_cap_reached" };
     if (!scheduleAllows(await readBehaviour(db, turn.scope), now)) return skip;
-    if (!available) return { kind: "handoff", reason: "bot_indisponivel" };
+    if (!available) return { kind: "handoff", reason: "bot_unavailable" };
     return reply;
   },
 });

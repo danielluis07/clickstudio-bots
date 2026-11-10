@@ -7,8 +7,17 @@ Run `bun run db:migrate` before deploying. The migration adds the Conversation's
 `waiting` flag and the message's `echo_unresolved` flag. Conversations already
 with the team are put on the waiting list. The automatic return's migration
 (#139) adds `resume_on_contact_message`, false for existing rows: a
-`bot_indisponivel` Handoff from before it returns only after a quiet service
+`bot_unavailable` Handoff from before it returns only after a quiet service
 window, since there is no telling whether a Member acted on it.
+
+The reasons were renamed from Portuguese identifiers to English in
+[#173](https://github.com/danielluis07/clickstudio-bots/issues/173). Its
+migration rewrites the stored `conversation.handoff_reason` and
+`bot_turn_record.handoff_reason` values. Since it runs before the deploy, it
+also adds a trigger on both columns that rewrites an old spelling on write, so
+an instance still on the old code cannot store one. A follow-up migration drops
+the trigger and its functions once no old instance remains. An old instance
+shows no reason for a Conversation whose reason is already English.
 
 ## What Members see
 
@@ -19,15 +28,15 @@ pt-BR reason of the latest Handoff. **Aguardando equipe** above the list (URL
 
 | Reason | Shown as | Cause |
 | --- | --- | --- |
-| `sem_resposta` | O Bot não soube responder | Model Handoff |
-| `pedido_do_contato` | O contato pediu atendimento | Model Handoff |
-| `regra_do_negocio` | Regra do negócio | Model Handoff |
-| `bot_indisponivel` | Bot indisponível | Provider, sender or uncertain send failure |
-| `limite_atingido` | Limite de respostas atingido | Allowance hook refused |
-| `limite_do_contato` | Limite diário do contato atingido | [Daily cap per Contact](bot-reply-allowance.md#daily-cap-per-contact) reached |
-| `assumida` | Assumida por um membro | **Assumir** |
-| `resposta_no_painel` | Membro respondeu pelo painel | Dashboard reply |
-| `resposta_no_app` | Membro respondeu pelo app | Unmatched app echo |
+| `no_answer` | O Bot não soube responder | Model Handoff |
+| `contact_request` | O contato pediu atendimento | Model Handoff |
+| `handoff_topic` | Regra do negócio | Model Handoff |
+| `bot_unavailable` | Bot indisponível | Provider, sender or uncertain send failure |
+| `allowance_exhausted` | Limite de respostas atingido | Allowance hook refused |
+| `contact_cap_reached` | Limite diário do contato atingido | [Daily cap per Contact](bot-reply-allowance.md#daily-cap-per-contact) reached |
+| `claimed` | Assumida por um membro | **Assumir** |
+| `dashboard_reply` | Membro respondeu pelo painel | Dashboard reply |
+| `app_reply` | Membro respondeu pelo app | Unmatched app echo |
 
 The schema enum is the single list of reasons, exported as
 `ConversationHandoffReason`. The Bot's Model reasons and its system reasons are
@@ -42,8 +51,8 @@ after they commit; others use `handOffAndNotify`, which notifies only when the
 Conversation changed hands.
 
 A Bot-initiated Handoff sends its short notice to the Contact through the
-normal reservation and send gates. System Handoffs (`bot_indisponivel`,
-`limite_atingido`, `limite_do_contato`) send nothing.
+normal reservation and send gates. System Handoffs (`bot_unavailable`,
+`allowance_exhausted`, `contact_cap_reached`) send nothing.
 
 ## Taking over
 
@@ -62,8 +71,8 @@ An echo can arrive before Meta answers the Bot's own send, while its pending
 row has no wamid yet. Such an echo is filed with `echo_unresolved`, without a
 Handoff. When the send's wamid is stored, a matching echo row gives way as
 before; any unresolved echo left was a Member's app reply and hands off as
-`resposta_no_app`. A failed or stuck send already hands off as
-`bot_indisponivel`. If the worker crashes after reserving, the Conversation
+`app_reply`. A failed or stuck send already hands off as
+`bot_unavailable`. If the worker crashes after reserving, the Conversation
 keeps showing **Bot** until the next turn or the
 [sweep](inbox-operations.md#the-sweep) fails the stuck send; the Bot sends
 nothing meanwhile, because the pending row
@@ -81,19 +90,19 @@ Bot on its own in two cases
   the waiting list with its reason.
 - **Resolvida** returns ownership to the Bot, clears the reason and removes the
   waiting item. It is also offered for a Bot-owned Conversation still waiting.
-- **The Contact writes after a `bot_indisponivel` Handoff** that no Member has
+- **The Contact writes after a `bot_unavailable` Handoff** that no Member has
   acted on. The provider has likely recovered; if not, the turn hands off
   again. **Assumir**, a dashboard reply or an app echo after the Handoff is a
-  Member acting on it, even though the reason stays `bot_indisponivel`. The
+  Member acting on it, even though the reason stays `bot_unavailable`. The
   Conversation's `resume_on_contact_message` flag tracks this: only a
-  `bot_indisponivel` change of hands sets it, and any Member Handoff or return
+  `bot_unavailable` change of hands sets it, and any Member Handoff or return
   clears it. Only a new Contact message returns it, never a redelivery. An
   audio or a media message with no caption returns the Conversation and then
-  hands it off again as `sem_resposta`.
+  hands it off again as `no_answer`.
 - **A service window passes with no message from either side.** The
   [sweep](inbox-operations.md#the-sweep) returns any Handoff whose last message,
   from the Contact, a Member or the Bot, is at least 24 hours old. This
-  applies to every reason, `bot_indisponivel` included. The Bot could not reply
+  applies to every reason, `bot_unavailable` included. The Bot could not reply
   outside the window anyway; it answers the Contact's next message.
 
 Both automatic returns behave as **Devolver ao Bot**: the Conversation stays on
