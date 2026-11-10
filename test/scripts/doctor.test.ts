@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { applicationRoleTimeouts } from "@/db/application-role";
 import {
   runDoctor,
   type DoctorDependencies,
@@ -15,11 +16,14 @@ const environment: DoctorEnvironment = {
   ANTHROPIC_API_KEY: "secret-anthropic",
 };
 
+const applicationRole = { timeouts: { ...applicationRoleTimeouts }, canChangeSchema: false };
+
 const ready = (overrides: Partial<DoctorDependencies> = {}): DoctorDependencies => ({
   migrationNames: ["first", "second"],
   inspectDatabase: async () => ({
     appliedMigrationNames: ["first", "second"],
     ownerAvailable: true,
+    role: applicationRole,
   }),
   checkServer: async () => true,
   probeProvider: async () => {
@@ -68,7 +72,11 @@ test("pending migrations and missing owner are reported without applying or crea
   const report = await runDoctor({
     environment,
     dependencies: ready({
-      inspectDatabase: async () => ({ appliedMigrationNames: ["first"], ownerAvailable: false }),
+      inspectDatabase: async () => ({
+        appliedMigrationNames: ["first"],
+        ownerAvailable: false,
+        role: applicationRole,
+      }),
     }),
   });
   expect(report.ok).toBe(false);
@@ -86,6 +94,7 @@ test("migrations from another branch cannot be mistaken for local readiness", as
       inspectDatabase: async () => ({
         appliedMigrationNames: ["first", "second", "future"],
         ownerAvailable: true,
+        role: applicationRole,
       }),
     }),
   });
@@ -100,7 +109,11 @@ test("a missing migration history and a stopped server remain visible in the rep
   const report = await runDoctor({
     environment,
     dependencies: ready({
-      inspectDatabase: async () => ({ appliedMigrationNames: null, ownerAvailable: false }),
+      inspectDatabase: async () => ({
+        appliedMigrationNames: null,
+        ownerAvailable: false,
+        role: applicationRole,
+      }),
       checkServer: async () => false,
     }),
   });
@@ -122,8 +135,49 @@ test("database failures are sanitized and do not prevent the independent server 
   });
   expect(report.ok).toBe(false);
   expect(report.checks.find(({ name }) => name === "database")?.status).toBe("fail");
+  expect(report.checks.find(({ name }) => name === "database_role")?.status).toBe("skip");
   expect(report.checks.find(({ name }) => name === "server")?.status).toBe("pass");
   expect(JSON.stringify(report)).not.toContain("secret-database");
+});
+
+test("a role without the expected timeouts fails readiness and names the missing settings", async () => {
+  const report = await runDoctor({
+    environment,
+    dependencies: ready({
+      inspectDatabase: async () => ({
+        appliedMigrationNames: ["first", "second"],
+        ownerAvailable: true,
+        role: {
+          timeouts: { ...applicationRoleTimeouts, lock_timeout: 0, statement_timeout: 60_000 },
+          canChangeSchema: false,
+        },
+      }),
+    }),
+  });
+  expect(report.ok).toBe(false);
+  const check = report.checks.find(({ name }) => name === "database_role");
+  expect(check?.status).toBe("fail");
+  expect(check?.message).toContain("statement_timeout, lock_timeout");
+  expect(check?.message).not.toContain("idle_in_transaction_session_timeout");
+  expect(check?.message).toContain("bun run db:app-role");
+});
+
+test("a role that can change the schema fails readiness even with every timeout", async () => {
+  const report = await runDoctor({
+    environment,
+    dependencies: ready({
+      inspectDatabase: async () => ({
+        appliedMigrationNames: ["first", "second"],
+        ownerAvailable: true,
+        role: { ...applicationRole, canChangeSchema: true },
+      }),
+    }),
+  });
+  expect(report.ok).toBe(false);
+  expect(report.checks.find(({ name }) => name === "database_role")).toMatchObject({
+    status: "fail",
+    message: expect.stringContaining("criar ou alterar tabelas"),
+  });
 });
 
 test("server checks receive only the configured origin, without paths, queries or credentials", async () => {

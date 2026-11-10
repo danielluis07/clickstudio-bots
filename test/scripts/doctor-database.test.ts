@@ -39,6 +39,15 @@ test("an existing owner is detected without exposing or changing their records",
   expect(await db.select().from(member)).toEqual(before);
 });
 
+test("inspection reads the connected role's timeouts and schema rights without changing them", async () => {
+  // PGlite connects as a superuser with no timeouts: exactly what the doctor rejects.
+  const { role } = await inspect();
+  expect(role).toEqual({
+    timeouts: { statement_timeout: 0, lock_timeout: 0, idle_in_transaction_session_timeout: 0 },
+    canChangeSchema: true,
+  });
+});
+
 test("inspection reports absent migration metadata without recreating it", async () => {
   await db.execute(sql`drop schema drizzle cascade`);
   expect((await inspect()).appliedMigrationNames).toBeNull();

@@ -1,6 +1,7 @@
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { Client } from "pg";
 import { createGateway } from "ai";
+import { readApplicationRole } from "@/db/application-role";
 import { createAiSdkModel, createBotModel } from "@/platform/ai-sdk-model";
 import type { DatabaseReadiness, DoctorDependencies } from "@/scripts/doctor/checks";
 
@@ -24,11 +25,13 @@ export const inspectDatabaseReadiness = async (
     const owner = tables.has_members
       ? await query("select exists(select 1 from public.member where role = 'owner') as available")
       : [];
+    const role = await readApplicationRole(query);
     await query("COMMIT");
     return {
       appliedMigrationNames:
         applied?.flatMap(({ name }) => (typeof name === "string" ? [name] : [])) ?? null,
       ownerAvailable: owner[0]?.available === true,
+      role,
     };
   } catch (error) {
     await query("ROLLBACK");

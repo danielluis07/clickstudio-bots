@@ -16,28 +16,51 @@ bun install
 
 Create `.env` with:
 
-- `DATABASE_URL`: Neon **pooled** connection string of the **dev branch**. Production's URL lives only in Vercel's environment variables, never in `.env`. The app keeps one global `pg` pool and registers it with `attachDatabasePool`.
+- `DATABASE_URL`: Neon **pooled** connection string of the **dev branch**, signed in as the **application role** (see [Database roles](#database-roles)). Production's URL lives only in Vercel's environment variables, never in `.env`. The app keeps one global `pg` pool and registers it with `attachDatabasePool`.
   Use `sslmode=verify-full` in both pooled and direct connection strings to preserve certificate and hostname verification and avoid the `pg` warning about changing SSL mode semantics.
+- `DATABASE_OWNER_URL`: Neon **direct** connection string of the dev branch, signed in as the **owner role**. Only `bun run db:migrate` and `bun run db:app-role` read it; the app never does.
 - `BETTER_AUTH_SECRET`
 - `APP_URL`: e.g. `http://localhost:3000`
 - `RESEND_API_KEY`: Resend API key used for invitation emails.
 - `EMAIL_FROM`: verified Resend sender, e.g. `ClickStudio Bots <convites@example.com>`.
 
-Apply migrations, optionally seed the demo Tenant, then start the dev server:
+Apply migrations, configure the application role, optionally seed the demo Tenant, then start the dev server:
 
 ```bash
 bun run db:migrate
+bun run db:app-role
 bun run db:seed
 bun run dev
 ```
 
-Neon recommends the **direct** (unpooled) connection string for migrations. To migrate production, pass its direct string for that one command rather than storing it:
+Neon recommends the **direct** (unpooled) connection string for migrations. To migrate production, pass its owner direct string for that one command rather than storing it:
 
 ```bash
-DATABASE_URL="<production direct connection string>" bun run db:migrate
+DATABASE_OWNER_URL="<production owner direct connection string>" bun run db:migrate
 ```
 
 See [ADR 0003](docs/adr/0003-node-postgres-global-pool-on-neon.md) for why the app connects this way.
+
+### Database roles
+
+Each Neon branch has two roles ([ADR 0009](docs/adr/0009-least-privilege-application-role-with-role-level-timeouts.md)):
+
+| Role | Can | Connection string | Used by |
+| --- | --- | --- | --- |
+| Owner (Neon's default, e.g. `neondb_owner`) | Everything, including creating and altering tables | `DATABASE_OWNER_URL`, direct endpoint | `bun run db:migrate`, `bun run db:app-role`. Never in Vercel |
+| Application (e.g. `app`) | Read and write rows; no DDL | `DATABASE_URL`, pooled endpoint | The app in every environment, `bun run doctor`, `db:seed`, `admin:create` and the Tenant administration scripts |
+
+The application role also carries the database timeouts: `statement_timeout` 30 s, `lock_timeout` 5 s and `idle_in_transaction_session_timeout` 10 s. They live on the role because the pooled endpoint cannot keep a session `SET`. The pool itself gives up on getting a connection after 5 s.
+
+To set up a branch, create no role in the Neon Console: roles made there join `neon_superuser`. Instead:
+
+1. Choose a role name and generate a password (Neon requires at least 60 bits of entropy; `openssl rand -hex 16` gives a URL-safe one).
+2. Put them in `DATABASE_URL`: the branch's pooled host with that user and password.
+3. Run `bun run db:migrate`, then `bun run db:app-role`. The second command creates the role, or updates its password, grants and timeouts if it exists. Run it again after changing the timeouts in `db/application-role.ts`; open connections keep the old values until they reconnect.
+
+For production, run step 3 once with both production strings passed on the command line, then set only the pooled application string as `DATABASE_URL` in Vercel. Tables from later migrations are granted automatically, as long as migrations keep running as the same owner. `bun run doctor` fails if `DATABASE_URL` can change the schema or lacks the timeouts.
+
+Production's Neon compute must not scale to zero: in the Neon Console, open the production branch's compute settings and disable scale to zero, so the first requests after a quiet period do not wait for the compute to start.
 
 To enable owner-managed WhatsApp Channels, follow [WhatsApp Channel setup](docs/whatsapp-setup.md) for the Meta v4 configuration, encrypted-token keys and live validation steps.
 
@@ -74,7 +97,8 @@ which is pending legal review before go-live.
 | `bun run test`        | Bun test runner (PGlite suites included)                        |
 | `bun run evaluate:provider --help` | Manual provider evaluation and offline human scoring ([guide](docs/evaluation/README.md)) |
 | `bun run db:generate` | Generate a migration in `drizzle/` from `db/schema`             |
-| `bun run db:migrate`  | Apply pending migrations to `DATABASE_URL`                      |
+| `bun run db:migrate`  | Apply pending migrations as the owner (`DATABASE_OWNER_URL`, or `DATABASE_URL` when unset) |
+| `bun run db:app-role` | Create or update the application role in `DATABASE_URL` ([guide](#database-roles)) |
 | `bun run admin:create` | Create a platform administrator (see below)                    |
 | `bun run sweep:schedule` | Create or update the QStash schedule for the sweep ([guide](docs/inbox-operations.md#the-sweep)) |
 | `bun run db:seed`     | Recreate the demo Tenant on the dev database (see below)        |
