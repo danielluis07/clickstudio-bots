@@ -1,4 +1,5 @@
 import type { Database, Transaction } from "@/db/database";
+import { contactCapReached } from "@/modules/bot/contact-cap";
 import type { BotTurn } from "@/modules/bot/repository";
 import { scheduleAllows } from "@/modules/bot/schedule";
 import { readBehaviour } from "@/modules/bot/settings";
@@ -22,7 +23,10 @@ export type ReplyDecision =
   | { kind: "skip" }
   | {
       kind: "handoff";
-      reason: Extract<ConversationHandoffReason, "limite_atingido" | "bot_indisponivel">;
+      reason: Extract<
+        ConversationHandoffReason,
+        "limite_atingido" | "limite_do_contato" | "bot_indisponivel"
+      >;
     };
 
 const reply: ReplyDecision = { kind: "reply" };
@@ -33,8 +37,9 @@ const skip: ReplyDecision = { kind: "skip" };
 //  1. not eligible (not activated, paused, unsubscribed, with the team): skip
 //  2. the service window has closed: skip
 //  3. the reply allowance is used up: Handoff, even outside the Schedule
-//  4. outside the Schedule: skip, never a Handoff
-//  5. the Model or sender is unavailable: Handoff
+//  4. the Contact has had today's Bot replies: Handoff, even outside the Schedule
+//  5. outside the Schedule: skip, never a Handoff
+//  6. the Model or sender is unavailable: Handoff
 // It reads the current saved state on every call, so a change during the
 // Model call reaches the `beforeSend` check. It writes nothing.
 export const createReplyGate = ({
@@ -59,6 +64,8 @@ export const createReplyGate = ({
     if (checkpoint === "enqueue") return reply;
     if (!found.windowOpen) return skip;
     if (!(await allowance.canReply(turn))) return { kind: "handoff", reason: "limite_atingido" };
+    if (await contactCapReached(db, turn, now))
+      return { kind: "handoff", reason: "limite_do_contato" };
     if (!scheduleAllows(await readBehaviour(db, turn.scope), now)) return skip;
     if (!available) return { kind: "handoff", reason: "bot_indisponivel" };
     return reply;

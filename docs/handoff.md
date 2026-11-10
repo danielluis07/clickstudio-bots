@@ -24,6 +24,7 @@ pt-BR reason of the latest Handoff. **Aguardando equipe** above the list (URL
 | `regra_do_negocio` | Regra do negócio | Model Handoff |
 | `bot_indisponivel` | Bot indisponível | Provider, sender or uncertain send failure |
 | `limite_atingido` | Limite de respostas atingido | Allowance hook refused |
+| `limite_do_contato` | Limite diário do contato atingido | [Daily cap per Contact](bot-reply-allowance.md#daily-cap-per-contact) reached |
 | `assumida` | Assumida por um membro | **Assumir** |
 | `resposta_no_painel` | Membro respondeu pelo painel | Dashboard reply |
 | `resposta_no_app` | Membro respondeu pelo app | Unmatched app echo |
@@ -42,7 +43,7 @@ Conversation changed hands.
 
 A Bot-initiated Handoff sends its short notice to the Contact through the
 normal reservation and send gates. System Handoffs (`bot_indisponivel`,
-`limite_atingido`) send nothing.
+`limite_atingido`, `limite_do_contato`) send nothing.
 
 ## Taking over
 

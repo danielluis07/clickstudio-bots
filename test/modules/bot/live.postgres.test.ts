@@ -1,12 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { eq, sql } from "drizzle-orm";
-import { botReplyUsage, conversation } from "@/db/schema";
+import { botReplyUsage, conversation, message } from "@/db/schema";
 import {
+  dailyContactReplyLimit,
   createBotActivation,
   createBotSandbox,
   createBotSettingsEditor,
   createLiveBot,
   createBotAllowance,
+  type BotAllowance,
   type BotJob,
 } from "@/modules/bot";
 import {
@@ -252,6 +254,81 @@ suite("live turns on real Postgres", () => {
     expect(await reader.getConversation(conversationId)).toMatchObject({
       owner: "team",
       handoffReason: "bot_indisponivel",
+    });
+  });
+
+  const botReplies = (
+    db: typeof database.db,
+    tenantId: string,
+    conversationId: string,
+    count: number,
+    sentAt: Date,
+  ) =>
+    db.insert(message).values(
+      Array.from({ length: count }, () => ({
+        tenantId,
+        conversationId,
+        direction: "outbound" as const,
+        origin: "bot" as const,
+        type: "text" as const,
+        text: "R$ 80.",
+        status: "sent" as const,
+        wamid: crypto.randomUUID(),
+        sentAt,
+      })),
+    );
+
+  test("a reply committed after the gate passed cannot carry a Contact past the daily cap", async () => {
+    const { db, scope, clock, model, sender, dependencies, conversationId, reader, allowance } =
+      await setup();
+    await botReplies(db, scope.tenantId, conversationId, dailyContactReplyLimit - 1, clock.now());
+    model.script({ text: "R$ 80." });
+    let raced = false;
+    // Another turn's reply commits on its own connection while this turn's
+    // reservation transaction is open, after its gate checks passed.
+    const racing: BotAllowance = {
+      ...allowance,
+      async reserve(tx, turn) {
+        await allowance.reserve(tx, turn);
+        if (raced) return;
+        raced = true;
+        await botReplies(db, scope.tenantId, conversationId, 1, clock.now());
+      },
+    };
+    await expect(
+      createLiveBot({ ...dependencies, allowance: racing }).run(conversationId),
+    ).rejects.toThrow("Contact reply cap reached");
+    expect(sender.sent).toHaveLength(0);
+    expect(await createLiveBot(dependencies).run(conversationId)).toBe("handoff");
+    expect(sender.sent).toHaveLength(0);
+    expect(await reader.getConversation(conversationId)).toMatchObject({
+      owner: "team",
+      handoffReason: "limite_do_contato",
+    });
+  });
+
+  test("concurrent turns for a Contact one reply under the cap send one reply, then hand off", async () => {
+    const { db, scope, route, clock, model, sender, dependencies, conversationId, reader } =
+      await setup();
+    await botReplies(db, scope.tenantId, conversationId, dailyContactReplyLimit - 1, clock.now());
+    model.script({ text: "R$ 80." }, { text: "R$ 80." });
+    await Promise.allSettled([
+      createLiveBot(dependencies).run(conversationId),
+      createLiveBot(dependencies).run(conversationId),
+    ]);
+    expect(sender.sent).toHaveLength(1);
+    await recordInboundTextMessage(db, route, {
+      wamid: crypto.randomUUID(),
+      from: "5511999990001",
+      profileName: null,
+      text: "Mais uma",
+      sentAt: clock.now(),
+    });
+    expect(await createLiveBot(dependencies).run(conversationId)).toBe("handoff");
+    expect(sender.sent).toHaveLength(1);
+    expect(await reader.getConversation(conversationId)).toMatchObject({
+      owner: "team",
+      handoffReason: "limite_do_contato",
     });
   });
 });

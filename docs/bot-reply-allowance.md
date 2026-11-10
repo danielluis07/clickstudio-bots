@@ -48,6 +48,44 @@ existing Handoff. The daily cron is a fallback, independently of sending to Meta
 idempotency keys for 24 hours; recovery after an ambiguous acceptance must happen
 within that window to retain its external deduplication guarantee.
 
+## Daily cap per Contact
+
+Issue: [#143](https://github.com/danielluis07/clickstudio-bots/issues/143).
+
+Without it, one Contact writing in a loop could spend the whole Tenant's
+allowance in a few hours and leave every other Contact with a
+`limite_atingido` Handoff. So each Contact gets at most 30 Bot replies per day
+in `America/Sao_Paulo` (`dailyContactReplyLimit` in
+`modules/bot/contact-cap.ts`). The cap is the same for every Tenant.
+
+- The count covers the Bot replies sent to the Contact since São Paulo
+  midnight, across the Contact's Conversations. Pending sends count, because
+  they may still reach the Contact. Failed sends, imported history and sandbox
+  output do not count.
+- The reply gate checks the cap after the Tenant's allowance and before the
+  Schedule, at `beforeModel` and `beforeSend`. A capped Contact's next message
+  hands off as `limite_do_contato`, shown as **Limite diário do contato
+  atingido**, without calling the Model and without sending. As with the
+  allowance, this happens even outside the Schedule. Other Contacts of the
+  Tenant are still answered.
+- The send reservation counts again inside its transaction, after the lease
+  check has locked the Conversation's row. A reservation that would pass the
+  cap fails and the job retries. The retry's gate then hands off.
+- **Devolver ao Bot** and **Resolvida** record `returned_by_member_at` on the
+  Conversation. Replies sent before that time stop counting, so a Member who
+  returns a capped Conversation gives the Contact a fresh 30. Automatic
+  returns do not reset the count.
+- Midnight starts a fresh count but does not return the Conversation. It stays
+  with the team until a Member returns it, or until the quiet-window sweep
+  returns it after 24 hours with no messages.
+
+Tests: `test/modules/bot/reply-gate.test.ts` (cap, São Paulo boundary, other
+Contacts, Member return), `test/modules/bot/live.test.ts` (end to end) and
+`test/modules/bot/live.postgres.test.ts` (a reply committed after the gate,
+concurrent turns).
+
+## Deployment
+
 Run `bun run db:migrate` before deploying. The production wiring lives in
 `server/services.ts`. Public behavior tests are in
 `test/modules/bot/allowance.test.ts`, `test/modules/bot/live.test.ts`,
