@@ -101,8 +101,47 @@ reply gate would not skip it.
 
 The gate asks `BotAllowance.canReply`; reservation calls `BotAllowance.reserve`
 in the same transaction. The monthly accounting is described in
-[Bot reply allowance](bot-reply-allowance.md). `UsageMeter` is a no-op in
-production. Sandbox counters remain separate from production.
+[Bot reply allowance](bot-reply-allowance.md). Sandbox counters remain separate
+from production.
+
+## Turn records
+
+Issue: [#137](https://github.com/danielluis07/clickstudio-bots/issues/137).
+
+Every live turn that completes writes one `bot_turn_record` row under its
+Tenant: when it finished, how it ended (`sent`, `skipped` or `handoff`), the
+Handoff reason, the Model's input, output, cache-read and cache-write tokens,
+tool round trips and the turn's duration in milliseconds. A Model-requested
+Handoff that also sends a reply is recorded as `handoff`. A skip before the
+Model records zero tokens. The row holds counts and codes only, never message
+text, names or phone numbers. A turn that throws is retried by its job and is
+recorded when it completes. A Handoff the next job makes for a send left
+pending by a crashed turn is not recorded.
+
+The core returns its tokens on each outcome (`respond()`); `modules/bot/live.ts`
+writes the row. A failed write logs `bot_turn_record_failed` and never fails
+the turn. The sandbox and the provider evaluation write no rows, and the
+sandbox never returns token counts to the browser.
+
+Rows are kept 13 months by the daily `prune-bot-turn-records` task, deleted with
+the Tenant, and left out of the Tenant export. Token use per Tenant per month,
+in São Paulo time:
+
+```sql
+select tenant_id,
+       date_trunc('month', at at time zone 'America/Sao_Paulo') as month,
+       sum(input_tokens) as input_tokens,
+       sum(output_tokens) as output_tokens,
+       sum(cache_read_tokens) as cache_read_tokens,
+       sum(cache_write_tokens) as cache_write_tokens
+  from bot_turn_record
+ group by 1, 2
+ order by 1, 2;
+```
+
+Multiply each sum by the Model's price per token for the cost. The
+[sweep](inbox-operations.md#the-sweep) uses these rows to alert on a jump in a
+Tenant's **Bot indisponível** Handoffs.
 
 ## Verification
 

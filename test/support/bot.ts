@@ -8,8 +8,6 @@ import {
   type BotAllowance,
   type ContextMessage,
   type KnowledgeBase,
-  type TurnUsage,
-  type UsageMeter,
 } from "@/modules/bot";
 import { noContactDetails, type ContactDetails } from "@/modules/conversations";
 
@@ -85,27 +83,4 @@ export const createTestBotRepository = (): TestBotRepository => {
     listRecentMessages: async () => repository.messages,
   };
   return repository;
-};
-
-export type TestUsageMeter = UsageMeter & {
-  records: { tenantId: string; at: Date; usage: TurnUsage }[];
-  failNext(): void;
-};
-
-export const createTestUsageMeter = (): TestUsageMeter => {
-  const records: TestUsageMeter["records"] = [];
-  let shouldFail = false;
-  return {
-    records,
-    failNext: () => {
-      shouldFail = true;
-    },
-    record: async ({ tenantId }, at, usage) => {
-      if (shouldFail) {
-        shouldFail = false;
-        throw new Error("Meter unavailable");
-      }
-      records.push({ tenantId, at, usage });
-    },
-  };
 };

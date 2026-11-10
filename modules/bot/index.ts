@@ -1,5 +1,5 @@
 // The Bot core: one turn decides a grounded answer or a Handoff, behind the
-// Model, repository and usage ports.
+// Model and repository ports. Live turns record their outcome and tokens.
 export { createBotActivation, type BotActivation } from "@/modules/bot/activation";
 export { readBotConfiguration, type BotConfiguration } from "@/modules/bot/configuration";
 export {
@@ -62,8 +62,19 @@ export {
   type BotSettingsLimits,
 } from "@/modules/bot/settings";
 export type { HandoffReason } from "@/modules/bot/tools";
-export { createBotCore, type BotCore, type TurnOutcome } from "@/modules/bot/turn";
-export type { TurnUsage, UsageMeter } from "@/modules/bot/usage";
+export {
+  createBotCore,
+  splitTokens,
+  type BotCore,
+  type TurnDecision,
+  type TurnOutcome,
+  type TurnTokens,
+} from "@/modules/bot/turn";
+export {
+  alertBotHandoffSpikes,
+  pruneBotTurnRecords,
+  type BotTurnRecord,
+} from "@/modules/bot/turn-records";
 export {
   createBotAllowance,
   recordBotReplyUsage,

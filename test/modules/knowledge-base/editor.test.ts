@@ -5,7 +5,7 @@ import { createBotCore, readBotConfiguration } from "@/modules/bot";
 import { resolveChannelPhoneNumber } from "@/modules/channels";
 import { createKnowledgeBaseEditor, type NewKnowledgeBaseEntry } from "@/modules/knowledge-base";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
-import { createTestBotRepository, createTestUsageMeter } from "@/test/support/bot";
+import { createTestBotRepository } from "@/test/support/bot";
 import { createTestClock, type TestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestModel, type TestModel } from "@/test/support/model";
@@ -129,7 +129,7 @@ describe("what the Bot reads", () => {
       { author: "contact", text: "Quanto custa o corte?", sentAt: clock.now() },
     ];
     repository.getConfiguration = (turn) => readBotConfiguration(db, turn.scope);
-    return createBotCore({ model, repository, meter: createTestUsageMeter(), clock });
+    return createBotCore({ model, repository, clock });
   };
 
   test("the next reply after a save uses the saved Knowledge base of the turn's Tenant only", async () => {

@@ -56,7 +56,9 @@ export const diagnosticKinds = [
   "sweep_task_failed",
   "bot_job_failed",
   "bot_decision_failed",
-  "bot_usage_metering_failed",
+  "bot_turn_record_failed",
+  "bot_handoff_spike",
+  "inbox_queue_stale",
   "meta_request_failed",
   "whatsapp_configuration_invalid",
   "email_send_failed",
@@ -66,6 +68,14 @@ export const diagnosticKinds = [
 ] as const;
 
 export type DiagnosticKind = (typeof diagnosticKinds)[number];
+
+// Kinds that report a condition the sweep observed, not a thrown error. Sentry
+// groups each into one issue (per Tenant where it names one), however many
+// sweeps see it.
+export const conditionKinds = [
+  "bot_handoff_spike",
+  "inbox_queue_stale",
+] as const satisfies readonly DiagnosticKind[];
 
 export type Diagnostic = {
   kind: DiagnosticKind;
@@ -88,6 +98,11 @@ export type Diagnostic = {
   tenantId?: string;
   conversationId?: string;
   jobId?: string;
+  // Counts for a condition: the oldest pending inbox event's age, or a
+  // Tenant's Handoffs out of its Bot turns.
+  ageSeconds?: number;
+  handoffs?: number;
+  turns?: number;
 };
 
 // The diagnostics port shared by modules, routes and the Sentry adapter.
@@ -145,6 +160,8 @@ export const scrubDiagnostic = (input: unknown): Diagnostic => {
   }
   if (typeof source.jobId === "string" && /^msg_[a-zA-Z0-9_-]{1,128}$/.test(source.jobId))
     clean.jobId = source.jobId;
+  for (const key of ["ageSeconds", "handoffs", "turns"] as const)
+    if (integerIn(source[key], 0, 1_000_000_000)) clean[key] = source[key] as number;
   return clean;
 };
 

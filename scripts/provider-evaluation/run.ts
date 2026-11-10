@@ -1,10 +1,10 @@
 import {
   createBotCore,
+  splitTokens,
   disabledCapture,
   disabledLinks,
   type Model,
   type ModelToolCall,
-  type TurnUsage,
 } from "@/modules/bot";
 import type { ChannelRoute } from "@/modules/channels";
 import { noContactDetails } from "@/modules/conversations";
@@ -61,13 +61,6 @@ export const runEvaluation = async ({
     const attempts: EvaluationRun["cases"][number]["attempts"] = [];
     const observed = observeModel(model, attempts);
     let injectedRefusal: ModelToolCall | null = null;
-    let usage: TurnUsage = {
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      toolRoundTrips: 0,
-    };
     const core = createBotCore({
       model: {
         async generate(request) {
@@ -101,18 +94,15 @@ export const runEvaluation = async ({
             sentAt: new Date(at.getTime() - item.messages.length + index),
           })),
       },
-      meter: {
-        record: async (_scope, _at, recorded) => {
-          usage = { ...recorded };
-        },
-      },
       clock: { now: () => at },
     });
     // This proof belongs ONLY to the in-memory synthetic repository. No live
     // database, Channel, Contact, allowance or delivery adapter is reachable.
     const scope = { tenantId: tenant.id, channelId: `evaluation-${tenant.id}` } as ChannelRoute;
     const start = nowMs();
-    const outcome = await core.respond({ scope, conversationId: item.id });
+    const { decision: outcome, tokens: usage } = splitTokens(
+      await core.respond({ scope, conversationId: item.id }),
+    );
     const latencyMs = nowMs() - start;
     const cost =
       (usage.inputTokens * pricing.inputPerMillion +
