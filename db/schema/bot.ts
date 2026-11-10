@@ -115,6 +115,7 @@ export const botTurnRecord = pgTable(
         "regra_do_negocio",
         "bot_indisponivel",
         "limite_atingido",
+        "limite_do_contato",
       ],
     }),
     inputTokens: integer("input_tokens").notNull(),

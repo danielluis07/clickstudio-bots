@@ -11,12 +11,21 @@ import {
   createLiveBot,
   createBotAllowance,
   botTurnAttempts,
+  dailyContactReplyLimit,
   type BotJob,
   type BotAllowance,
 } from "@/modules/bot";
 import { RetryableError } from "@/platform/retryable";
 import { eq, sql } from "drizzle-orm";
-import { botReplyUsage, channel, contact, conversation, message, organization } from "@/db/schema";
+import {
+  botReplyUsage,
+  botTurnRecord,
+  channel,
+  contact,
+  conversation,
+  message,
+  organization,
+} from "@/db/schema";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import {
   createConversationRepository,
@@ -515,6 +524,49 @@ test("sandbox output and an uncertain Meta send never consume production replies
   await worker.run(conversationId);
   await worker.run(conversationId);
   expect(await allowance.status(scope)).toMatchObject({ used: 0 });
+});
+
+test("a Contact past today's reply cap hands off without the Model while other Contacts are answered", async () => {
+  const { scope, route, clock, model, sender, activation, conversationId, worker, repository } =
+    await setup();
+  await activation.activate(scope);
+  await db.insert(message).values(
+    Array.from({ length: dailyContactReplyLimit }, () => ({
+      tenantId: scope.tenantId,
+      conversationId,
+      direction: "outbound" as const,
+      origin: "bot" as const,
+      type: "text" as const,
+      text: "R$ 80.",
+      status: "sent" as const,
+      wamid: crypto.randomUUID(),
+      sentAt: clock.now(),
+    })),
+  );
+  const previousRequests = model.requests.length;
+  expect(await worker.run(conversationId)).toBe("handoff");
+  expect(model.requests).toHaveLength(previousRequests);
+  expect(sender.sent).toHaveLength(0);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "team",
+    waiting: true,
+    handoffReason: "limite_do_contato",
+  });
+  expect(
+    await db
+      .select({ outcome: botTurnRecord.outcome, handoffReason: botTurnRecord.handoffReason })
+      .from(botTurnRecord),
+  ).toEqual([{ outcome: "handoff", handoffReason: "limite_do_contato" }]);
+  const other = (await recordInboundTextMessage(db, route, {
+    wamid: crypto.randomUUID(),
+    from: "5511999990002",
+    profileName: null,
+    text: "Preço?",
+    sentAt: clock.now(),
+  }))!;
+  model.script({ text: "R$ 80." });
+  expect(await worker.run(other)).toBe("sent");
+  expect(sender.sent).toHaveLength(1);
 });
 
 test("exhaustion hands off a new Contact message even while Schedule pauses replies", async () => {

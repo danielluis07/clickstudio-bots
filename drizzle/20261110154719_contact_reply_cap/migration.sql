@@ -1,0 +1,1 @@
+ALTER TABLE "conversation" ADD COLUMN "returned_by_member_at" timestamp with time zone;

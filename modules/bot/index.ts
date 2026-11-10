@@ -89,6 +89,7 @@ export {
   type ReplyAllowance,
   type ReplyUsage,
 } from "@/modules/bot/allowance";
+export { contactCapDayStart, dailyContactReplyLimit } from "@/modules/bot/contact-cap";
 export {
   createBotSandbox,
   sandboxDailyCap,

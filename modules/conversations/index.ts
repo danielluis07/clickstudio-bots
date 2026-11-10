@@ -1,6 +1,7 @@
 // Contacts, their Conversations with a Tenant on one Channel, and the
 // messages in them.
 export {
+  countContactBotReplies,
   countPendingBotReplies,
   hasUnansweredContactMessages,
   listStrandedBotConversations,

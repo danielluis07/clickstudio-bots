@@ -4,11 +4,13 @@ import {
   count,
   eq,
   gt,
+  gte,
   inArray,
   isNull,
   lte,
   max,
   min,
+  ne,
   notInArray,
   or,
   sql,
@@ -57,6 +59,44 @@ export const countPendingBotReplies = async (
       ),
     );
   return pending!.total;
+};
+
+// Bot replies sent at or after `since` to the Contact of the Conversation,
+// across that Contact's Conversations, for the daily reply cap. Pending sends
+// count, since they may still reach the Contact; failed ones do not. A reply
+// before a Member last returned its Conversation to the Bot does not count.
+// Read in the reservation transaction, the Conversation's lease and row lock
+// make the count exact for that Conversation.
+export const countContactBotReplies = async (
+  db: Database | Transaction,
+  scope: ChannelRoute | TenantScope,
+  conversationId: string,
+  since: Date,
+) => {
+  const turnContact = db
+    .select({ contactId: conversation.contactId })
+    .from(conversation)
+    .where(and(eq(conversation.id, conversationId), eq(conversation.tenantId, scope.tenantId)));
+  const [replies] = await db
+    .select({ total: count() })
+    .from(message)
+    .innerJoin(conversation, eq(conversation.id, message.conversationId))
+    .where(
+      and(
+        eq(message.tenantId, scope.tenantId),
+        eq(conversation.tenantId, scope.tenantId),
+        inArray(conversation.contactId, turnContact),
+        eq(message.origin, "bot"),
+        eq(message.imported, false),
+        ne(message.status, "failed"),
+        gte(message.sentAt, since),
+        or(
+          isNull(conversation.returnedByMemberAt),
+          gt(message.sentAt, conversation.returnedByMemberAt),
+        ),
+      ),
+    );
+  return replies!.total;
 };
 
 // The Bot may reply in a Conversation only while it owns it and its Channel is

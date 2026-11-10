@@ -84,7 +84,7 @@ export const knowledgeBaseEditor = createKnowledgeBaseEditor({ db, clock: system
 export const botSettingsEditor = createBotSettingsEditor({ db, clock: systemClock });
 
 export const botActivation = createBotActivation({ db, clock: systemClock });
-export const handoffControls = createHandoffControls({ db, notifier });
+export const handoffControls = createHandoffControls({ db, clock: systemClock, notifier });
 export const contactDeletion = createContactDeletion({ db, clock: systemClock, notifier });
 export const conversationRepository = (scope: TenantScope) =>
   createConversationRepository(db, scope);

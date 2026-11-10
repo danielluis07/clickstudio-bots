@@ -9,6 +9,7 @@ export const handoffReasonLabels: Record<ConversationHandoffReason, string> = {
   regra_do_negocio: "Regra do negócio",
   bot_indisponivel: "Bot indisponível",
   limite_atingido: "Limite de respostas atingido",
+  limite_do_contato: "Limite diário do contato atingido",
   assumida: "Assumida por um membro",
   resposta_no_painel: "Membro respondeu pelo painel",
   resposta_no_app: "Membro respondeu pelo app",

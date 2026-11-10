@@ -45,7 +45,7 @@ const callerFor = (session: TRPCContext["session"], clock = createTestClock()) =
     realtime: createAblyRealtime({ apiKey: "test.key:private-test-secret" }),
     notifier,
     activation,
-    handoff: createHandoffControls({ db, notifier }),
+    handoff: createHandoffControls({ db, clock, notifier }),
     deleteContact: createContactDeletion({ db, notifier, clock }),
     conversations: (scope) => createConversationRepository(db, scope),
     tenants: (scope) => createTenantRepository(db, scope),

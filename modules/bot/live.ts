@@ -1,6 +1,7 @@
 import type { Database } from "@/db/database";
 import { readBotConfiguration } from "@/modules/bot/configuration";
 import { recordBotReplyUsage } from "@/modules/bot/allowance";
+import { reserveContactReply } from "@/modules/bot/contact-cap";
 import { liveTurnContext } from "@/modules/bot/context";
 import { createBotCore, type TurnTokens } from "@/modules/bot/turn";
 import { createReplyGate, type BotAllowance, type ReplyDecision } from "@/modules/bot/reply-gate";
@@ -143,7 +144,10 @@ export const createLiveBot = ({
     const handoffReason = outcome.kind === "handoff" ? outcome.reason : undefined;
     const messageId = await turn.reserve(outcome.reply, {
       handoffReason,
-      beforeReserve: (tx) => allowance.reserve(tx, turn),
+      beforeReserve: async (tx) => {
+        await allowance.reserve(tx, turn);
+        await reserveContactReply(tx, turn, clock.now());
+      },
     });
     if (!messageId) return { result: "skipped", tokens };
     // A pending row is the durable send barrier. Never retry a send that may

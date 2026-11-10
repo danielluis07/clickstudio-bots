@@ -99,6 +99,9 @@ type Resumption = {
   requireAll?: boolean;
   // Returns only the Conversations that still match once locked.
   where?: SQL;
+  // When a Member returned it. The daily reply cap per Contact then counts
+  // afresh; automatic returns leave the count as it was.
+  byMemberAt?: Date;
 };
 
 // The only way back to the Bot, for the Member commands and the automatic
@@ -110,7 +113,13 @@ const resume = async (
   tx: Transaction,
   scope: { tenantId: string },
   conversationIds: string[],
-  { resolved = false, answerBacklog = false, requireAll = false, where }: Resumption = {},
+  {
+    resolved = false,
+    answerBacklog = false,
+    requireAll = false,
+    where,
+    byMemberAt,
+  }: Resumption = {},
 ) => {
   const ids = [...new Set(conversationIds)];
   if (ids.length === 0) return [];
@@ -138,6 +147,7 @@ const resume = async (
     .set({
       owner: "bot",
       resumeOnContactMessage: false,
+      ...(byMemberAt ? { returnedByMemberAt: byMemberAt } : {}),
       ...(resolved ? { waiting: false, handoffReason: null } : {}),
     })
     .where(and(eq(conversation.tenantId, scope.tenantId), inArray(conversation.id, resumed)));
@@ -149,10 +159,11 @@ const resumeFromDashboard = async (
   scope: TenantScope,
   conversationIds: string[],
   resolved: boolean,
+  now: Date,
 ) =>
   (
     await db.transaction((tx) =>
-      resume(tx, scope, conversationIds, { resolved, requireAll: true }),
+      resume(tx, scope, conversationIds, { resolved, requireAll: true, byMemberAt: now }),
     )
   ).length > 0;
 
@@ -207,7 +218,15 @@ export const returnQuietHandoffs = async ({
 // The Handoff controls any Member may use, whoever took the Conversation over.
 // Besides these, only a Contact's message after a "Bot indisponível" Handoff
 // and a quiet service window return a Conversation to the Bot.
-export const createHandoffControls = ({ db, notifier }: { db: Database; notifier: Notifier }) => {
+export const createHandoffControls = ({
+  db,
+  clock,
+  notifier,
+}: {
+  db: Database;
+  clock: Clock;
+  notifier: Notifier;
+}) => {
   const outcome = async (scope: TenantScope, conversationId: string, found: boolean) => {
     if (!found) return { ok: false as const, error: "not_found" as const };
     await notifyInbox(notifier, scope.tenantId, { conversationId });
@@ -230,12 +249,12 @@ export const createHandoffControls = ({ db, notifier }: { db: Database; notifier
       return outcome(
         scope,
         conversationId,
-        await resumeFromDashboard(db, scope, [conversationId], false),
+        await resumeFromDashboard(db, scope, [conversationId], false, clock.now()),
       );
     },
     async bulkReturnToBot(scope: TenantScope, conversationIds: string[]) {
       const ids = [...new Set(conversationIds)];
-      if (!(await resumeFromDashboard(db, scope, ids, false)))
+      if (!(await resumeFromDashboard(db, scope, ids, false, clock.now())))
         return { ok: false as const, error: "not_found" as const };
       await Promise.all(
         ids.map((conversationId) => notifyInbox(notifier, scope.tenantId, { conversationId })),
@@ -247,7 +266,7 @@ export const createHandoffControls = ({ db, notifier }: { db: Database; notifier
       return outcome(
         scope,
         conversationId,
-        await resumeFromDashboard(db, scope, [conversationId], true),
+        await resumeFromDashboard(db, scope, [conversationId], true, clock.now()),
       );
     },
   };

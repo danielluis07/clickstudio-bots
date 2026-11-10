@@ -74,6 +74,7 @@ export const conversation = pgTable(
         "regra_do_negocio",
         "bot_indisponivel",
         "limite_atingido",
+        "limite_do_contato",
         "assumida",
         "resposta_no_painel",
         "resposta_no_app",
@@ -86,6 +87,9 @@ export const conversation = pgTable(
     // next message returns the Conversation to the Bot. Any Member Handoff
     // clears it.
     resumeOnContactMessage: boolean("resume_on_contact_message").notNull().default(false),
+    // When a Member last returned the Conversation to the Bot. The daily reply
+    // cap per Contact counts only Bot replies sent after it.
+    returnedByMemberAt: timestamp("returned_by_member_at", { withTimezone: true }),
     botLeaseToken: text("bot_lease_token"),
     botLeaseUntil: timestamp("bot_lease_until", { withTimezone: true }),
     // When the latest message was sent; the inbox lists the most recent first.

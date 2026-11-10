@@ -134,7 +134,7 @@ const setup = async () => {
     timestamp,
     worker,
     repository,
-    controls: createHandoffControls({ db, notifier }),
+    controls: createHandoffControls({ db, clock, notifier }),
     replies: createReplyService({ db, clock, notifier, getSender: () => sender }),
     ownership: async () => {
       const found = await repository.getConversation(conversationId);
@@ -652,7 +652,11 @@ test("an audio after a Bot indisponível Handoff returns the Bot, which hands of
     sentAt: clock.now(),
   });
 
-  expect(await ownership()).toEqual({ owner: "team", handoffReason: "sem_resposta", waiting: true });
+  expect(await ownership()).toEqual({
+    owner: "team",
+    handoffReason: "sem_resposta",
+    waiting: true,
+  });
 });
 
 test("a Handoff quiet for a whole service window returns to the Bot, which answers only the next message", async () => {
