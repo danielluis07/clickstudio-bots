@@ -180,14 +180,20 @@ QStash retries each job with an explicit count: three for
 `process-inbox-event` and `run-bot-turn`. The sweep itself is not retried; the
 next run comes five minutes later.
 
-Create or update the QStash schedule after the first deploy of an environment, and
-again whenever `APP_URL` or `QSTASH_URL` changes:
+Create or update the QStash schedule after the first deploy of an environment,
+and again whenever `APP_URL` or `QSTASH_URL` changes. Run it with that
+environment's public `APP_URL` and its QStash credentials, not the local
+`.env`: QStash cannot call `localhost`, and the script refuses a local
+`APP_URL`. Variables set in the shell take precedence over `.env`:
 
 ```powershell
+$env:APP_URL = 'https://<production domain>'
+$env:QSTASH_TOKEN = '<production QStash token>'
 bun run sweep:schedule
+Remove-Item Env:APP_URL, Env:QSTASH_TOKEN
 ```
 
-It needs `QSTASH_TOKEN`, `QSTASH_URL` and `APP_URL` from that environment.
+Set `QSTASH_URL` the same way if that environment uses another QStash region.
 Run `bun run db:migrate` first: the migration adds the partial indexes the
 sweep's scans use.
 
