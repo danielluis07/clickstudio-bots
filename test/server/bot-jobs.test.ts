@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { eq } from "drizzle-orm";
-import { conversation } from "@/db/schema";
+import { channel, conversation } from "@/db/schema";
 import { createLiveBot, type BotJob, type LiveBot } from "@/modules/bot";
 import { recordInboundTextMessage } from "@/modules/conversations";
 import { createQStashJobVerifier } from "@/platform/qstash";
@@ -75,6 +75,8 @@ test("a failed Bot job reports its error class, Conversation and Tenant without 
     text: "Oi, quero remarcar",
     sentAt: clock.now(),
   }))!;
+  // Active, so the turn reaches the reply gate's allowance check.
+  await db.update(channel).set({ botEnabled: true }).where(eq(channel.tenantId, route.tenantId));
   const diagnostics = createTestDiagnostics();
   const failing = createBotJobRoute(
     {
@@ -85,12 +87,9 @@ test("a failed Bot job reports its error class, Conversation and Tenant without 
         queue: createTestJobQueue<BotJob>(),
         notifier: createTestNotifier(),
         getSender: createTestWhatsAppSender,
-        allowance: {
-          ...createTestBotAllowance(),
-          notifyWarning: async () => {
-            throw new RangeError("Maria Souza 5511999990002 Oi, quero remarcar");
-          },
-        },
+        allowance: createTestBotAllowance(async () => {
+          throw new RangeError("Maria Souza 5511999990002 Oi, quero remarcar");
+        }),
       }),
       url,
       verifier: createQStashJobVerifier(qstashSigningKeys),

@@ -28,7 +28,7 @@ import { isPlatformAdmin } from "@/modules/identity";
 import { annotateError, classifyError, logError } from "@/platform/diagnostics";
 import type { InboxDiagnostics } from "@/modules/webhook-inbox/diagnostics";
 import type { Clock } from "@/platform/clock";
-import type { Notifier } from "@/platform/notifier";
+import { notifyInbox, type Notifier } from "@/platform/notifier";
 import type { LiveBot } from "@/modules/bot";
 
 // A pending event this old that never failed has no live job: QStash delivers
@@ -151,11 +151,14 @@ export const createWebhookInbox = ({
       // captions can start a turn. History, statuses and echoes never do.
       if (route && conversationId && readInboundMessage(event.payload))
         await bot?.enqueue(route, conversationId);
-      // A failed ping retries the idempotent committed write and ping together.
-      if (recorded.conversationId)
-        await notifier.publish(route!.tenantId, { conversationId: recorded.conversationId });
-      else if (recorded.contactId)
-        await notifier.publish(route!.tenantId, { contactId: recorded.contactId });
+      // Best effort: a failed ping must not retry the event, which would
+      // enqueue another Bot job each time (#142).
+      const ping = recorded.conversationId
+        ? { conversationId: recorded.conversationId }
+        : recorded.contactId
+          ? { contactId: recorded.contactId }
+          : null;
+      if (ping) await notifyInbox(notifier, route!.tenantId, ping, diagnostics?.log);
       await repository.settle(inboxEventId, clock.now(), { status: "processed" });
       return { ok: true as const, status: "processed" as const };
     } catch (error) {

@@ -203,9 +203,16 @@ export const createLiveBot = ({
           async (scope, followUp) => {
             tenantId = scope.tenantId;
             if (followUp) await enqueue(scope, conversationId);
-            // Job retries also recover a warning after an interrupted acknowledgment,
-            // even when the Conversation has no unanswered messages or is with the team.
-            await allowance.notifyWarning({ scope, conversationId });
+            // Best effort, even when the Conversation has no unanswered messages
+            // or is with the team: a failed email must not fail a turn whose
+            // reply was sent. The daily `retryWarnings` task recovers it (#142).
+            await allowance.notifyWarning({ scope, conversationId }).catch((error: unknown) =>
+              logError("email_send_failed", error, {
+                tenantId: scope.tenantId,
+                conversationId,
+                operation: "bot-reply-warning",
+              }),
+            );
           },
         );
       } catch (error) {

@@ -8,8 +8,31 @@ import {
   type BotAllowance,
   type ContextMessage,
   type KnowledgeBase,
+  type LiveBot,
 } from "@/modules/bot";
+import type { ChannelRoute } from "@/modules/channels";
 import { noContactDetails, type ContactDetails } from "@/modules/conversations";
+
+// The inbox's Bot hand-off, recording each enqueue. `failNext` fails one
+// event's processing after its write has committed, as a queue outage would.
+export const createTestInboxBot = (bot?: Pick<LiveBot, "enqueue">) => {
+  let shouldFail = false;
+  const enqueued: string[] = [];
+  return {
+    enqueued,
+    failNext: () => {
+      shouldFail = true;
+    },
+    async enqueue(route: ChannelRoute, conversationId: string) {
+      if (shouldFail) {
+        shouldFail = false;
+        throw new Error("Bot queue unavailable");
+      }
+      enqueued.push(conversationId);
+      await bot?.enqueue(route, conversationId);
+    },
+  } satisfies Pick<LiveBot, "enqueue"> & { enqueued: unknown; failNext: unknown };
+};
 
 // Complete allowance for tests that vary reply permission independently of usage.
 export const createTestBotAllowance = (
