@@ -5,18 +5,22 @@ import type { Database } from "@/db/database";
 import { botTurnRecord, channel, conversation, organization } from "@/db/schema";
 import { resolveChannelPhoneNumber } from "@/modules/channels";
 import { recordInboundTextMessage } from "@/modules/conversations";
-import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
+import { closeTestDatabase, createTestDatabase, queryTestDatabase } from "@/test/support/database";
 
 let db: Database;
 let conversationId: string;
-const migration = readFileSync(
-  `${import.meta.dir}/../../drizzle/20261110190333_english_handoff_reasons/migration.sql`,
-  "utf8",
-);
-const backfill = () =>
+const statements = (name: string) =>
+  readFileSync(`${import.meta.dir}/../../drizzle/${name}/migration.sql`, "utf8").split(
+    "--> statement-breakpoint",
+  );
+// The migration that drops the guard still calls the mapping function, which the
+// fully migrated test database no longer has: recreate it from #173's migration.
+const [createMapping] = statements("20261110190333_english_handoff_reasons");
+const dropGuard = statements("20261110192407_drop_english_handoff_reason_guard");
+const runMigration = () =>
   db.transaction(async (tx) => {
-    for (const statement of migration.split("--> statement-breakpoint"))
-      if (statement.trim().startsWith("UPDATE")) await tx.execute(sql.raw(statement));
+    await tx.execute(sql.raw(createMapping));
+    for (const statement of dropGuard) await tx.execute(sql.raw(statement));
   });
 
 const legacy = {
@@ -26,13 +30,9 @@ const legacy = {
   bot_indisponivel: "bot_unavailable",
   limite_atingido: "allowance_exhausted",
   limite_do_contato: "contact_cap_reached",
-  assumida: "claimed",
-  resposta_no_painel: "dashboard_reply",
-  resposta_no_app: "app_reply",
 };
-const botTurnLegacy = Object.entries(legacy).slice(0, 6);
 
-const setConversationReason = (reason: string) =>
+const setConversationReason = (reason: string | null) =>
   db.execute(sql`update conversation set handoff_reason = ${reason} where id = ${conversationId}`);
 const conversationReason = async (): Promise<string | null> =>
   (await db.select({ reason: conversation.handoffReason }).from(conversation))[0].reason;
@@ -48,12 +48,16 @@ const turnReasons = async () =>
       .from(botTurnRecord)
       .orderBy(botTurnRecord.handoffReason)
   ).map((row): string | null => row.reason);
-const setTriggers = async (state: "enable" | "disable") => {
-  for (const table of ["conversation", "bot_turn_record"])
-    await db.execute(
-      sql.raw(`alter table ${table} ${state} trigger ${table}_english_handoff_reason`),
-    );
-};
+const guardObjects = async () => [
+  ...(await queryTestDatabase<{ name: string }>(
+    db,
+    "select proname as name from pg_proc where proname like 'english_handoff_reason%'",
+  )),
+  ...(await queryTestDatabase<{ name: string }>(
+    db,
+    "select tgname as name from pg_trigger where tgname like '%english_handoff_reason'",
+  )),
+];
 
 beforeEach(async () => {
   db = await createTestDatabase();
@@ -83,30 +87,26 @@ beforeEach(async () => {
 });
 afterEach(() => closeTestDatabase(db));
 
-test("the migration renames every stored Portuguese reason", async () => {
-  await setTriggers("disable");
+test("the guard is gone, so a Portuguese reason is stored as written", async () => {
+  expect(await guardObjects()).toEqual([]);
   await setConversationReason("assumida");
-  for (const [old] of botTurnLegacy) await addTurnRecord(old);
-  await setTriggers("enable");
-
-  await backfill();
-
-  expect(await conversationReason()).toBe("claimed");
-  expect(await turnReasons()).toEqual(botTurnLegacy.map(([, renamed]) => renamed).sort());
+  expect(await conversationReason()).toBe("assumida");
 });
 
-test("a write from code still on the Portuguese reasons is stored in English", async () => {
-  for (const [old, renamed] of Object.entries(legacy)) {
-    await setConversationReason(old);
-    expect(await conversationReason()).toBe(renamed);
-  }
-  for (const [old] of botTurnLegacy) await addTurnRecord(old);
-  expect(await turnReasons()).toEqual(botTurnLegacy.map(([, renamed]) => renamed).sort());
+test("the migration renames every stored Portuguese reason and leaves no guard", async () => {
+  await setConversationReason("resposta_no_painel");
+  for (const old of Object.keys(legacy)) await addTurnRecord(old);
+  await addTurnRecord("claimed");
+
+  await runMigration();
+
+  expect(await conversationReason()).toBe("dashboard_reply");
+  expect(await turnReasons()).toEqual([...Object.values(legacy), "claimed"].sort());
+  expect(await guardObjects()).toEqual([]);
 });
 
-test("English reasons and a cleared reason are left as they are", async () => {
-  await setConversationReason("bot_unavailable");
-  expect(await conversationReason()).toBe("bot_unavailable");
-  await db.execute(sql`update conversation set handoff_reason = null`);
+test("the migration leaves a cleared reason cleared", async () => {
+  await setConversationReason(null);
+  await runMigration();
   expect(await conversationReason()).toBeNull();
 });
