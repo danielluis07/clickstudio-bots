@@ -45,8 +45,24 @@ const contactPanelFields = {
 };
 
 // WhatsApp lets a business reply freely for 24 hours after the Contact's
-// latest message.
+// latest message. The one definition, shared by the dashboard and the Bot:
+// only the Contact's live messages open it; imported history never does.
 export const serviceWindowHours = 24;
+
+const opensServiceWindow = () => sql`${message.conversationId} = ${conversation.id}
+  and ${message.origin} = 'contact' and not ${message.imported}`;
+
+// When the Conversation's service window closes; null until the Contact has
+// written live, since the window never opens otherwise.
+const serviceWindowClosesAt = () =>
+  sql`(select max(${message.sentAt}) + make_interval(hours => ${serviceWindowHours})
+    from ${message} where ${opensServiceWindow()})`.mapWith(message.sentAt) as SQL<Date | null>;
+
+// Whether the Conversation's service window is open at `now`.
+export const serviceWindowOpen = (now: Date) => sql`exists(
+  select 1 from ${message} where ${opensServiceWindow()}
+  and ${message.sentAt} > ${now.toISOString()}::timestamptz - make_interval(hours => ${serviceWindowHours})
+)`;
 
 // The message's changes of one kind, matched by its wamid and direction.
 const changesOf = (
@@ -92,11 +108,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
         handoffReason: conversation.handoffReason,
         waiting: conversation.waiting,
         contact: contactPanelFields,
-        // Null until the Contact has written; the window never opens otherwise.
-        serviceWindowClosesAt: sql`(
-        select max(${message.sentAt}) + make_interval(hours => ${serviceWindowHours}) from ${message}
-        where ${message.conversationId} = ${conversation.id} and ${message.direction} = 'inbound'
-      )`.mapWith(message.sentAt),
+        serviceWindowClosesAt: serviceWindowClosesAt(),
       })
       .from(conversation)
       .innerJoin(contact, eq(contact.id, conversation.contactId))

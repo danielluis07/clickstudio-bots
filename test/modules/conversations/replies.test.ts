@@ -15,6 +15,7 @@ import {
   createConversationRepository,
   createReplyService,
   pruneEarlyMessageStatuses,
+  recordImportedHistory,
   recordInboundTextMessage,
   recordMessageEcho,
   recordMessageStatus,
@@ -211,6 +212,31 @@ describe("Dashboard replies", () => {
     expect(await replies.sendReply(owner, { conversationId, text: "Voltamos" })).toEqual({
       ok: true,
     });
+  });
+
+  test("imported history does not open the window, as for the Bot", async () => {
+    await recordImportedHistory(db, channelA, {
+      phone: "5511988887777",
+      messages: [
+        {
+          wamid: "wamid.HISTORY1",
+          direction: "inbound",
+          status: null,
+          text: "Oi pelo app",
+          sentAt: new Date("2026-10-21T09:00:00Z"),
+        },
+      ],
+    });
+    clock.set(new Date("2026-10-21T09:30:00Z"));
+    const inbox = createConversationRepository(db, owner);
+    const [{ id: conversationId }] = (await inbox.listConversations()).conversations;
+
+    expect((await inbox.getConversation(conversationId))?.serviceWindowClosesAt).toBeNull();
+    expect(await replies.sendReply(owner, { conversationId, text: "Oi" })).toEqual({
+      ok: false,
+      error: "window_closed",
+    });
+    expect(sender.sent).toEqual([]);
   });
 
   test("a send Meta refuses stays in the Conversation as failed, without a wamid", async () => {
