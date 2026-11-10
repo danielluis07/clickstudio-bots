@@ -17,6 +17,7 @@ import {
   recordInboundTextMessage,
 } from "@/modules/conversations";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
+import { RetryableError } from "@/platform/retryable";
 import { createPostgresTestDatabase } from "@/test/support/postgres";
 import { seedLiveBot } from "@/test/support/live-bot";
 import { createTestModel } from "@/test/support/model";
@@ -147,6 +148,34 @@ suite("live turns on real Postgres", () => {
         ({ origin }) => origin === "bot",
       ),
     ).toHaveLength(1);
+  });
+
+  test("retried turns and refused sends still send one reply across competing workers", async () => {
+    const { scope, model, sender, dependencies, conversationId, reader, allowance } = await setup();
+    const retrying = { ...dependencies, sleep: async () => {} };
+    model.script(
+      new RetryableError("Model temporarily unavailable", { cause: new Error("529 overloaded") }),
+      { text: "O corte custa R$ 80." },
+    );
+    // The first delivery meets the Model outage and asks the queue for another.
+    expect(await createLiveBot(retrying).run(conversationId, { attempt: 1 })).toBe("retry");
+    // Redeliveries, the sweep's jobs and duplicates compete while Meta refuses twice.
+    sender.refuseNext(2);
+    await Promise.all(
+      Array.from({ length: 12 }, (_, index) =>
+        createLiveBot(retrying).run(conversationId, { attempt: 2 + (index % 2) }),
+      ),
+    );
+    await Promise.all(Array.from({ length: 4 }, () => createLiveBot(retrying).run(conversationId)));
+    expect(sender.sent).toHaveLength(1);
+    expect(sender.attempts).toBe(3);
+    expect(await allowance.status(scope)).toMatchObject({ used: 1 });
+    expect(
+      (await reader.listMessages(conversationId))!.messages.filter(
+        ({ origin }) => origin === "bot",
+      ),
+    ).toEqual([expect.objectContaining({ wamid: "wamid.OUT1" })]);
+    expect(await reader.getConversation(conversationId)).toMatchObject({ owner: "bot" });
   });
 
   test("a ChannelRoute cannot read or hand off another Tenant's Conversation", async () => {

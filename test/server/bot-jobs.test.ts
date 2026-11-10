@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { eq } from "drizzle-orm";
 import { conversation } from "@/db/schema";
-import { createLiveBot, type BotJob } from "@/modules/bot";
+import { createLiveBot, type BotJob, type LiveBot } from "@/modules/bot";
 import { recordInboundTextMessage } from "@/modules/conversations";
 import { createQStashJobVerifier } from "@/platform/qstash";
 import { createBotJobRoute } from "@/server/bot-jobs";
@@ -109,6 +109,33 @@ test("a failed Bot job reports its error class, Conversation and Tenant without 
   ]);
   for (const secret of ["Maria", "5511999990002", "remarcar"])
     expect(JSON.stringify(diagnostics.alerts)).not.toContain(secret);
+});
+
+test("a job retries a transient failure without an alert, counting QStash's deliveries", async () => {
+  const attempts: (number | undefined)[] = [];
+  const diagnostics = createTestDiagnostics();
+  const retrying = createBotJobRoute(
+    {
+      bot: {
+        run: async (_id: string, { attempt }: { attempt?: number } = {}) => {
+          attempts.push(attempt);
+          return "retry" as const;
+        },
+      } as unknown as LiveBot,
+      url,
+      verifier: createQStashJobVerifier(qstashSigningKeys),
+    },
+    diagnostics,
+  );
+  const body = JSON.stringify({ conversationId });
+  for (const retried of [undefined, "0", "2", "not a number"]) {
+    const signed = request(body, signQStashRequest({ url, body }));
+    if (retried !== undefined) signed.headers.set("upstash-retried", retried);
+    expect((await retrying.POST(signed)).status).toBe(503);
+  }
+  // Without a readable count, the Bot treats the delivery as the last.
+  expect(attempts).toEqual([undefined, 1, 3, undefined]);
+  expect(diagnostics.alerts).toEqual([]);
 });
 
 test("a valid job retries a held lease and acknowledges a missing Conversation", async () => {

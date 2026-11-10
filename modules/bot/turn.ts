@@ -25,6 +25,7 @@ import type { BotRepository, BotTurn } from "@/modules/bot/repository";
 import { checkToolCalls, handoffReply, modelTools, type HandoffReason } from "@/modules/bot/tools";
 import type { Clock } from "@/platform/clock";
 import { logError } from "@/platform/diagnostics";
+import { RetryableError } from "@/platform/retryable";
 
 // Counts, never content: what a Bot turn's Model requests cost.
 export type TurnTokens = ModelUsage & {
@@ -87,8 +88,13 @@ export const createBotCore = ({
   context?: ContextLimits;
 }) => ({
   // It never checks whether a reply may be sent now; live turns ask the reply
-  // gate.
-  async respond(turn: BotTurn): Promise<TurnOutcome> {
+  // gate. With `retryTransient`, a transient Model failure rejects with its
+  // `RetryableError` for the caller to retry the whole turn, instead of
+  // handing off.
+  async respond(
+    turn: BotTurn,
+    { retryTransient = false }: { retryTransient?: boolean } = {},
+  ): Promise<TurnOutcome> {
     const window = contextWindow(clock.now(), context);
     const [{ behaviour, knowledgeBase, capture, links }, details, recent] = await Promise.all([
       repository.getConfiguration(turn),
@@ -180,6 +186,7 @@ export const createBotCore = ({
     // expected, so it is logged with the provider's status but does not alert.
     const decision = await decide().catch((error: unknown) => {
       logError("bot_decision_failed", error, ids);
+      if (retryTransient && error instanceof RetryableError) throw error;
       return handoff("bot_indisponivel");
     });
     return { ...decision, tokens: usage };

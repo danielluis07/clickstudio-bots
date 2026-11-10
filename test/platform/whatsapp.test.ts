@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createWhatsAppAdapter, whatsAppWebhookFields } from "@/platform/whatsapp";
 import { createWhatsAppTokenCipher } from "@/platform/whatsapp-credentials";
+import { RetryableError } from "@/platform/retryable";
 
 const accessToken = "secret-business-token";
 const options = {
@@ -377,5 +378,50 @@ describe("WhatsApp adapter", () => {
       }),
     ).rejects.toThrow("WhatsApp send failed");
     expect(calls).toBe(0);
+  });
+
+  test("only a send Meta refused for now is retryable; one that may have been sent is not", async () => {
+    const context = { tenantId: "tenant-a", wabaId: "200", phoneNumberId: "300" };
+    const credential = createWhatsAppTokenCipher(
+      options.activeKeyVersion,
+      options.encryptionKeys,
+    ).encrypt(accessToken, context);
+    const metaError = (status: number, code?: number) => async () =>
+      Response.json({ error: { message: accessToken, code } }, { status });
+    const send = (fetch: () => Promise<Response>) =>
+      createWhatsAppAdapter({ ...options, fetch })
+        .sendText({ ...context, credential, to: "5511988887777", text: "Oi" })
+        .catch((error: unknown) => error);
+
+    for (const fetch of [
+      metaError(429),
+      metaError(500, 2),
+      metaError(503, 1),
+      // Cloud API and pair rate limits arrive as 400s.
+      metaError(400, 130429),
+      metaError(400, 131056),
+    ]) {
+      const error = await send(fetch);
+      expect(error).toBeInstanceOf(RetryableError);
+      expect(String((error as Error).message)).not.toContain(accessToken);
+    }
+    for (const fetch of [
+      // No answer from Meta, or one it may have sent before failing.
+      async () => {
+        throw new DOMException("timed out", "TimeoutError");
+      },
+      async () => {
+        throw new TypeError("fetch failed");
+      },
+      async () => new Response("Bad gateway", { status: 502 }),
+      async () => Response.json({ messages: [] }),
+      // Refused for good.
+      metaError(400, 100),
+      metaError(401, 190),
+    ]) {
+      const error = await send(fetch);
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(RetryableError);
+    }
   });
 });

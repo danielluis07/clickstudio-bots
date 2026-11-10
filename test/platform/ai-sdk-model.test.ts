@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import type { Model, ModelRequest } from "@/modules/bot";
 import { createAiSdkModel } from "@/platform/ai-sdk-model";
+import { describeError } from "@/platform/diagnostics";
+import { RetryableError } from "@/platform/retryable";
 
 type Generated = Awaited<ReturnType<MockLanguageModelV4["doGenerate"]>>;
 
@@ -160,7 +163,7 @@ describe("AI SDK model", () => {
     expect(provider.doGenerateCalls).toHaveLength(1);
   });
 
-  test("a slow provider rejects at the timeout", async () => {
+  test("a slow provider rejects at the timeout, as retryable", async () => {
     const provider = new MockLanguageModelV4({
       doGenerate: ({ abortSignal }) =>
         new Promise((_, reject) => {
@@ -170,6 +173,33 @@ describe("AI SDK model", () => {
 
     await expect(
       createAiSdkModel({ model: provider, timeoutMs: 20 }).generate(request),
-    ).rejects.toThrow();
+    ).rejects.toBeInstanceOf(RetryableError);
+  });
+
+  test("a rate limit or provider outage is retryable; a refused request is not", async () => {
+    const failing = (statusCode: number) =>
+      createAiSdkModel({
+        model: new MockLanguageModelV4({
+          doGenerate: async () => {
+            throw new APICallError({ message: "", url: "", requestBodyValues: {}, statusCode });
+          },
+        }),
+      }).generate(request);
+
+    for (const statusCode of [429, 500, 503, 529]) {
+      const error = await failing(statusCode).catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(RetryableError);
+      // The provider's status still reaches the error record.
+      expect(describeError(error)).toMatchObject({
+        errorClass: "RetryableError",
+        causeClass: "AI_APICallError",
+        providerStatus: statusCode,
+      });
+    }
+    for (const statusCode of [400, 401, 404]) {
+      const error = await failing(statusCode).catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(APICallError);
+      expect(error).not.toBeInstanceOf(RetryableError);
+    }
   });
 });

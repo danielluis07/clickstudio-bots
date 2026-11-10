@@ -4,7 +4,10 @@ import type {
 } from "@/platform/whatsapp-credentials";
 
 // Sends from a Channel through the Cloud API. Plaintext access tokens never
-// cross this port; the adapter decrypts the credential itself.
+// cross this port; the adapter decrypts the credential itself. `sendText`
+// rejects with a `RetryableError` (`@/platform/retryable`) only when Meta
+// refused the message and may accept it later; any other rejection may have
+// been sent and must never be resent.
 export interface WhatsAppSender {
   sendText(
     input: WhatsAppCredentialContext & {
