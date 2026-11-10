@@ -12,7 +12,7 @@ import {
   organization,
 } from "@/db/schema";
 import type { ChannelRoute } from "@/modules/channels";
-import type { TenantScope } from "@/modules/tenancy";
+import { recordMemberActivity, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 import { notifyInbox, type Notifier } from "@/platform/notifier";
 
@@ -228,6 +228,13 @@ export const deleteContact = async ({
         set: { deletedAt },
       });
     await eraseInboxEvents(tx, scope.tenantId, found.phone, deletedAt);
+    // The entry keeps the Contact's id, which no longer resolves: nothing
+    // in it identifies the person.
+    await recordMemberActivity(tx, scope, {
+      action: "contact.deleted",
+      subjectIds: [contactId],
+      at: deletedAt,
+    });
     return true;
   });
   if (!deleted) return { ok: false as const, error: "not_found" as const };

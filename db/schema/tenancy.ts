@@ -65,6 +65,45 @@ export const invitation = pgTable(
   ],
 );
 
+// What a Member or the platform administrator did to Tenant data. Each value
+// names the record its `subject_id` points at, if any.
+export const memberActivityActions = [
+  "conversation.taken_over",
+  "conversation.returned_to_bot",
+  "conversation.resolved",
+  "contact.deleted",
+  "invitation.created",
+  "invitation.canceled",
+  "invitation.accepted",
+  "member.removed",
+  "bot.activated",
+  "bot.paused",
+  "bot.unpaused",
+  "behaviour_settings.saved",
+  "capture_settings.saved",
+  "link_settings.saved",
+] as const;
+
+// Append-only: a trigger refuses every update, and every delete while the
+// Tenant row still exists. Ids only, never message text, names or phone
+// numbers; an id outlives the record it named. No foreign keys: a reference
+// to the Tenant row would take `for key share` on it after the action's own
+// row locks (docs/locking.md), and a reference to the actor or subject would
+// cascade an entry away with them. Tenant deletion removes the entries.
+export const memberActivity = pgTable(
+  "member_activity",
+  {
+    id: id(),
+    tenantId: text("tenant_id").notNull(),
+    // A Member's user id, or the platform administrator's.
+    actorUserId: text("actor_user_id").notNull(),
+    action: text("action", { enum: memberActivityActions }).notNull(),
+    subjectId: text("subject_id"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [index("member_activity_tenant_id_occurred_at_idx").on(t.tenantId, t.occurredAt)],
+);
+
 // Click-through assent to the Terms and DPA annex given when joining a Tenant.
 export const legalAcceptance = pgTable(
   "legal_acceptance",

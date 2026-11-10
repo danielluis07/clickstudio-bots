@@ -19,3 +19,4 @@ export { createTenantLifecycle } from "@/modules/tenancy/lifecycle";
 export { tenantOperationLeaseMs, tenantRecoveryDays } from "@/modules/tenancy/lifecycle-policy";
 export { pruneCanceledTenants } from "@/modules/tenancy/retention";
 export { createTenantExport, type TenantExportFile } from "@/modules/tenancy/export";
+export { recordMemberActivity, type MemberActivityAction } from "@/modules/tenancy/activity";

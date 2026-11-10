@@ -4,6 +4,7 @@ import {
   channel,
   inboxEvent,
   member,
+  memberActivity,
   organization,
   session,
   user,
@@ -60,6 +61,9 @@ export const pruneCanceledTenants = async (db: Database, clock: Clock) => {
       // All product data, including encrypted Channel tokens, cascades from
       // the Tenant. Manual billing/invoices are held outside this database.
       await tx.delete(organization).where(eq(organization.id, tenantId));
+      // The activity log has no foreign key to cascade through. Its trigger
+      // allows these deletes only now that the Tenant row is gone.
+      await tx.delete(memberActivity).where(eq(memberActivity.tenantId, tenantId));
       for (const identity of identities) {
         const exclusive = and(
           eq(user.id, identity.id),

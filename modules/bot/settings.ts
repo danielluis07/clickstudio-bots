@@ -145,11 +145,13 @@ export const readBehaviour = async (
 
 export const createBotSettingsEditor = ({ db, clock }: { db: Database; clock: Clock }) => {
   const settings = createOwnerSavedSettings({
+    db,
     clock,
     schema: settingsSchema,
+    action: "behaviour_settings.saved",
     load: (tenantId) => loadSettings(db, tenantId),
-    persist: async (scope, values) => {
-      await db
+    persist: async (tx, scope, values) => {
+      await tx
         .insert(botSettings)
         .values({ tenantId: scope.tenantId, ...values })
         .onConflictDoUpdate({ target: botSettings.tenantId, set: values });

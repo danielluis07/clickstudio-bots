@@ -14,6 +14,7 @@ import {
   knowledgeBaseEntry,
   legalAcceptance,
   member,
+  memberActivity,
   message,
   messageChange,
   organization,
@@ -65,6 +66,7 @@ export const createTenantExport = ({ db, clock }: { db: Database; clock: Clock }
           sandboxUsage,
           replyUsage,
           activation,
+          memberActivities,
         ] = [
           await tx
             .select({
@@ -157,6 +159,11 @@ export const createTenantExport = ({ db, clock }: { db: Database; clock: Clock }
             .where(eq(botReplyUsage.tenantId, tenantId))
             .orderBy(asc(botReplyUsage.period)),
           await tx.select().from(botActivation).where(eq(botActivation.tenantId, tenantId)),
+          await tx
+            .select()
+            .from(memberActivity)
+            .where(eq(memberActivity.tenantId, tenantId))
+            .orderBy(asc(memberActivity.occurredAt), asc(memberActivity.id)),
         ];
         return {
           version: 1,
@@ -177,6 +184,7 @@ export const createTenantExport = ({ db, clock }: { db: Database; clock: Clock }
           sandboxUsage,
           replyUsage,
           activation,
+          memberActivity: memberActivities,
         };
       },
       { isolationLevel: "repeatable read", accessMode: "read only" },

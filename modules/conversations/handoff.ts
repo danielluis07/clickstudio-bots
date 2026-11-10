@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, lte, type SQL } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
 import { conversation, message } from "@/db/schema";
 import { serviceWindowHours } from "@/modules/conversations/repository";
-import type { TenantScope } from "@/modules/tenancy";
+import { recordMemberActivity, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 import { notifyInbox, type Notifier } from "@/platform/notifier";
 
@@ -162,9 +162,20 @@ const resumeFromDashboard = async (
   now: Date,
 ) =>
   (
-    await db.transaction((tx) =>
-      resume(tx, scope, conversationIds, { resolved, requireAll: true, byMemberAt: now }),
-    )
+    await db.transaction(async (tx) => {
+      const resumed = await resume(tx, scope, conversationIds, {
+        resolved,
+        requireAll: true,
+        byMemberAt: now,
+      });
+      if (resumed.length > 0)
+        await recordMemberActivity(tx, scope, {
+          action: resolved ? "conversation.resolved" : "conversation.returned_to_bot",
+          subjectIds: resumed,
+          at: now,
+        });
+      return resumed;
+    })
   ).length > 0;
 
 // A new Contact message returns a "Bot indisponível" Handoff no Member has
@@ -239,9 +250,16 @@ export const createHandoffControls = ({
   return {
     // "Assumir": silences the Bot without sending anything.
     async takeOver(scope: TenantScope, conversationId: string) {
-      const found =
-        (await handOff(db, scope, conversationId, "claimed")) ||
-        (await exists(scope, conversationId));
+      const changed = await db.transaction(async (tx) => {
+        if (!(await handOff(tx, scope, conversationId, "claimed"))) return false;
+        await recordMemberActivity(tx, scope, {
+          action: "conversation.taken_over",
+          subjectIds: [conversationId],
+          at: clock.now(),
+        });
+        return true;
+      });
+      const found = changed || (await exists(scope, conversationId));
       return outcome(scope, conversationId, found);
     },
     // "Devolver ao Bot": the Conversation stays on the waiting list.

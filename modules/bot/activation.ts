@@ -3,7 +3,7 @@ import type { Database, Transaction } from "@/db/database";
 import { botActivation, botSettings, organization } from "@/db/schema";
 import { activateChannelBot, readChannelBotState, setChannelBotPaused } from "@/modules/channels";
 import { readKnowledgeBaseReadiness } from "@/modules/knowledge-base";
-import type { TenantScope } from "@/modules/tenancy";
+import { recordMemberActivity, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 
 const activateWithSnapshot = async <T>(db: Database, activate: (tx: Transaction) => Promise<T>) => {
@@ -59,16 +59,28 @@ export const createBotActivation = ({ db, clock }: { db: Database; clock: Clock 
     // and the flag write cannot read different committed configurations.
     return activateWithSnapshot(db, async (tx) => {
       const checklist = await readChecklist(tx, scope);
-      return activateChannelBot(tx, scope, {
+      const at = clock.now();
+      const result = await activateChannelBot(tx, scope, {
         ready: checklist.profile && checklist.knowledge && checklist.tested,
-        at: clock.now(),
+        at,
       });
+      if (result.ok) await recordMemberActivity(tx, scope, { action: "bot.activated", at });
+      return result;
     });
   },
 
   // Every Member may pause the Channel independently of activation and Schedule.
   setPaused: (scope: TenantScope, paused: boolean) =>
-    setChannelBotPaused(db, scope, { paused, at: clock.now() }),
+    db.transaction(async (tx) => {
+      const at = clock.now();
+      const result = await setChannelBotPaused(tx, scope, { paused, at });
+      if (result.ok)
+        await recordMemberActivity(tx, scope, {
+          action: paused ? "bot.paused" : "bot.unpaused",
+          at,
+        });
+      return result;
+    }),
 
   async markTested(scope: TenantScope, testedAt: Date) {
     if (scope.role !== "owner") return { ok: false as const, error: "forbidden" as const };

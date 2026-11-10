@@ -128,11 +128,13 @@ export const readCapture = async (db: Database, scope: BotTurn["scope"]) =>
 
 export const createCaptureSettingsEditor = ({ db, clock }: { db: Database; clock: Clock }) => {
   const settings = createOwnerSavedSettings({
+    db,
     clock,
     schema: captureSchema,
+    action: "capture_settings.saved",
     load: (tenantId) => loadCapture(db, tenantId),
-    persist: async (scope, values) => {
-      await db
+    persist: async (tx, scope, values) => {
+      await tx
         .insert(botCaptureSettings)
         .values({ tenantId: scope.tenantId, ...values })
         .onConflictDoUpdate({ target: botCaptureSettings.tenantId, set: values });
