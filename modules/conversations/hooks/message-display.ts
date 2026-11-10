@@ -54,3 +54,21 @@ export const messageStatusLabels = {
   read: "Lida",
   failed: "Não enviada",
 } as const;
+
+// Meta's error codes for an undelivered message that a Member can act on.
+const failureReasons: Record<number, string> = {
+  131000: "Erro desconhecido no WhatsApp",
+  131021: "O contato é o próprio número da empresa",
+  131026: "O número não pode receber a mensagem",
+  131031: "A conta do WhatsApp está bloqueada",
+  131042: "Problema de pagamento na conta do WhatsApp",
+  131047: "Mais de 24 horas desde a última mensagem do contato",
+  131048: "Limite de envio atingido por denúncias de spam",
+  131056: "Muitas mensagens para este contato em pouco tempo",
+};
+
+// Why Meta did not deliver a message, or null when it gave no code.
+export const messageFailureReason = (failureCode: number | null) =>
+  failureCode === null
+    ? null
+    : `${failureReasons[failureCode] ?? "Erro do WhatsApp"} (código ${failureCode})`;

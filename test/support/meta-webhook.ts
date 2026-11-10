@@ -73,16 +73,29 @@ export const statusChange = ({
   wamid,
   status,
   timestamp = "1792497700",
+  errorCode,
 }: Metadata & {
   wamid: string;
   status: "sent" | "delivered" | "read" | "failed";
   timestamp?: string;
+  // Meta's error for a failed status.
+  errorCode?: number;
 }) => ({
   field: "messages",
   value: {
     messaging_product: "whatsapp",
     metadata: { display_phone_number: "5511999990000", phone_number_id: phoneNumberId },
-    statuses: [{ id: wamid, status, timestamp, recipient_id: "5511988887777" }],
+    statuses: [
+      {
+        id: wamid,
+        status,
+        timestamp,
+        recipient_id: "5511988887777",
+        ...(errorCode && {
+          errors: [{ code: errorCode, title: "Message undeliverable", message: "Undeliverable" }],
+        }),
+      },
+    ],
   },
 });
 

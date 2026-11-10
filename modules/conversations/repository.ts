@@ -188,6 +188,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
           // Null for the Contact's messages and once the author is removed.
           authorName: user.name,
           status: message.status,
+          failureCode: message.failureCode,
           type: message.type,
           // As last edited; a revoked message shows no text.
           text: sql<

@@ -208,6 +208,7 @@ describe("Webhook inbox", () => {
             origin: "contact",
             authorName: null,
             status: null,
+            failureCode: null,
             type: "text",
             text: "Olá!",
             sentAt: new Date("2026-10-20T12:00:00Z"),
@@ -490,6 +491,7 @@ describe("Coexistence echoes", () => {
       origin: "app",
       authorName: null,
       status: "sent",
+      failureCode: null,
       type: "text",
       text: "Abrimos sim!",
       sentAt: new Date("2026-10-20T12:03:20Z"),
@@ -891,6 +893,23 @@ describe("Delivery statuses", () => {
     );
 
     expect((await statusesOf(tenantA)).at(-1)).toEqual({ wamid: "wamid.OUT1", status: "failed" });
+  });
+
+  test("a failed status keeps Meta's error code for the Member", async () => {
+    await replyToContact();
+
+    await deliver(
+      statusChange({
+        phoneNumberId: "300",
+        wamid: "wamid.OUT1",
+        status: "failed",
+        errorCode: 131026,
+      }),
+    );
+
+    const [{ messages }] = await conversationsOf(tenantA);
+    expect(messages.at(-1)).toMatchObject({ status: "failed", failureCode: 131026 });
+    expect(messages[0]).toMatchObject({ failureCode: null });
   });
 
   test("a status for another Channel's message, or for an unknown one, changes nothing", async () => {

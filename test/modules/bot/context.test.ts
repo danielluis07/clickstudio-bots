@@ -11,6 +11,7 @@ const row = (id: string, minute: number, fields: Partial<BotTurnMessage> = {}): 
   origin: "contact",
   authorName: null,
   status: null,
+  failureCode: null,
   type: "text",
   text: id,
   sentAt: at(minute),

@@ -9,6 +9,8 @@ import type { Clock } from "@/platform/clock";
 export type MessageStatusUpdate = {
   wamid: string;
   status: "sent" | "delivered" | "read" | "failed";
+  // Meta's error code, for a failed status that gave one.
+  failureCode?: number | null;
 };
 
 // Meta answers a send within seconds, so an early status still unmatched after
@@ -29,11 +31,11 @@ const advanceStatus = (
   tx: Transaction,
   tenantId: string,
   wamid: string,
-  status: MessageStatusUpdate["status"],
+  { status, failureCode }: Pick<MessageStatusUpdate, "status" | "failureCode">,
 ) =>
   tx
     .update(message)
-    .set({ status })
+    .set({ status, failureCode: status === "failed" ? (failureCode ?? null) : null })
     .where(
       and(
         eq(message.tenantId, tenantId),
@@ -49,8 +51,8 @@ export const applyEarlyStatus = async (tx: Transaction, tenantId: string, wamid:
   const [early] = await tx
     .delete(earlyMessageStatus)
     .where(and(eq(earlyMessageStatus.tenantId, tenantId), eq(earlyMessageStatus.wamid, wamid)))
-    .returning({ status: earlyMessageStatus.status });
-  if (early) await advanceStatus(tx, tenantId, wamid, early.status);
+    .returning({ status: earlyMessageStatus.status, failureCode: earlyMessageStatus.failureCode });
+  if (early) await advanceStatus(tx, tenantId, wamid, early);
 };
 
 // Reflects Meta's delivery status on the Channel's outbound message. Creates
@@ -74,16 +76,17 @@ export const recordMessageStatus = (
           tenantId: route.tenantId,
           wamid: update.wamid,
           status: update.status,
+          failureCode: update.failureCode ?? null,
           receivedAt: update.receivedAt,
         })
         .onConflictDoUpdate({
           target: [earlyMessageStatus.tenantId, earlyMessageStatus.wamid],
-          set: { status: update.status },
+          set: { status: update.status, failureCode: update.failureCode ?? null },
           setWhere: sql`${rankOf(earlyMessageStatus.status)} < ${rankOf(sql`${update.status}::text`)}`,
         });
       return null;
     }
-    await advanceStatus(tx, route.tenantId, update.wamid, update.status);
+    await advanceStatus(tx, route.tenantId, update.wamid, update);
     // Look up even on a retry that already applied the status: a failed ping
     // must still be deliverable after the database write committed.
     return findMessageConversation(tx, route, update.wamid, "outbound");

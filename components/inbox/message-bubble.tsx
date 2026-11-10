@@ -31,7 +31,9 @@ export function MessageBubble({ message }: { message: ConversationMessage }) {
         <MessageFooter className="flex-wrap gap-1.5">
           {edited && <span>{edited}</span>}
           <time dateTime={message.sentAt.toISOString()}>{formatShortDateTime(message.sentAt)}</time>
-          {message.status && <MessageStatus status={message.status} />}
+          {message.status && (
+            <MessageStatus status={message.status} failureCode={message.failureCode} />
+          )}
         </MessageFooter>
       </MessageContent>
     </Message>

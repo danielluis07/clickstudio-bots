@@ -207,6 +207,11 @@ const statusEventSchema = z.object({
       z.object({
         id: z.string().min(1),
         status: z.enum(["sent", "delivered", "read", "failed"]),
+        // Why Meta could not deliver it; only a failed status carries it.
+        errors: z
+          .array(z.object({ code: z.number().int() }))
+          .optional()
+          .catch(undefined),
       }),
     ]),
   }),
@@ -216,8 +221,12 @@ const statusEventSchema = z.object({
 export const readMessageStatus = (payload: unknown): MessageStatusUpdate | null => {
   const parsed = statusEventSchema.safeParse(payload);
   if (!parsed.success) return null;
-  const [{ id, status }] = parsed.data.value.statuses;
-  return { wamid: id, status };
+  const [{ id, status, errors }] = parsed.data.value.statuses;
+  return {
+    wamid: id,
+    status,
+    failureCode: status === "failed" ? (errors?.[0]?.code ?? null) : null,
+  };
 };
 
 const messageEchoEventSchema = z.object({

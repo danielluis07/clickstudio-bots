@@ -1,6 +1,6 @@
 import { Check, CheckCheck, CircleAlert, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { messageStatusLabels } from "@/modules/conversations/hooks";
+import { messageFailureReason, messageStatusLabels } from "@/modules/conversations/hooks";
 
 type Status = keyof typeof messageStatusLabels;
 
@@ -12,14 +12,22 @@ const icons = {
   failed: CircleAlert,
 };
 
-export function MessageStatus({ status }: { status: Status }) {
+export function MessageStatus({
+  status,
+  failureCode,
+}: {
+  status: Status;
+  failureCode: number | null;
+}) {
   const Icon = icons[status];
+  const reason = status === "failed" ? messageFailureReason(failureCode) : null;
+  const label = reason ? `${messageStatusLabels[status]}: ${reason}` : messageStatusLabels[status];
 
   return (
     <span
       role="img"
-      aria-label={messageStatusLabels[status]}
-      title={messageStatusLabels[status]}
+      aria-label={label}
+      title={label}
       className={cn(
         "inline-flex items-center gap-1",
         status === "read" && "text-sky-600 dark:text-sky-400",
@@ -27,7 +35,7 @@ export function MessageStatus({ status }: { status: Status }) {
       )}
     >
       <Icon className="size-3.5" aria-hidden="true" />
-      {status === "failed" && messageStatusLabels.failed}
+      {status === "failed" && label}
     </span>
   );
 }
