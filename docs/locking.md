@@ -70,6 +70,22 @@ rule:
   key here is already serialised by a lock of a lower rank: the wamid, the
   Contact address or the Conversation row.
 
+### Member activity entries
+
+Many Member and administrator actions end their transaction with an insert into
+`member_activity` (`recordActivity`, `modules/tenancy/activity.ts`; see
+[Member activity](member-activity.md)). The table has no foreign keys and no
+unique key besides a fresh id, so the insert takes no lock that can wait, and
+it adds no rank. That is deliberate: a reference to the Tenant row would take
+`for key share` on it after the action's row locks, a rank 4 → 2 wait that
+could deadlock with `inviteMember`, which holds the Tenant row `for update` and
+then waits on Invitation rows.
+
+Recording made these actions transactions where they were single statements:
+"Assumir" (the Handoff `UPDATE` of one Conversation), cancelling an invitation
+(one Invitation row), pausing the Bot (the Channel row) and the three settings
+saves (one settings upsert). Each still takes one row lock.
+
 ## Every lock
 
 ### Advisory locks

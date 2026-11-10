@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Database } from "@/db/database";
 import { invitation, member, organization, user } from "@/db/schema";
 import { createUserRepository, isPlatformAdmin } from "@/modules/identity";
+import { recordMemberActivity } from "@/modules/tenancy/activity";
 import { memberInvitationEmail } from "@/modules/tenancy/invitation-email";
 import {
   invitationExpiry,
@@ -80,7 +81,15 @@ export const createMemberManagement = ({
       if (!isOwner(scope)) {
         return { ok: false as const, error: "forbidden" as const };
       }
-      const canceled = await createTenantRepository(db, scope).cancelInvitation(invitationId);
+      const canceled = await db.transaction(async (tx) => {
+        if (!(await createTenantRepository(tx, scope).cancelInvitation(invitationId))) return false;
+        await recordMemberActivity(tx, scope, {
+          action: "invitation.canceled",
+          subjectIds: [invitationId],
+          at: clock.now(),
+        });
+        return true;
+      });
       if (!canceled) return { ok: false as const, error: "not_found" as const };
       return { ok: true as const };
     },
@@ -140,6 +149,11 @@ export const createMemberManagement = ({
             inviterId: scope.userId,
           })
           .returning({ id: invitation.id });
+        await recordMemberActivity(tx, scope, {
+          action: "invitation.created",
+          subjectIds: [inserted.id],
+          at: clock.now(),
+        });
         return { ...names, invitationId: inserted.id };
       });
       if (created.error) {
@@ -214,6 +228,11 @@ export const createMemberManagement = ({
         } else {
           await users.delete(deleted.userId);
         }
+        await recordMemberActivity(tx, scope, {
+          action: "member.removed",
+          subjectIds: [memberId],
+          at: clock.now(),
+        });
         return true;
       });
 

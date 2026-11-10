@@ -71,11 +71,13 @@ export const readLinks = async (db: Database, scope: BotTurn["scope"]) =>
 
 export const createLinkSettingsEditor = ({ db, clock }: { db: Database; clock: Clock }) => {
   const settings = createOwnerSavedSettings({
+    db,
     clock,
     schema: settingsSchema,
+    action: "link_settings.saved",
     load: (tenantId) => loadLinks(db, tenantId),
-    persist: async (scope, values) => {
-      await db
+    persist: async (tx, scope, values) => {
+      await tx
         .insert(botLinkSettings)
         .values({ tenantId: scope.tenantId, ...values })
         .onConflictDoUpdate({ target: botLinkSettings.tenantId, set: values });

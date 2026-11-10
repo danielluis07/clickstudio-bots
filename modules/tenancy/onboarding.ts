@@ -11,6 +11,7 @@ import {
   invitationLifetimeDays,
   invitationUrl,
 } from "@/modules/tenancy/invitations";
+import { recordActivity } from "@/modules/tenancy/activity";
 import type { Clock } from "@/platform/clock";
 import { logError } from "@/platform/diagnostics";
 import type { Mailer } from "@/platform/mailer";
@@ -123,6 +124,11 @@ export const createTenantOnboarding = ({
             inviterId: actorUserId,
           })
           .returning({ id: invitation.id });
+        await recordActivity(
+          tx,
+          { tenantId, actorUserId },
+          { action: "invitation.created", subjectIds: [ownerInvitation.id], at: clock.now() },
+        );
         return ownerInvitation;
       });
 
@@ -237,6 +243,11 @@ export const createTenantOnboarding = ({
             acceptedAt: clock.now(),
           });
         }
+        await recordActivity(
+          tx,
+          { tenantId: claimed.organizationId, actorUserId: userId },
+          { action: "invitation.accepted", subjectIds: [claimed.id], at: clock.now() },
+        );
         return { userId, tenantId: claimed.organizationId, email: claimed.email };
       });
 

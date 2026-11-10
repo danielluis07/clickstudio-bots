@@ -31,6 +31,8 @@ test("a serialization retry checks readiness again after rolling back the flag w
   const conflict = Object.assign(new Error("Concurrent Channel update"), { code: "40001" });
   let attempts = 0;
   const transactions = spyOn(db, "transaction").mockImplementation(async (run, config) => {
+    // Only activation's snapshot counts; the settings save is a transaction too.
+    if (config?.isolationLevel !== "repeatable read") return transaction(run, config);
     attempts++;
     if (attempts !== 1) return transaction(run, config);
     try {
