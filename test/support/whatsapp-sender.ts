@@ -1,5 +1,6 @@
 import type { WhatsAppSender } from "@/modules/conversations";
 import { RetryableError } from "@/platform/retryable";
+import { CredentialRejectedError } from "@/platform/whatsapp-credentials";
 
 type SentText = Parameters<WhatsAppSender["sendText"]>[0];
 
@@ -11,6 +12,8 @@ export type TestWhatsAppSender = WhatsAppSender & {
   failNext(): void;
   // Meta refuses the next sends, as with a rate limit; nothing is sent.
   refuseNext(times?: number): void;
+  // Meta refuses every send from now on for the Channel's credential.
+  rejectCredential(): void;
   // Runs once Meta has accepted a send, before the sender learns its wamid,
   // as when the send's echo is processed first.
   beforeAnswering(callback: (wamid: string) => Promise<unknown>): void;
@@ -21,6 +24,7 @@ export const createTestWhatsAppSender = (): TestWhatsAppSender => {
   const sent: SentText[] = [];
   let shouldFail = false;
   let refusals = 0;
+  let credentialRejected = false;
   let onAccepted: ((wamid: string) => Promise<unknown>) | null = null;
 
   const sender: TestWhatsAppSender = {
@@ -32,11 +36,18 @@ export const createTestWhatsAppSender = (): TestWhatsAppSender => {
     refuseNext: (times = 1) => {
       refusals = times;
     },
+    rejectCredential: () => {
+      credentialRejected = true;
+    },
     beforeAnswering: (callback) => {
       onAccepted = callback;
     },
     sendText: async (input) => {
       sender.attempts++;
+      if (credentialRejected)
+        throw new CredentialRejectedError("WhatsApp credential rejected", {
+          cause: new Error("Error validating access token"),
+        });
       if (refusals > 0) {
         refusals--;
         throw new RetryableError("WhatsApp send refused", {

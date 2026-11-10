@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import type { AccountUpdate } from "@/modules/channels";
 import type {
   AppContact,
   ImportedHistory,
@@ -422,4 +423,83 @@ export const readAppContact = (payload: unknown): AppContact | null => {
       ? (change.contact.full_name ?? change.contact.first_name)?.trim() || null
       : null;
   return { phone: phone.data, name, changedAt: change.metadata.timestamp };
+};
+
+// The WABA an event names: Meta's entry id, kept on every split event.
+export const readWabaId = (payload: unknown) => {
+  const parsed = z.object({ wabaId: z.string().min(1) }).safeParse(payload);
+  return parsed.success ? parsed.data.wabaId : null;
+};
+
+// `account_update` events that end the app's access to the number: the
+// business removed the partner or uninstalled the app, deleted the WABA, or
+// moved its number off the Cloud API.
+const removalEvents = new Set([
+  "PARTNER_REMOVED",
+  "PARTNER_APP_UNINSTALLED",
+  "ACCOUNT_DELETED",
+  "ACCOUNT_OFFBOARDED",
+]);
+
+// `account_update` events Meta documents that never change whether the Bot
+// can reply. A restriction or ban state not listed here is read below.
+const knownAccountEvents = new Set([
+  "ACCOUNT_RECONNECTED",
+  "ACCOUNT_VIOLATION",
+  "AUTH_INTL_PRICE_ELIGIBILITY_UPDATE",
+  "BUSINESS_PRIMARY_LOCATION_COUNTRY_UPDATE",
+  "MM_LITE_TERMS_SIGNED",
+  "PARTNER_ADDED",
+  "PARTNER_APP_INSTALLED",
+  "PARTNER_CLIENT_CERTIFICATION_STATUS_UPDATE",
+  "VERIFIED_ACCOUNT",
+  "VOLUME_BASED_PRICING_TIER_UPDATE",
+]);
+
+// Meta's Unix timestamp in seconds, as a number or a string.
+const expirationSchema = z
+  .union([z.number().int().positive(), z.string().regex(/^\d{1,12}$/)])
+  .transform((seconds) => new Date(Number(seconds) * 1000));
+
+const accountUpdateEventSchema = z.object({
+  field: z.literal("account_update"),
+  value: z.looseObject({
+    event: z.string().min(1),
+    ban_info: z
+      .object({ waba_ban_state: z.union([z.string(), z.array(z.string())]) })
+      .optional()
+      .catch(undefined),
+    restriction_info: z
+      .array(z.object({ restriction_type: z.string(), expiration: expirationSchema.optional() }))
+      .optional()
+      .catch(undefined),
+  }),
+});
+
+// What an `account_update` event means for the Channel: an update to apply,
+// "known" for a documented event that changes nothing, or null for an event
+// the platform does not know, which stays inspectable as unsupported.
+export const readAccountUpdate = (payload: unknown): AccountUpdate | "known" | null => {
+  const parsed = accountUpdateEventSchema.safeParse(payload);
+  if (!parsed.success) return null;
+  const { event, ban_info: ban, restriction_info: restrictions } = parsed.data.value;
+  if (removalEvents.has(event)) return { kind: "removed" };
+  if (knownAccountEvents.has(event)) return "known";
+  if (event === "DISABLED_UPDATE") {
+    const states = [ban?.waba_ban_state ?? []].flat();
+    if (states.includes("DISABLE")) return { kind: "banned" };
+    if (states.includes("REINSTATE")) return { kind: "reinstated" };
+    // A ban only scheduled still lets the number send.
+    return states.includes("SCHEDULE_FOR_DISABLE") ? "known" : null;
+  }
+  if (event === "ACCOUNT_RESTRICTION") {
+    if (!restrictions) return null;
+    // Only a block on replying to Contacts stops the Bot; it never starts
+    // conversations or adds numbers.
+    const replies = restrictions.find(
+      ({ restriction_type: type }) => type === "RESTRICTED_CUSTOMER_INITIATED_MESSAGING",
+    );
+    return replies ? { kind: "restricted", until: replies.expiration ?? null } : "known";
+  }
+  return null;
 };

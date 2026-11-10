@@ -871,6 +871,64 @@ test("a send that may have reached Meta, such as a timeout, is never retried", a
   });
 });
 
+const channelHealth = async () => (await db.select({ health: channel.health }).from(channel))[0];
+
+test("a send refused for the credential marks the Channel unhealthy, and no Bot turn starts after it", async () => {
+  const {
+    scope,
+    route,
+    clock,
+    model,
+    sender,
+    activation,
+    conversationId,
+    worker,
+    queue,
+    repository,
+  } = await setup();
+  await activation.activate(scope);
+  model.script({ text: "O corte custa R$ 80." });
+  sender.rejectCredential();
+  expect(await worker.run(conversationId)).toBe("handoff");
+  // Never retried: no retry gets past a rejected credential.
+  expect(sender.attempts).toBe(1);
+  expect(await channelHealth()).toEqual({ health: "credential_rejected" });
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "team",
+    handoffReason: "bot_indisponivel",
+  });
+
+  // Another Contact writes: nothing is enqueued, nothing is generated or sent.
+  const next = (await recordInboundTextMessage(db, route, {
+    wamid: crypto.randomUUID(),
+    from: "5511999990002",
+    profileName: "Bia",
+    text: "Vocês abrem sábado?",
+    sentAt: clock.now(),
+  }))!;
+  await worker.enqueue(route, next);
+  expect(queue.take()).toEqual([]);
+  // A job already queued, or one the sweep finds, does not reach the Model.
+  const requests = model.requests.length;
+  expect(await worker.run(next)).toBe("skipped");
+  clock.advance(5 * 60_000);
+  await worker.sweep();
+  expect(queue.take()).toEqual([]);
+  expect(model.requests).toHaveLength(requests);
+  expect(sender.attempts).toBe(1);
+  // The new Conversation stays with the Bot, to resume once reconnected.
+  expect(await repository.getConversation(next)).toMatchObject({ owner: "bot" });
+});
+
+test("a transient Meta refusal never marks the Channel unhealthy", async () => {
+  const { scope, model, sender, activation, conversationId, worker } = await setup();
+  await activation.activate(scope);
+  model.script({ text: "O corte custa R$ 80." });
+  sender.refuseNext(3);
+  expect(await worker.run(conversationId)).toBe("handoff");
+  expect(await channelHealth()).toEqual({ health: "healthy" });
+});
+
 test("pause and Schedule changes during generation prevent sending without Handoff", async () => {
   const fixture = await setup();
   const { scope, clock, model, sender, activation, conversationId, worker, repository } = fixture;

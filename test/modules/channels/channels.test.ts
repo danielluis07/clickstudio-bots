@@ -1,7 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { channel, member, organization, user } from "@/db/schema";
-import { createChannelService } from "@/modules/channels";
+import {
+  createChannelService,
+  recordAccountUpdate,
+  recordCredentialRejected,
+  sweepChannelHealth,
+} from "@/modules/channels";
+import { createTestDiagnostics } from "@/test/support/diagnostics";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { createWhatsAppAdapter, whatsAppWebhookFields } from "@/platform/whatsapp";
 import { createTestClock } from "@/test/support/clock";
@@ -165,6 +171,7 @@ describe("Channels", () => {
     setFailure(true);
     expect(await service.connect(owner, { code: "signup-code", wabaId: "200" })).toEqual({
       ok: true,
+      reconnected: false,
     });
     expect(await service.getChannel(owner)).toMatchObject({
       botEnabled: false,
@@ -215,6 +222,7 @@ describe("Channels", () => {
     const { service, syncRequests } = harness();
     expect(await service.connect(owner, { code: "signup-code", wabaId: "200" })).toEqual({
       ok: true,
+      reconnected: false,
     });
     expect(syncRequests).toEqual([syncRequest("smb_app_state_sync"), syncRequest("history")]);
     expect(await service.getChannel(owner)).toMatchObject({ historyNotImported: false });
@@ -274,5 +282,128 @@ describe("Channels", () => {
     setFailure(false);
     await Promise.all([service.retrySubscription(owner), service.retrySubscription(owner)]);
     expect(syncRequests).toEqual([syncRequest("smb_app_state_sync"), syncRequest("history")]);
+  });
+});
+
+describe("Channel health", () => {
+  const connect = async () => {
+    const fixture = harness();
+    await fixture.service.connect(owner, { code: "signup-code", wabaId: "200" });
+    const connected = (await fixture.service.getChannel(owner))!;
+    return { ...fixture, connected };
+  };
+
+  test("a connected Channel is healthy and cannot be connected again", async () => {
+    const { service, connected } = await connect();
+    expect(connected).toMatchObject({ health: "healthy", canReconnect: false });
+    expect(await service.connect(owner, { code: "again", wabaId: "200" })).toEqual({
+      ok: false,
+      error: "already_connected",
+    });
+  });
+
+  test("the owner reconnects the same number after Meta rejects its credential", async () => {
+    const { service, connected, requests } = await connect();
+    await recordCredentialRejected(db, owner, connected.id, clock.now());
+    expect(await service.getChannel(attendant)).toMatchObject({
+      health: "credential_rejected",
+      canReconnect: true,
+    });
+    const [{ credential: rejected }] = await db.select().from(channel);
+    expect(await service.connect(attendant, { code: "again", wabaId: "200" })).toEqual({
+      ok: false,
+      error: "forbidden",
+    });
+
+    requests.length = 0;
+    clock.advance(60_000);
+    expect(await service.connect(owner, { code: "again", wabaId: "200" })).toEqual({
+      ok: true,
+      reconnected: true,
+    });
+    const [stored] = await db.select().from(channel);
+    expect(stored).toMatchObject({
+      id: connected.id,
+      health: "healthy",
+      healthChangedAt: clock.now(),
+      subscriptionStatus: "subscribed",
+    });
+    expect(stored.credential).not.toEqual(rejected);
+    // Subscribed again, as Meta drops the app when the partner is removed.
+    expect(requests.some((url) => url.endsWith("/200/subscribed_apps"))).toBe(true);
+  });
+
+  test("reconnecting refuses another number and keeps the Channel waiting", async () => {
+    const { connected } = await connect();
+    await recordCredentialRejected(db, owner, connected.id, clock.now());
+    const other = harness("301").service;
+    expect(await other.connect(owner, { code: "again", wabaId: "200" })).toEqual({
+      ok: false,
+      error: "different_number",
+    });
+    expect(await other.connect(owner, { code: "again", wabaId: "201" })).toEqual({
+      ok: false,
+      error: "different_number",
+    });
+    expect(await other.getChannel(owner)).toMatchObject({
+      phoneNumberId: "300",
+      health: "credential_rejected",
+    });
+  });
+
+  test("a ban or restriction cannot be cleared by reconnecting", async () => {
+    const { service, connected } = await connect();
+    const route = (await service.resolvePhoneNumber("300"))!;
+    await recordAccountUpdate(db, route, { kind: "banned" }, clock.now());
+    // A rejected credential never hides the ban.
+    await recordCredentialRejected(db, owner, connected.id, clock.now());
+    expect(await service.getChannel(owner)).toMatchObject({
+      health: "banned",
+      canReconnect: false,
+    });
+    expect(await service.connect(owner, { code: "again", wabaId: "200" })).toEqual({
+      ok: false,
+      error: "already_connected",
+    });
+    await recordAccountUpdate(db, route, { kind: "reinstated" }, clock.now());
+    expect(await service.getChannel(owner)).toMatchObject({ health: "healthy" });
+  });
+
+  test("the sweep alerts once per unhealthy state and lifts restrictions that ended", async () => {
+    const { service } = await connect();
+    const route = (await service.resolvePhoneNumber("300"))!;
+    const diagnostics = createTestDiagnostics();
+    const until = new Date(clock.now().getTime() + 60 * 60_000);
+    await recordAccountUpdate(db, route, { kind: "restricted", until }, clock.now());
+    expect(await service.getChannel(owner)).toMatchObject({
+      health: "restricted",
+      restrictedUntil: until,
+    });
+
+    await sweepChannelHealth({ db, clock, diagnostics });
+    await sweepChannelHealth({ db, clock, diagnostics });
+    expect(diagnostics.alerts).toEqual([{ kind: "channel_unhealthy", operation: "restricted" }]);
+
+    // A later end for the same restriction is not a new alert.
+    const later = new Date(until.getTime() + 60 * 60_000);
+    await recordAccountUpdate(db, route, { kind: "restricted", until: later }, clock.now());
+    clock.set(until);
+    await sweepChannelHealth({ db, clock, diagnostics });
+    expect(await service.getChannel(owner)).toMatchObject({ health: "restricted" });
+    expect(diagnostics.alerts).toHaveLength(1);
+
+    clock.set(later);
+    await sweepChannelHealth({ db, clock, diagnostics });
+    expect(await service.getChannel(owner)).toMatchObject({
+      health: "healthy",
+      restrictedUntil: null,
+    });
+
+    await recordAccountUpdate(db, route, { kind: "removed" }, clock.now());
+    await sweepChannelHealth({ db, clock, diagnostics });
+    expect(diagnostics.alerts).toEqual([
+      { kind: "channel_unhealthy", operation: "restricted" },
+      { kind: "channel_unhealthy", operation: "removed" },
+    ]);
   });
 });

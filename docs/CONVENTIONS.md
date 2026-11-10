@@ -37,6 +37,6 @@ Rules (enforced by `test/architecture.test.ts`; see ADR 0005):
 - Every tRPC procedure is built on `tenantProcedure`, which resolves the `TenantScope`; no procedure takes a Tenant id as input. `test/trpc/router.test.ts` calls every procedure signed out and without membership and expects a refusal.
 - A port lives in the module that needs it. It moves to `platform/` only when several modules share it.
 - Repositories for Tenant-owned data take a `TenantScope` (`@/modules/tenancy`) and live in the module that owns the data.
-- The one exception is inbound Meta events, which have no Member. They write Tenant-owned data under a `ChannelRoute` (`@/modules/channels`). Only `resolveChannelPhoneNumber` creates one, from the phone-number-id of a signed event. Never build either proof from a request's Tenant id.
+- The one exception is inbound Meta events, which have no Member. They write Tenant-owned data under a `ChannelRoute` (`@/modules/channels`). Only `resolveChannelPhoneNumber` and `resolveChannelWaba` create one, from the phone-number-id or the WABA id (entry id) of a signed event. Never build either proof from a request's Tenant id.
 - Route handlers in `app/` stay one line each. Their request adapters (status codes, headers, body parsing) live in `server/` (for example `server/webhook-routes.ts`), or in `trpc/handler.ts` for tRPC, so tests can exercise them with plain `Request` objects.
 - Start a module when a glossary area gets its first code. Do not create empty folders ahead of time.

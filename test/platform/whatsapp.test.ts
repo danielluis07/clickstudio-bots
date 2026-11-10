@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { createWhatsAppAdapter, whatsAppWebhookFields } from "@/platform/whatsapp";
-import { createWhatsAppTokenCipher } from "@/platform/whatsapp-credentials";
+import {
+  createWhatsAppTokenCipher,
+  CredentialRejectedError,
+} from "@/platform/whatsapp-credentials";
 import { RetryableError } from "@/platform/retryable";
 
 const accessToken = "secret-business-token";
@@ -422,6 +425,50 @@ describe("WhatsApp adapter", () => {
       const error = await send(fetch);
       expect(error).toBeInstanceOf(Error);
       expect(error).not.toBeInstanceOf(RetryableError);
+    }
+  });
+
+  test("a send refused for the Channel's credential is a credential rejection, never retryable", async () => {
+    const context = { tenantId: "tenant-a", wabaId: "200", phoneNumberId: "300" };
+    const credential = createWhatsAppTokenCipher(
+      options.activeKeyVersion,
+      options.encryptionKeys,
+    ).encrypt(accessToken, context);
+    const metaError = (status: number, code?: number, subcode?: number) => async () =>
+      Response.json({ error: { message: accessToken, code, error_subcode: subcode } }, { status });
+    const send = (fetch: () => Promise<Response>) =>
+      createWhatsAppAdapter({ ...options, fetch })
+        .sendText({ ...context, credential, to: "5511988887777", text: "Oi" })
+        .catch((error: unknown) => error);
+
+    for (const fetch of [
+      // Expired, revoked or changed-password tokens, and removed permissions.
+      metaError(401, 190),
+      metaError(401, 190, 463),
+      metaError(400, 190, 460),
+      metaError(401, 0),
+      metaError(403, 10),
+      metaError(403, 200),
+      metaError(403, 131005),
+    ]) {
+      const error = await send(fetch);
+      expect(error).toBeInstanceOf(CredentialRejectedError);
+      expect(error).not.toBeInstanceOf(RetryableError);
+      expect(String((error as Error).message)).not.toContain(accessToken);
+    }
+    for (const fetch of [
+      // Transient refusals and failures that say nothing about the credential.
+      metaError(429),
+      metaError(503, 1),
+      metaError(400, 130429),
+      metaError(400, 131000),
+      metaError(400, 100),
+      async () => new Response("Unauthorized", { status: 401 }),
+      async () => {
+        throw new DOMException("timed out", "TimeoutError");
+      },
+    ]) {
+      expect(await send(fetch)).not.toBeInstanceOf(CredentialRejectedError);
     }
   });
 });

@@ -23,6 +23,7 @@ import { createTestJobQueue, type TestJobQueue } from "@/test/support/job-queue"
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
 import { createTestNotifier, type TestNotifier } from "@/test/support/notifier";
 import {
+  accountUpdateDelivery,
   messageEchoChange,
   metaAppSecret,
   metaDelivery,
@@ -345,6 +346,106 @@ describe("Webhook inbox", () => {
     const conversations = await conversationsOf(tenantA);
     expect(conversations).toHaveLength(1);
     expect(conversations[0].messages).toHaveLength(1);
+  });
+});
+
+describe("Account updates", () => {
+  const healthOf = async () =>
+    Object.fromEntries(
+      (
+        await db
+          .select({ id: channel.id, health: channel.health, until: channel.restrictedUntil })
+          .from(channel)
+          .orderBy(channel.id)
+      ).map(({ id, health, until }) => [id, until ? { health, until } : { health }]),
+    );
+  const deliver = async (wabaId: string, value: Record<string, unknown>) => {
+    await receive(accountUpdateDelivery(wabaId, value));
+    const [job] = queue.take();
+    const result = await inbox.process(job.inboxEventId);
+    const [stored] = await db
+      .select({ ignoredReason: inboxEvent.ignoredReason })
+      .from(inboxEvent)
+      .where(eq(inboxEvent.id, job.inboxEventId));
+    return { ...result, ...stored };
+  };
+
+  beforeEach(async () => {
+    await db
+      .update(channel)
+      .set({ health: "healthy", restrictedUntil: null, healthChangedAt: null });
+  });
+
+  test("a restriction on replying to Contacts restricts only that WABA's Channel until it ends", async () => {
+    expect(
+      await deliver("201", {
+        phone_number: "5511999990001",
+        event: "ACCOUNT_RESTRICTION",
+        restriction_info: [
+          { restriction_type: "RESTRICTED_BIZ_INITIATED_MESSAGING", expiration: 1792500000 },
+          { restriction_type: "RESTRICTED_CUSTOMER_INITIATED_MESSAGING", expiration: 1792584000 },
+        ],
+      }),
+    ).toMatchObject({ status: "processed", ignoredReason: null });
+    expect(await healthOf()).toEqual({
+      "channel-a": { health: "healthy" },
+      "channel-b": { health: "restricted", until: new Date(1792584000 * 1000) },
+    });
+    // Nothing for the inbox: the Painel reads the Channel itself.
+    expect(notifier.pings).toEqual([]);
+  });
+
+  test("removing the partner marks the Channel removed, and a later ban does not replace it", async () => {
+    expect(
+      await deliver("200", {
+        event: "PARTNER_REMOVED",
+        waba_info: { waba_id: "200", owner_business_id: "900" },
+      }),
+    ).toMatchObject({ status: "processed" });
+    await deliver("200", { event: "DISABLED_UPDATE", ban_info: { waba_ban_state: ["DISABLE"] } });
+    expect(await healthOf()).toMatchObject({ "channel-a": { health: "removed" } });
+  });
+
+  test("a ban stops the Channel and Meta's reinstatement restores it", async () => {
+    await deliver("200", {
+      event: "DISABLED_UPDATE",
+      ban_info: { waba_ban_state: "DISABLE", waba_ban_date: "2026-10-20" },
+    });
+    expect(await healthOf()).toMatchObject({ "channel-a": { health: "banned" } });
+    await deliver("200", { event: "DISABLED_UPDATE", ban_info: { waba_ban_state: "REINSTATE" } });
+    expect(await healthOf()).toMatchObject({ "channel-a": { health: "healthy" } });
+  });
+
+  test("known events that do not affect sending are ignored as known", async () => {
+    for (const value of [
+      { event: "VERIFIED_ACCOUNT" },
+      { event: "PARTNER_ADDED", waba_info: { waba_id: "200" } },
+      { event: "DISABLED_UPDATE", ban_info: { waba_ban_state: ["SCHEDULE_FOR_DISABLE"] } },
+      {
+        event: "ACCOUNT_RESTRICTION",
+        restriction_info: [{ restriction_type: "RESTRICTED_ADD_PHONE_NUMBER_ACTION" }],
+      },
+    ])
+      expect(await deliver("200", value)).toMatchObject({
+        status: "ignored",
+        ignoredReason: "known_event",
+      });
+    expect(await healthOf()).toMatchObject({ "channel-a": { health: "healthy" } });
+  });
+
+  test("an unknown event stays unsupported, and an unknown WABA files nothing", async () => {
+    expect(await deliver("200", { event: "SOMETHING_NEW" })).toMatchObject({
+      status: "ignored",
+      ignoredReason: "unsupported_event",
+    });
+    expect(await deliver("999", { event: "PARTNER_REMOVED" })).toMatchObject({
+      status: "ignored",
+      ignoredReason: "unknown_channel",
+    });
+    expect(await healthOf()).toEqual({
+      "channel-a": { health: "healthy" },
+      "channel-b": { health: "healthy" },
+    });
   });
 });
 

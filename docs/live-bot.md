@@ -17,7 +17,8 @@ Handoff. Resuming still respects the configured Schedule.
 ## Delivery and recovery
 
 Inbox processing enqueues `run-bot-turn` only for an unanswered, live Contact
-message in an activated, subscribed, unpaused Channel and a Bot-owned Conversation.
+message in an activated, subscribed, unpaused and
+[healthy](whatsapp-setup.md#channel-health) Channel and a Bot-owned Conversation.
 Imported history, delivery statuses and app echoes do not start turns. Queue
 failure leaves the inbox event unsettled so its idempotent processing can retry.
 
@@ -81,8 +82,8 @@ and writes nothing. A live turn asks it at three checkpoints:
 
 Every checkpoint applies the same order, and the first match wins:
 
-1. Not eligible (Channel not activated, paused or unsubscribed, or the
-   Conversation is with the team): skip.
+1. Not eligible (Channel not activated, paused, unsubscribed or unhealthy, or
+   the Conversation is with the team): skip.
 2. The 24-hour service window, opened by the Contact's latest live message, has
    closed: skip.
 3. The monthly reply allowance is used up: Handoff as **Limite atingido**, even

@@ -2,6 +2,7 @@ export {
   findChannelCredential,
   recordHistoryDeclined,
   resolveChannelPhoneNumber,
+  resolveChannelWaba,
   type ChannelRoute,
 } from "@/modules/channels/repository";
 export {
@@ -15,3 +16,9 @@ export {
   readChannelBotState,
   setChannelBotPaused,
 } from "@/modules/channels/bot-controls";
+export {
+  recordAccountUpdate,
+  recordCredentialRejected,
+  sweepChannelHealth,
+  type AccountUpdate,
+} from "@/modules/channels/health";

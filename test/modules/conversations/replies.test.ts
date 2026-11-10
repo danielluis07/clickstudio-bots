@@ -216,6 +216,27 @@ describe("Dashboard replies", () => {
     });
   });
 
+  test("a reply refused for the Channel's credential marks only that Channel unhealthy", async () => {
+    const conversationId = await receive(channelA, "2026-10-21T09:00:00Z");
+    clock.set(new Date("2026-10-21T09:30:00Z"));
+    sender.rejectCredential();
+
+    expect(await replies.sendReply(owner, { conversationId, text: "Oi, Ana" })).toEqual({
+      ok: false,
+      error: "send_failed",
+    });
+    expect(
+      await db
+        .select({ id: channel.id, health: channel.health, at: channel.healthChangedAt })
+        .from(channel)
+        .orderBy(channel.id),
+    ).toEqual([
+      { id: "channel-a", health: "credential_rejected", at: clock.now() },
+      { id: "channel-b", health: "healthy", at: null },
+    ]);
+    await db.update(channel).set({ health: "healthy", healthChangedAt: null });
+  });
+
   test("refuses blank replies and another Tenant's Conversation without sending", async () => {
     const conversationOfB = await receive(channelB, "2026-10-21T09:00:00Z");
     const conversationOfA = await receive(channelA, "2026-10-21T09:00:00Z");

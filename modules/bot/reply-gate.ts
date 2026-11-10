@@ -34,7 +34,8 @@ const skip: ReplyDecision = { kind: "skip" };
 
 // Whether the Bot may send its next reply in a live Conversation now. Every
 // checkpoint applies the same order and the first match wins:
-//  1. not eligible (not activated, paused, unsubscribed, with the team): skip
+//  1. not eligible (not activated, paused, unsubscribed, unhealthy, with the
+//     team): skip
 //  2. the service window has closed: skip
 //  3. the reply allowance is used up: Handoff, even outside the Schedule
 //  4. the Contact has had today's Bot replies: Handoff, even outside the Schedule

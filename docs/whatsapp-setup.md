@@ -200,6 +200,51 @@ Groups are outside the product. Meta leaves them out of history; messages that
 name a `group_id`, live or in history, and history threads not keyed by a
 Contact's wa_id are ignored.
 
+### Channel health
+
+Issue: [#145](https://github.com/danielluis07/clickstudio-bots/issues/145).
+
+Run `bun run db:migrate` before deploying. The migration adds the Channel's
+`health` (default `healthy`), `health_changed_at`, `health_alerted_at` and
+`restricted_until`.
+
+A Channel's `health` says whether Meta still lets it send. Anything but
+`healthy` makes the Channel ineligible for the Bot, so no Bot turn is enqueued,
+run or recovered by the sweep. Its Conversations stay with the Bot, which
+resumes once the Channel is healthy again; Members cannot send through it
+either, so a Handoff would not help.
+
+| Health | Set when | Cleared when |
+| --- | --- | --- |
+| `credential_rejected` | Meta refuses a Bot or Member send for the credential: codes 0, 10, 102, 190, 200–299 and 131005 | The owner reconnects |
+| `removed` | `account_update`: `PARTNER_REMOVED`, `PARTNER_APP_UNINSTALLED`, `ACCOUNT_DELETED` or `ACCOUNT_OFFBOARDED` | The owner reconnects |
+| `banned` | `account_update`: `DISABLED_UPDATE` with `waba_ban_state` `DISABLE` | `DISABLED_UPDATE` with `REINSTATE` |
+| `restricted` | `account_update`: `ACCOUNT_RESTRICTION` with `RESTRICTED_CUSTOMER_INITIATED_MESSAGING` | Its `expiration` passes; never without one |
+
+A transient refusal (429, Meta's throttling codes, a 5xx) or a send that may
+have reached Meta never changes the health. The send that meets a rejected
+credential still fails its reply and hands off as **Bot indisponível**, once.
+A lesser state never replaces a more lasting one: removal over a ban, a ban
+over a rejected credential or a restriction.
+
+`account_update` events name the WABA, not a phone number id, so they are
+routed by the entry id (`resolveChannelWaba`). Other documented events
+(`VERIFIED_ACCOUNT`, `PARTNER_ADDED`, `PARTNER_APP_INSTALLED`,
+`ACCOUNT_VIOLATION`, `ACCOUNT_RECONNECTED`, a scheduled ban, restrictions on
+business-initiated messaging or adding numbers, pricing and certification
+updates) are settled as `ignored` with `known_event`. An event the platform
+does not know stays `unsupported_event` for inspection.
+
+The Channel card on the Painel shows each state in pt-BR. For
+`credential_rejected` and `removed`, the owner sees **Reconectar WhatsApp
+Business**, which runs Embedded Signup again. It must select the same WABA and
+number; the Channel, its Conversations and history are kept, the new
+credential replaces the old one, and the app subscribes to the WABA again.
+Another number is refused: changing numbers goes through support.
+
+The [sweep](inbox-operations.md#the-sweep) lifts restrictions that have ended
+and alerts the platform administrator once per new state.
+
 ## Live validation
 
 Use the dedicated Brazilian demo WhatsApp Business number required by #37:
