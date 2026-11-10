@@ -44,6 +44,27 @@ describe("WhatsApp adapter", () => {
     });
     expect(requests).toHaveLength(2);
   });
+  test("sends to a replacement Graph API origin when one is configured", async () => {
+    const context = { tenantId: "tenant-a", wabaId: "200", phoneNumberId: "300" };
+    const credential = createWhatsAppTokenCipher(
+      options.activeKeyVersion,
+      options.encryptionKeys,
+    ).encrypt(accessToken, context);
+    const urls: string[] = [];
+    const adapter = createWhatsAppAdapter({
+      ...options,
+      graphApiUrl: "http://127.0.0.1:3101",
+      async fetch(url) {
+        urls.push(String(url));
+        return Response.json({ messages: [{ id: "wamid.FAKE" }] });
+      },
+    });
+
+    expect(
+      await adapter.sendText({ ...context, credential, to: "5511988887777", text: "Oi" }),
+    ).toEqual({ wamid: "wamid.FAKE" });
+    expect(urls).toEqual(["http://127.0.0.1:3101/v26.0/300/messages"]);
+  });
   test("exchanges a code and discovers a coexistence number without exposing its token", async () => {
     const requests: { url: string; init?: RequestInit }[] = [];
     const adapter = createWhatsAppAdapter({

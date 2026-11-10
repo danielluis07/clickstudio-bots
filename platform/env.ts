@@ -3,6 +3,9 @@ import { z } from "zod";
 import { isUsSentryDsn } from "@/platform/diagnostics";
 
 export const env = createEnv({
+  // An empty value counts as unset, so the browser suite can switch off an
+  // optional service that a developer's .env configures.
+  emptyStringAsUndefined: true,
   /*
    * Serverside Environment variables, not available on the client.
    * Will throw if you access these variables on the client.
@@ -22,6 +25,12 @@ export const env = createEnv({
       .string()
       .regex(/^v\d+\.\d+$/)
       .default("v26.0"),
+    // Replaces https://graph.facebook.com. Only the browser suite sets it, to
+    // a local fake (docs/browser-tests.md); production never does.
+    META_GRAPH_API_URL: z
+      .url()
+      .transform((url) => url.replace(/\/+$/, ""))
+      .optional(),
     WHATSAPP_TOKEN_KEY_VERSION: z.string().min(1).optional(),
     WHATSAPP_TOKEN_KEYS: z.string().min(1).optional(),
     // The token Meta echoes in the webhook verification handshake.
@@ -49,6 +58,7 @@ export const env = createEnv({
     META_APP_SECRET: process.env.META_APP_SECRET,
     META_WHATSAPP_SIGNUP_CONFIG_ID: process.env.META_WHATSAPP_SIGNUP_CONFIG_ID,
     META_GRAPH_API_VERSION: process.env.META_GRAPH_API_VERSION,
+    META_GRAPH_API_URL: process.env.META_GRAPH_API_URL,
     WHATSAPP_TOKEN_KEY_VERSION: process.env.WHATSAPP_TOKEN_KEY_VERSION,
     WHATSAPP_TOKEN_KEYS: process.env.WHATSAPP_TOKEN_KEYS,
     META_WEBHOOK_VERIFY_TOKEN: process.env.META_WEBHOOK_VERIFY_TOKEN,

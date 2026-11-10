@@ -27,6 +27,7 @@ const buildWhatsAppAdapter = () => {
       appId: env.META_APP_ID!,
       appSecret: env.META_APP_SECRET!,
       graphVersion: env.META_GRAPH_API_VERSION,
+      graphApiUrl: env.META_GRAPH_API_URL,
       activeKeyVersion: env.WHATSAPP_TOKEN_KEY_VERSION!,
       encryptionKeys: z.record(z.string(), z.string()).parse(JSON.parse(env.WHATSAPP_TOKEN_KEYS!)),
     });
