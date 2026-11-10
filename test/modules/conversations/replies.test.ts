@@ -1,12 +1,24 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
-import { channel, contact, conversation, member, message, organization, user } from "@/db/schema";
+import {
+  channel,
+  contact,
+  conversation,
+  earlyMessageStatus,
+  member,
+  message,
+  organization,
+  user,
+} from "@/db/schema";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
 import {
   createConversationRepository,
   createReplyService,
+  pruneEarlyMessageStatuses,
   recordInboundTextMessage,
   recordMessageEcho,
+  recordMessageStatus,
+  recordSentWamid,
 } from "@/modules/conversations";
 import { createMemberManagement, resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { createTestClock } from "@/test/support/clock";
@@ -93,6 +105,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  await db.delete(earlyMessageStatus);
   await db.delete(message);
   await db.delete(conversation);
   await db.delete(contact);
@@ -345,5 +358,106 @@ describe("Dashboard replies", () => {
       { origin: "dashboard", authorName: null, text: "Já verifico" },
       { origin: "dashboard", authorName: "Olga Dona", text: "Obrigada, Ari" },
     ]);
+  });
+});
+
+describe("Delivery statuses that arrive before the reply's wamid", () => {
+  const status = (wamid: string, value: "sent" | "delivered" | "read" | "failed") =>
+    recordMessageStatus(db, channelA, {
+      wamid,
+      status: value,
+      receivedAt: clock.now(),
+    });
+
+  const lastStatus = async (conversationId: string) =>
+    (await messagesOf(owner, conversationId)).at(-1)?.status;
+
+  test("a failed status processed first leaves the dashboard reply failed", async () => {
+    const conversationId = await receive(channelA, "2026-10-21T09:00:00Z");
+    clock.set(new Date("2026-10-21T09:30:00Z"));
+    sender.beforeAnswering(async (wamid) => {
+      expect(await status(wamid, "failed")).toBeNull();
+    });
+
+    expect(await replies.sendReply(owner, { conversationId, text: "Oi" })).toEqual({ ok: true });
+
+    expect(await lastStatus(conversationId)).toBe("failed");
+    expect(await db.select().from(earlyMessageStatus)).toEqual([]);
+  });
+
+  test("a sent or delivered status processed first is reflected once the wamid is recorded", async () => {
+    const conversationId = await receive(channelA, "2026-10-21T09:00:00Z");
+    clock.set(new Date("2026-10-21T09:30:00Z"));
+    sender.beforeAnswering(async (wamid) => {
+      await status(wamid, "sent");
+      await status(wamid, "delivered");
+    });
+
+    await replies.sendReply(owner, { conversationId, text: "Oi" });
+
+    expect(await lastStatus(conversationId)).toBe("delivered");
+  });
+
+  test("early statuses only move forward, before and after the wamid is recorded", async () => {
+    const conversationId = await receive(channelA, "2026-10-21T09:00:00Z");
+    clock.set(new Date("2026-10-21T09:30:00Z"));
+    sender.beforeAnswering(async (wamid) => {
+      await status(wamid, "read");
+      await status(wamid, "sent");
+    });
+
+    await replies.sendReply(owner, { conversationId, text: "Oi" });
+    expect(await lastStatus(conversationId)).toBe("read");
+
+    await status("wamid.OUT1", "delivered");
+    expect(await lastStatus(conversationId)).toBe("read");
+  });
+
+  test("an early failed status overrides the sent a Bot reply gets with its wamid", async () => {
+    const conversationId = await receive(channelA, "2026-10-21T09:00:00Z");
+    const [reply] = await db
+      .insert(message)
+      .values({
+        tenantId: "tenant-a",
+        conversationId,
+        direction: "outbound",
+        origin: "bot",
+        status: "pending",
+        type: "text",
+        text: "Olá!",
+        sentAt: new Date("2026-10-21T09:00:05Z"),
+      })
+      .returning({ id: message.id });
+    await status("wamid.BOT1", "failed");
+
+    await db.transaction((tx) => recordSentWamid(tx, channelA, reply!.id, "wamid.BOT1"));
+
+    expect(await lastStatus(conversationId)).toBe("failed");
+  });
+
+  test("a status processed before its app echo applies to the echoed reply", async () => {
+    const conversationId = await receive(channelA, "2026-10-21T09:00:00Z");
+    await status("wamid.APP1", "read");
+
+    await recordMessageEcho(db, channelA, {
+      wamid: "wamid.APP1",
+      to: "5511988887777",
+      text: "Pelo app",
+      sentAt: new Date("2026-10-21T09:10:00Z"),
+    });
+
+    expect(await lastStatus(conversationId)).toBe("read");
+  });
+
+  test("a status for a message never stored settles at once and is pruned after a day", async () => {
+    clock.set(new Date("2026-10-21T09:00:00Z"));
+    expect(await status("wamid.NEVER", "delivered")).toBeNull();
+    await status("wamid.NEVER2", "sent");
+
+    clock.set(new Date("2026-10-22T08:59:59Z"));
+    expect(await pruneEarlyMessageStatuses(db, clock)).toBe(0);
+    clock.set(new Date("2026-10-22T09:00:01Z"));
+    expect(await pruneEarlyMessageStatuses(db, clock)).toBe(2);
+    expect(await db.select().from(earlyMessageStatus)).toEqual([]);
   });
 });

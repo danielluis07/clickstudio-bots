@@ -130,6 +130,14 @@ see #61). Processing is idempotent, so QStash retries and duplicate jobs are
 safe. A job that keeps failing goes to QStash's dead-letter queue; inspecting
 and replaying those uses the [internal recovery view](inbox-operations.md).
 
+A delivery status moves its outbound message's status forward, never back. Meta's
+first status can be processed before the platform stores the wamid Meta answered
+the send with (#146). Such a status settles as `processed` and is kept in
+`early_message_status`, under the same per-wamid lock that storing the wamid
+takes. Storing the wamid, from a send's answer or an app echo, applies it. Early
+statuses whose wamid is never stored are dropped by the daily `prune-early-statuses`
+task after a day.
+
 ### Coexistence echoes, edits and revokes
 
 Issue: [#46](https://github.com/danielluis07/clickstudio-bots/issues/46).

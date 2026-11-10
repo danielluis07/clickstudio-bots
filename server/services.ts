@@ -15,6 +15,7 @@ import {
   createConversationRepository,
   createHandoffControls,
   createReplyService,
+  pruneEarlyMessageStatuses,
   returnQuietHandoffs,
 } from "@/modules/conversations";
 import type { TenantScope } from "@/modules/tenancy";
@@ -188,6 +189,7 @@ export const dailyCronRoute = createDailyCronRoute({
     { name: "prune-inbox", run: () => pruneInboxEvents(db, systemClock) },
     { name: "retry-reply-warnings", run: () => botAllowance.retryWarnings() },
     { name: "prune-bot-turn-records", run: () => pruneBotTurnRecords(db, systemClock) },
+    { name: "prune-early-statuses", run: () => pruneEarlyMessageStatuses(db, systemClock) },
   ],
 });
 

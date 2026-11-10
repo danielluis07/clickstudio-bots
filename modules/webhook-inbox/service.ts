@@ -105,7 +105,10 @@ export const createWebhookInbox = ({
         conversationId: await recordInboundMessage(db, route, { ...inbound, receivedAt }),
       };
     const statusUpdate = readMessageStatus(payload);
-    if (statusUpdate) return { conversationId: await recordMessageStatus(db, route, statusUpdate) };
+    if (statusUpdate)
+      return {
+        conversationId: await recordMessageStatus(db, route, { ...statusUpdate, receivedAt }),
+      };
     const echo = readMessageEcho(payload);
     if (echo)
       return (

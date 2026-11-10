@@ -60,5 +60,9 @@ export {
   type ReplyService,
 } from "@/modules/conversations/replies";
 export { createConversationRepository } from "@/modules/conversations/repository";
-export { recordMessageStatus, type MessageStatusUpdate } from "@/modules/conversations/statuses";
+export {
+  pruneEarlyMessageStatuses,
+  recordMessageStatus,
+  type MessageStatusUpdate,
+} from "@/modules/conversations/statuses";
 export type { WhatsAppSender } from "@/modules/conversations/whatsapp-sender";
