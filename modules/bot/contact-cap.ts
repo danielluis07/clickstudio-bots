@@ -6,7 +6,7 @@ import { countContactBotReplies } from "@/modules/conversations";
 // Bot replies one Contact may get per day in São Paulo time, whatever the
 // Tenant's allowance has left. It keeps one Contact writing in a loop from
 // spending the whole Tenant's allowance. Past it, the Conversation hands off
-// as `limite_do_contato` until a Member returns it; the next day only starts
+// as `contact_cap_reached` until a Member returns it; the next day only starts
 // a fresh count.
 export const dailyContactReplyLimit = 30;
 

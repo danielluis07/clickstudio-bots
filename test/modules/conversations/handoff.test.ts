@@ -151,7 +151,7 @@ test("Assumir silences the Bot without sending anything to the Contact", async (
   await worker.run(conversationId);
 
   expect(sender.sent).toEqual([]);
-  expect(await ownership()).toEqual({ owner: "team", handoffReason: "assumida", waiting: true });
+  expect(await ownership()).toEqual({ owner: "team", handoffReason: "claimed", waiting: true });
 });
 
 test("a dashboard reply silences the Bot, even when its send fails", async () => {
@@ -168,7 +168,7 @@ test("a dashboard reply silences the Bot, even when its send fails", async () =>
   expect(sender.sent).toEqual([]);
   expect(await ownership()).toEqual({
     owner: "team",
-    handoffReason: "resposta_no_painel",
+    handoffReason: "dashboard_reply",
     waiting: true,
   });
 });
@@ -190,7 +190,7 @@ test("a reply from the WhatsApp Business app, seen through its echo, silences th
   expect(sender.sent).toEqual([]);
   expect(await ownership()).toEqual({
     owner: "team",
-    handoffReason: "resposta_no_app",
+    handoffReason: "app_reply",
     waiting: true,
   });
 });
@@ -264,7 +264,7 @@ test("an app reply arriving while the Bot's reply awaits Meta hands off once the
 
   expect(await ownership()).toEqual({
     owner: "team",
-    handoffReason: "resposta_no_app",
+    handoffReason: "app_reply",
     waiting: true,
   });
   await receive("Obrigada!");
@@ -283,7 +283,7 @@ test("any Member can return the Bot, which answers only the next Contact message
 
   expect(await controls.returnToBot(attendant, conversationId)).toEqual({ ok: true });
   // "Devolver ao Bot" keeps the Conversation on the waiting list.
-  expect(await ownership()).toEqual({ owner: "bot", handoffReason: "assumida", waiting: true });
+  expect(await ownership()).toEqual({ owner: "bot", handoffReason: "claimed", waiting: true });
   await worker.run(conversationId);
   expect(sender.sent).toEqual([]);
 
@@ -316,7 +316,7 @@ test("a Member bulk returns selected Handoffs without backlog replies, answering
   for (const id of [conversationId, secondId]) {
     expect(await repository.getConversation(id)).toMatchObject({
       owner: "bot",
-      handoffReason: "assumida",
+      handoffReason: "claimed",
       waiting: true,
     });
     expect(await worker.run(id)).toBe("skipped");
@@ -449,7 +449,7 @@ test("a Handoff and resume during generation never answer the Handoff backlog", 
 test("a Bot-initiated Handoff tells the Contact and joins the waiting list", async () => {
   const { model, sender, conversationId, worker, ownership } = await setup();
   model.script({
-    toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "pedido_do_contato" } }],
+    toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "contact_request" } }],
   });
 
   await worker.run(conversationId);
@@ -459,7 +459,7 @@ test("a Bot-initiated Handoff tells the Contact and joins the waiting list", asy
   ]);
   expect(await ownership()).toEqual({
     owner: "team",
-    handoffReason: "pedido_do_contato",
+    handoffReason: "contact_request",
     waiting: true,
   });
 });
@@ -496,7 +496,7 @@ test("a failed Bot send after Assumir keeps the Member's Handoff reason", async 
 
   await worker.run(conversationId);
 
-  expect(await ownership()).toEqual({ owner: "team", handoffReason: "assumida", waiting: true });
+  expect(await ownership()).toEqual({ owner: "team", handoffReason: "claimed", waiting: true });
 });
 
 test("a live turn's Handoff needs its lease, and only a change of hands notifies the inbox", async () => {
@@ -506,17 +506,17 @@ test("a live turn's Handoff needs its lease, and only a change of hands notifies
     .set({ botLeaseToken: "holder" })
     .where(eq(conversation.id, conversationId));
   const pings = notifier.pings.length;
-  const handOff = (leaseToken: string, reason: "limite_atingido" | "bot_indisponivel") =>
+  const handOff = (leaseToken: string, reason: "allowance_exhausted" | "bot_unavailable") =>
     handOffAndNotify(db, notifier, route, conversationId, reason, { leaseToken });
 
-  expect(await handOff("expired-holder", "limite_atingido")).toBe(false);
+  expect(await handOff("expired-holder", "allowance_exhausted")).toBe(false);
   expect(await ownership()).toEqual({ owner: "bot", handoffReason: null, waiting: false });
-  expect(await handOff("holder", "limite_atingido")).toBe(true);
-  expect(await handOff("holder", "bot_indisponivel")).toBe(false);
+  expect(await handOff("holder", "allowance_exhausted")).toBe(true);
+  expect(await handOff("holder", "bot_unavailable")).toBe(false);
 
   expect(await ownership()).toEqual({
     owner: "team",
-    handoffReason: "limite_atingido",
+    handoffReason: "allowance_exhausted",
     waiting: true,
   });
   expect(notifier.pings.slice(pings)).toEqual([
@@ -548,7 +548,7 @@ const failModel = async ({ model, conversationId, worker, ownership }: Fixture) 
   await worker.run(conversationId);
   expect(await ownership()).toEqual({
     owner: "team",
-    handoffReason: "bot_indisponivel",
+    handoffReason: "bot_unavailable",
     waiting: true,
   });
 };
@@ -563,7 +563,7 @@ test("after a Bot indisponível Handoff, the Contact's next messages return the 
   // Still waiting, with its reason, as after "Devolver ao Bot".
   expect(await ownership()).toEqual({
     owner: "bot",
-    handoffReason: "bot_indisponivel",
+    handoffReason: "bot_unavailable",
     waiting: true,
   });
   await receive("Ainda estão aí?");
@@ -618,7 +618,7 @@ test.each([
 
     expect(await ownership()).toEqual({
       owner: "team",
-      handoffReason: "bot_indisponivel",
+      handoffReason: "bot_unavailable",
       waiting: true,
     });
     expect(sender.sent.length).toBe(sentBefore);
@@ -627,13 +627,13 @@ test.each([
 
 test("other Handoffs stay with the team on the Contact's next message", async () => {
   const { route, notifier, conversationId, receive, ownership } = await setup();
-  await handOffAndNotify(db, notifier, route, conversationId, "limite_atingido");
+  await handOffAndNotify(db, notifier, route, conversationId, "allowance_exhausted");
 
   await receive("Alô?");
 
   expect(await ownership()).toEqual({
     owner: "team",
-    handoffReason: "limite_atingido",
+    handoffReason: "allowance_exhausted",
     waiting: true,
   });
 });
@@ -655,7 +655,7 @@ test("an audio after a Bot indisponível Handoff returns the Bot, which hands of
 
   expect(await ownership()).toEqual({
     owner: "team",
-    handoffReason: "sem_resposta",
+    handoffReason: "no_answer",
     waiting: true,
   });
 });
@@ -671,12 +671,12 @@ test("a Handoff quiet for a whole service window returns to the Bot, which answe
 
   clock.advance(dayMs - 1000);
   await sweep();
-  expect(await ownership()).toEqual({ owner: "team", handoffReason: "assumida", waiting: true });
+  expect(await ownership()).toEqual({ owner: "team", handoffReason: "claimed", waiting: true });
 
   clock.advance(1000);
   const pings = notifier.pings.length;
   await sweep();
-  expect(await ownership()).toEqual({ owner: "bot", handoffReason: "assumida", waiting: true });
+  expect(await ownership()).toEqual({ owner: "bot", handoffReason: "claimed", waiting: true });
   expect(notifier.pings.slice(pings)).toEqual([
     { tenantId: scope.tenantId, ping: { conversationId } },
   ]);

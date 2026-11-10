@@ -192,7 +192,7 @@ suite("live turns on real Postgres", () => {
         createTestNotifier(),
         other.route,
         conversationId,
-        "bot_indisponivel",
+        "bot_unavailable",
         {
           leaseToken: "foreign",
         },
@@ -242,7 +242,7 @@ suite("live turns on real Postgres", () => {
         await tx.execute(sql`set local lock_timeout = '1s'`);
         await tx
           .update(conversation)
-          .set({ handoffReason: "assumida" })
+          .set({ handoffReason: "claimed" })
           .where(eq(conversation.id, conversationId));
       });
       probeCompleted = true;
@@ -254,7 +254,7 @@ suite("live turns on real Postgres", () => {
     expect(sender.sent).toHaveLength(1);
     expect(await reader.getConversation(conversationId)).toMatchObject({
       owner: "team",
-      handoffReason: "bot_indisponivel",
+      handoffReason: "bot_unavailable",
     });
   });
 
@@ -304,7 +304,7 @@ suite("live turns on real Postgres", () => {
     expect(sender.sent).toHaveLength(0);
     expect(await reader.getConversation(conversationId)).toMatchObject({
       owner: "team",
-      handoffReason: "limite_do_contato",
+      handoffReason: "contact_cap_reached",
     });
   });
 
@@ -329,7 +329,7 @@ suite("live turns on real Postgres", () => {
     expect(sender.sent).toHaveLength(1);
     expect(await reader.getConversation(conversationId)).toMatchObject({
       owner: "team",
-      handoffReason: "limite_do_contato",
+      handoffReason: "contact_cap_reached",
     });
   });
 });

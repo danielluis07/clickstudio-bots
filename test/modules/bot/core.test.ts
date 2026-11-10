@@ -94,14 +94,14 @@ describe("configured Tenant links", () => {
       {
         toolCalls: [
           send({ linkId: booking.id }),
-          { id: "handoff", name: "handoff", input: { reason: "sem_resposta" } },
+          { id: "handoff", name: "handoff", input: { reason: "no_answer" } },
         ],
       },
     );
     const outcome = await core().respond(turn);
     expect(outcome).toMatchObject({
       kind: "handoff",
-      reason: "sem_resposta",
+      reason: "no_answer",
       reply: `Acesse o link: ${longBooking.url}\n\nO envio deste link não confirma agendamento nem pagamento. A equipe pode ajudar se precisar.\n\nSobre o restante, vou chamar alguém da equipe.`,
     });
     expect("reply" in outcome && outcome.reply.length <= 4096).toBe(true);
@@ -121,7 +121,7 @@ describe("configured Tenant links", () => {
     model.script(response, response);
     expect(await core().respond(turn)).toMatchObject({
       kind: "handoff",
-      reason: "bot_indisponivel",
+      reason: "bot_unavailable",
     });
     expect(model.requests).toHaveLength(2);
     expect(model.requests[1].messages.at(-1)).toMatchObject({
@@ -169,7 +169,7 @@ describe("configured Tenant links", () => {
       model.script(invalid, invalid);
       expect(await core().respond(turn)).toEqual({
         kind: "handoff",
-        reason: "bot_indisponivel",
+        reason: "bot_unavailable",
         reply: "No momento não consigo responder, vou chamar alguém da equipe.",
       });
       expect(model.requests).toHaveLength(2);
@@ -221,13 +221,13 @@ describe("configured Tenant links", () => {
         send({ linkId: booking.id }),
         { ...send({ linkId: payment.id }), id: "pay" },
         { ...send({ linkId: booking.id }), id: "duplicate" },
-        { id: "handoff", name: "handoff", input: { reason: "sem_resposta" } },
+        { id: "handoff", name: "handoff", input: { reason: "no_answer" } },
       ],
     });
     const outcome = await core().respond(turn);
     expect(outcome).toMatchObject({
       kind: "handoff",
-      reason: "sem_resposta",
+      reason: "no_answer",
       reply: `Acesse o link: ${booking.url}\n\nAcesse o link: ${payment.url}\n\nO envio deste link não confirma agendamento nem pagamento. A equipe pode ajudar se precisar.\n\nSobre o restante, vou chamar alguém da equipe.`,
     });
   });
@@ -385,18 +385,18 @@ const handoffCall = (reason: string, input: Record<string, unknown> = {}, id = "
 });
 
 describe("Handoff", () => {
-  test("unknown information hands off as sem_resposta with a short closing line", async () => {
+  test("unknown information hands off as no_answer with a short closing line", async () => {
     repository.messages = [fromContact("Vocês fazem luzes?")];
-    model.script({ toolCalls: [handoffCall("sem_resposta")] });
+    model.script({ toolCalls: [handoffCall("no_answer")] });
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
-      reason: "sem_resposta",
+      reason: "no_answer",
       reply: "Não tenho essa informação, vou chamar alguém da equipe.",
     });
   });
 
-  test("contradictory Knowledge base entries hand off as sem_resposta", async () => {
+  test("contradictory Knowledge base entries hand off as no_answer", async () => {
     repository.knowledgeBase = {
       faqs: [
         { question: "Quanto custa a barba?", answer: "A barba custa R$ 40." },
@@ -407,61 +407,61 @@ describe("Handoff", () => {
     repository.messages = [fromContact("Quanto custa a barba?")];
     model.script((request) =>
       request.knowledgeBase.includes("R$ 40") && request.knowledgeBase.includes("R$ 50")
-        ? { toolCalls: [handoffCall("sem_resposta")] }
+        ? { toolCalls: [handoffCall("no_answer")] }
         : { text: "A barba custa R$ 40." },
     );
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
-      reason: "sem_resposta",
+      reason: "no_answer",
       reply: "Não tenho essa informação, vou chamar alguém da equipe.",
     });
   });
 
   test("a mixed question gets the answerable part and a Handoff in one reply", async () => {
     repository.messages = [fromContact("Quanto custa o corte? E vocês fazem luzes?")];
-    model.script({ text: "O corte custa R$ 80.", toolCalls: [handoffCall("sem_resposta")] });
+    model.script({ text: "O corte custa R$ 80.", toolCalls: [handoffCall("no_answer")] });
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
-      reason: "sem_resposta",
+      reason: "no_answer",
       reply: "O corte custa R$ 80.\n\nSobre o restante, vou chamar alguém da equipe.",
     });
   });
 
   test("every Handoff reply tells the Contact the team will reply, whatever the model wrote", async () => {
     repository.messages = [fromContact("Quero falar com alguém")];
-    model.script({ text: "Claro!", toolCalls: [handoffCall("pedido_do_contato")] });
+    model.script({ text: "Claro!", toolCalls: [handoffCall("contact_request")] });
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
-      reason: "pedido_do_contato",
+      reason: "contact_request",
       reply: "Claro!\n\nCerto, vou chamar alguém da equipe para continuar o atendimento.",
     });
   });
 
-  test("a Contact asking for a person hands off as pedido_do_contato", async () => {
+  test("a Contact asking for a person hands off as contact_request", async () => {
     repository.messages = [fromContact("Quero falar com uma pessoa")];
-    model.script({ toolCalls: [handoffCall("pedido_do_contato")] });
+    model.script({ toolCalls: [handoffCall("contact_request")] });
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
-      reason: "pedido_do_contato",
+      reason: "contact_request",
       reply: "Certo, vou chamar alguém da equipe para continuar o atendimento.",
     });
   });
 
-  test("a Tenant Handoff topic hands off as regra_do_negocio", async () => {
+  test("a Tenant Handoff topic hands off as handoff_topic", async () => {
     repository.messages = [fromContact("Quero fazer uma reclamação")];
     model.script((request) =>
       request.instructions.includes("reclamações")
-        ? { toolCalls: [handoffCall("regra_do_negocio")] }
+        ? { toolCalls: [handoffCall("handoff_topic")] }
         : { text: "Pode falar!" },
     );
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
-      reason: "regra_do_negocio",
+      reason: "handoff_topic",
       reply: "Vou passar seu atendimento para a equipe, que responderá em breve.",
     });
   });
@@ -471,12 +471,12 @@ describe("tool call validation", () => {
   test("an invalid call is refused to the model and retried once", async () => {
     model.script(
       { text: "Um momento.", toolCalls: [handoffCall("talvez")] },
-      { toolCalls: [{ id: "call-2", name: "handoff", input: { reason: "sem_resposta" } }] },
+      { toolCalls: [{ id: "call-2", name: "handoff", input: { reason: "no_answer" } }] },
     );
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
-      reason: "sem_resposta",
+      reason: "no_answer",
       reply: "Não tenho essa informação, vou chamar alguém da equipe.",
     });
     const retry = model.requests[1];
@@ -500,7 +500,7 @@ describe("tool call validation", () => {
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
-      reason: "bot_indisponivel",
+      reason: "bot_unavailable",
       reply: "No momento não consigo responder, vou chamar alguém da equipe.",
     });
     expect(model.requests).toHaveLength(2);
@@ -514,7 +514,7 @@ describe("tool call validation", () => {
 
     expect(await core().respond(turn)).toMatchObject({
       kind: "handoff",
-      reason: "bot_indisponivel",
+      reason: "bot_unavailable",
     });
     expect(model.requests[1].messages.at(-1)).toMatchObject({
       role: "tool",
@@ -525,7 +525,7 @@ describe("tool call validation", () => {
   test("every call in a response with an invalid one is refused, valid ones included", async () => {
     model.script(
       {
-        toolCalls: [handoffCall("sem_resposta"), { id: "call-2", name: "send_payment", input: {} }],
+        toolCalls: [handoffCall("no_answer"), { id: "call-2", name: "send_payment", input: {} }],
       },
       { text: "O corte custa R$ 80." },
     );
@@ -543,7 +543,7 @@ describe("tool call validation", () => {
   test("Tenant and Conversation ids from the model are ignored; the turn's scope applies", async () => {
     model.script({
       toolCalls: [
-        handoffCall("pedido_do_contato", {
+        handoffCall("contact_request", {
           tenantId: "tenant-b",
           conversationId: "conversation-b",
         }),
@@ -552,7 +552,7 @@ describe("tool call validation", () => {
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
-      reason: "pedido_do_contato",
+      reason: "contact_request",
       reply: "Certo, vou chamar alguém da equipe para continuar o atendimento.",
     });
     expect(repository.turns).toEqual([turn]);
@@ -562,23 +562,23 @@ describe("tool call validation", () => {
 describe("provider failures", () => {
   const unavailable = "No momento não consigo responder, vou chamar alguém da equipe.";
 
-  test("a provider error hands off as bot_indisponivel, with no other provider tried", async () => {
+  test("a provider error hands off as bot_unavailable, with no other provider tried", async () => {
     model.script(new Error("529 overloaded"));
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
-      reason: "bot_indisponivel",
+      reason: "bot_unavailable",
       reply: unavailable,
     });
     expect(model.requests).toHaveLength(1);
   });
 
-  test("a provider timeout hands off as bot_indisponivel", async () => {
+  test("a provider timeout hands off as bot_unavailable", async () => {
     model.script(new DOMException("The operation timed out.", "TimeoutError"));
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
-      reason: "bot_indisponivel",
+      reason: "bot_unavailable",
       reply: unavailable,
     });
   });
@@ -591,7 +591,7 @@ describe("provider failures", () => {
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
-      reason: "bot_indisponivel",
+      reason: "bot_unavailable",
       reply: unavailable,
     });
     expect(tokens).toEqual({
@@ -608,7 +608,7 @@ describe("provider failures", () => {
 
     expect(await core().respond(turn)).toEqual({
       kind: "handoff",
-      reason: "bot_indisponivel",
+      reason: "bot_unavailable",
       reply: unavailable,
     });
   });
@@ -895,7 +895,7 @@ describe("Contact capture", () => {
 
     expect(await core().respond(turn)).toMatchObject({
       kind: "handoff",
-      reason: "bot_indisponivel",
+      reason: "bot_unavailable",
     });
     expect(repository.captured).toEqual([]);
   });
@@ -939,7 +939,7 @@ describe("Contact capture", () => {
     test("asks only for the missing required details instead of handing off", async () => {
       model.script({
         text: "O corte custa R$ 80.",
-        toolCalls: [handoffCall("pedido_do_contato")],
+        toolCalls: [handoffCall("contact_request")],
       });
 
       expect(await core().respond(turn)).toEqual({
@@ -954,11 +954,11 @@ describe("Contact capture", () => {
         { author: "bot", text: askNameAndEmail, sentAt: minutesAgo(2) },
         fromContact("Prefiro não informar"),
       ];
-      model.script({ toolCalls: [handoffCall("pedido_do_contato")] });
+      model.script({ toolCalls: [handoffCall("contact_request")] });
 
       expect(await core().respond(turn)).toEqual({
         kind: "handoff",
-        reason: "pedido_do_contato",
+        reason: "contact_request",
         reply: "Certo, vou chamar alguém da equipe para continuar o atendimento.",
       });
     });
@@ -970,12 +970,12 @@ describe("Contact capture", () => {
         fromContact("Sou a Ana, e-mail não tenho"),
       ];
       model.script({
-        toolCalls: [captureCall({ name: "Ana" }), handoffCall("pedido_do_contato", {}, "call-2")],
+        toolCalls: [captureCall({ name: "Ana" }), handoffCall("contact_request", {}, "call-2")],
       });
 
       expect(await core().respond(turn)).toMatchObject({
         kind: "handoff",
-        reason: "pedido_do_contato",
+        reason: "contact_request",
       });
       expect(repository.captured).toEqual([{ name: "Ana" }]);
     });
@@ -988,7 +988,7 @@ describe("Contact capture", () => {
         { author: "bot", text: "Não tenho essa informação.", sentAt: minutesAgo(2) },
         fromContact("Então quero falar com alguém"),
       ];
-      model.script({ toolCalls: [handoffCall("pedido_do_contato")] });
+      model.script({ toolCalls: [handoffCall("contact_request")] });
 
       expect(await core().respond(turn)).toEqual({ kind: "answer", reply: askNameAndEmail });
     });
@@ -998,30 +998,30 @@ describe("Contact capture", () => {
       model.script({
         toolCalls: [
           captureCall({ email: "ana@example.com" }),
-          handoffCall("sem_resposta", {}, "call-2"),
+          handoffCall("no_answer", {}, "call-2"),
         ],
       });
 
-      expect(await core().respond(turn)).toMatchObject({ kind: "handoff", reason: "sem_resposta" });
+      expect(await core().respond(turn)).toMatchObject({ kind: "handoff", reason: "no_answer" });
     });
 
     test("does not ask for optional details", async () => {
       repository.contact = { ...noContactDetails, name: "Ana", email: "ana@example.com" };
-      model.script({ toolCalls: [handoffCall("regra_do_negocio")] });
+      model.script({ toolCalls: [handoffCall("handoff_topic")] });
 
       expect(await core().respond(turn)).toMatchObject({
         kind: "handoff",
-        reason: "regra_do_negocio",
+        reason: "handoff_topic",
       });
     });
 
     test("does not ask while capture is disabled", async () => {
       repository.capture = { ...repository.capture, enabled: false };
-      model.script({ toolCalls: [handoffCall("pedido_do_contato")] });
+      model.script({ toolCalls: [handoffCall("contact_request")] });
 
       expect(await core().respond(turn)).toMatchObject({
         kind: "handoff",
-        reason: "pedido_do_contato",
+        reason: "contact_request",
       });
     });
 
@@ -1030,7 +1030,7 @@ describe("Contact capture", () => {
 
       expect(await core().respond(turn)).toMatchObject({
         kind: "handoff",
-        reason: "bot_indisponivel",
+        reason: "bot_unavailable",
       });
     });
   });

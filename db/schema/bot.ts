@@ -110,12 +110,12 @@ export const botTurnRecord = pgTable(
     outcome: text("outcome", { enum: ["sent", "skipped", "handoff"] }).notNull(),
     handoffReason: text("handoff_reason", {
       enum: [
-        "sem_resposta",
-        "pedido_do_contato",
-        "regra_do_negocio",
-        "bot_indisponivel",
-        "limite_atingido",
-        "limite_do_contato",
+        "no_answer",
+        "contact_request",
+        "handoff_topic",
+        "bot_unavailable",
+        "allowance_exhausted",
+        "contact_cap_reached",
       ],
     }),
     inputTokens: integer("input_tokens").notNull(),

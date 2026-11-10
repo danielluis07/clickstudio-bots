@@ -203,7 +203,7 @@ export const createLiveBot = ({
     if (!sent) {
       await turn.fail();
       // A Model-requested Handoff, already stored, keeps its reason.
-      return { result: "handoff", handoffReason: handoffReason ?? "bot_indisponivel", tokens };
+      return { result: "handoff", handoffReason: handoffReason ?? "bot_unavailable", tokens };
     }
     const acknowledgedAt = clock.now();
     await turn.acknowledge(messageId, sent.wamid, (tx) =>

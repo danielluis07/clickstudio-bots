@@ -13,24 +13,24 @@ export const captureToolName = "capture_contact_details";
 export const linkToolName = "send_configured_link";
 
 // Why the Bot stepped aside, among the reasons a Handoff stores. The model
-// chooses among these; "bot_indisponivel" is the core's own, after a provider
+// chooses among these; "bot_unavailable" is the core's own, after a provider
 // or tool failure.
 const modelHandoffReasons = [
-  "sem_resposta",
-  "pedido_do_contato",
-  "regra_do_negocio",
+  "no_answer",
+  "contact_request",
+  "handoff_topic",
 ] as const satisfies readonly ConversationHandoffReason[];
 
 export type HandoffReason =
-  (typeof modelHandoffReasons)[number] | Extract<ConversationHandoffReason, "bot_indisponivel">;
+  (typeof modelHandoffReasons)[number] | Extract<ConversationHandoffReason, "bot_unavailable">;
 
 // Every Handoff reply ends with one of these, so the Contact always learns
 // the team will reply, whatever the model wrote.
 const handoffNotices: Record<HandoffReason, string> = {
-  sem_resposta: "Não tenho essa informação, vou chamar alguém da equipe.",
-  pedido_do_contato: "Certo, vou chamar alguém da equipe para continuar o atendimento.",
-  regra_do_negocio: "Vou passar seu atendimento para a equipe, que responderá em breve.",
-  bot_indisponivel: "No momento não consigo responder, vou chamar alguém da equipe.",
+  no_answer: "Não tenho essa informação, vou chamar alguém da equipe.",
+  contact_request: "Certo, vou chamar alguém da equipe para continuar o atendimento.",
+  handoff_topic: "Vou passar seu atendimento para a equipe, que responderá em breve.",
+  bot_unavailable: "No momento não consigo responder, vou chamar alguém da equipe.",
 };
 
 // After the answerable part of a mixed question.
@@ -38,16 +38,16 @@ const remainderNotice = "Sobre o restante, vou chamar alguém da equipe.";
 
 export const handoffReply = (reason: HandoffReason, answered: string) => {
   if (!answered) return handoffNotices[reason];
-  return `${answered}\n\n${reason === "sem_resposta" ? remainderNotice : handoffNotices[reason]}`;
+  return `${answered}\n\n${reason === "no_answer" ? remainderNotice : handoffNotices[reason]}`;
 };
 
 const handoffInput = z.object({
   reason: z
     .enum(modelHandoffReasons)
     .describe(
-      "sem_resposta: the Knowledge base lacks the answer or contradicts itself. " +
-        "pedido_do_contato: the Contact asked for a person. " +
-        "regra_do_negocio: a topic the business hands to its team.",
+      "no_answer: the Knowledge base lacks the answer or contradicts itself. " +
+        "contact_request: the Contact asked for a person. " +
+        "handoff_topic: a topic the business hands to its team.",
     ),
 });
 

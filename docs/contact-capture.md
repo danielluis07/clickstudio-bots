@@ -36,7 +36,7 @@ server, whatever the provider checked:
 - The input is a strict object. A field the Tenant did not choose, a malformed
   email, a blank or over-long value, an empty call, or any extra key (such as a
   Contact or Tenant id) refuses the whole response. The model gets one retry,
-  then the turn hands off as `bot_indisponivel`.
+  then the turn hands off as `bot_unavailable`.
 - The write targets only the Contact of the turn's Conversation, resolved under
   the turn's `ChannelRoute`, and checks each value again before saving.
 - Valid details are stored immediately, even if the reply is later not sent.
@@ -54,7 +54,7 @@ Contact details are sent at all.
 ## Required details before a Handoff
 
 This is the catalog's one deterministic rule. When the model hands off as
-`sem_resposta`, `pedido_do_contato` or `regra_do_negocio` and a required
+`no_answer`, `contact_request` or `handoff_topic` and a required
 detail is still missing, counting values captured in the same response, the
 Bot does not hand off. It sends the answerable part, if any, followed by:
 
@@ -81,8 +81,8 @@ These are the uncertain cases, each covered by a core test:
   something else, a new Handoff asks again for what is still missing.
 - **Optional fields** are never asked for.
 - **Capture disabled.** Required flags have no effect.
-- **System Handoffs** (`bot_indisponivel` for provider or tool failures,
-  `limite_atingido` for the allowance) and every Member Handoff happen at once.
+- **System Handoffs** (`bot_unavailable` for provider or tool failures,
+  `allowance_exhausted` for the allowance) and every Member Handoff happen at once.
   They are never delayed for missing details.
 
 Changing this rule reopens the capability decision; do not substitute another.

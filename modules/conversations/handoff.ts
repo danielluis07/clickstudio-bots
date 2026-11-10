@@ -13,9 +13,9 @@ export type ConversationHandoffReason = NonNullable<
 // Handoffs a Member caused. After any of them a Member is on the Conversation,
 // so a "Bot indisponível" Handoff no longer returns on the Contact's next message.
 const memberHandoffReasons: readonly ConversationHandoffReason[] = [
-  "assumida",
-  "resposta_no_painel",
-  "resposta_no_app",
+  "claimed",
+  "dashboard_reply",
+  "app_reply",
 ] as const satisfies readonly ConversationHandoffReason[];
 
 const owns = (scope: { tenantId: string }, conversationId: string) =>
@@ -57,7 +57,7 @@ export const handOff = async (
       owner: "team",
       handoffReason: reason,
       waiting: true,
-      resumeOnContactMessage: reason === "bot_indisponivel",
+      resumeOnContactMessage: reason === "bot_unavailable",
     })
     .where(
       and(
@@ -240,7 +240,7 @@ export const createHandoffControls = ({
     // "Assumir": silences the Bot without sending anything.
     async takeOver(scope: TenantScope, conversationId: string) {
       const found =
-        (await handOff(db, scope, conversationId, "assumida")) ||
+        (await handOff(db, scope, conversationId, "claimed")) ||
         (await exists(scope, conversationId));
       return outcome(scope, conversationId, found);
     },

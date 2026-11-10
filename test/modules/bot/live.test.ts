@@ -168,7 +168,7 @@ test.each([
       expect(await repository.getConversation(conversationId)).toMatchObject({
         owner: "team",
         waiting: true,
-        handoffReason: "sem_resposta",
+        handoffReason: "no_answer",
       });
       const messages = (await repository.listMessages(conversationId))!.messages;
       const media = messages.find((row) => row.type !== "text")!;
@@ -355,12 +355,12 @@ test("a caption requiring unavailable media hands off instead of inventing its c
     }),
   );
   model.script({
-    toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "sem_resposta" } }],
+    toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "no_answer" } }],
   });
   await worker.run(conversationId);
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
-    handoffReason: "sem_resposta",
+    handoffReason: "no_answer",
   });
 });
 
@@ -396,7 +396,7 @@ test("a voice note arriving during generation blocks the pending Bot reply", asy
   expect(await worker.run(conversationId)).toBe("skipped");
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
-    handoffReason: "sem_resposta",
+    handoffReason: "no_answer",
   });
   expect(sender.sent).toHaveLength(0);
 });
@@ -469,7 +469,7 @@ test("the last allowed reply counts once; new messages hand off at the limit and
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
     waiting: true,
-    handoffReason: "limite_atingido",
+    handoffReason: "allowance_exhausted",
   });
   clock.set(new Date("2026-11-01T03:00:00Z"));
   await recordInboundTextMessage(db, route, {
@@ -482,7 +482,7 @@ test("the last allowed reply counts once; new messages hand off at the limit and
   await worker.run(conversationId);
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
-    handoffReason: "limite_atingido",
+    handoffReason: "allowance_exhausted",
   });
   const freshConversation = (await recordInboundTextMessage(db, route, {
     wamid: "next-month-new",
@@ -554,13 +554,13 @@ test("a Contact past today's reply cap hands off without the Model while other C
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
     waiting: true,
-    handoffReason: "limite_do_contato",
+    handoffReason: "contact_cap_reached",
   });
   expect(
     await db
       .select({ outcome: botTurnRecord.outcome, handoffReason: botTurnRecord.handoffReason })
       .from(botTurnRecord),
-  ).toEqual([{ outcome: "handoff", handoffReason: "limite_do_contato" }]);
+  ).toEqual([{ outcome: "handoff", handoffReason: "contact_cap_reached" }]);
   const other = (await recordInboundTextMessage(db, route, {
     wamid: crypto.randomUUID(),
     from: "5511999990002",
@@ -589,7 +589,7 @@ test("exhaustion hands off a new Contact message even while Schedule pauses repl
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
     waiting: true,
-    handoffReason: "limite_atingido",
+    handoffReason: "allowance_exhausted",
   });
   expect(model.requests).toHaveLength(previousRequests);
   expect(sender.sent).toHaveLength(0);
@@ -731,7 +731,7 @@ test("an unavailable sender hands off after generation", async () => {
   expect(sender.sent).toHaveLength(0);
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
-    handoffReason: "bot_indisponivel",
+    handoffReason: "bot_unavailable",
   });
 });
 
@@ -739,14 +739,14 @@ test("a Model Handoff is durable before the Meta call starts", async () => {
   const { scope, model, sender, activation, conversationId, worker, repository } = await setup();
   await activation.activate(scope);
   model.script({
-    toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "pedido_do_contato" } }],
+    toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "contact_request" } }],
   });
   let ownership: unknown;
   sender.beforeAnswering(async () => {
     ownership = await repository.getConversation(conversationId);
   });
   await worker.run(conversationId);
-  expect(ownership).toMatchObject({ owner: "team", handoffReason: "pedido_do_contato" });
+  expect(ownership).toMatchObject({ owner: "team", handoffReason: "contact_request" });
 });
 
 test("an uncertain Meta send fails and hands off without resending on retry", async () => {
@@ -761,7 +761,7 @@ test("an uncertain Meta send fails and hands off without resending on retry", as
   expect(sender.sent).toHaveLength(1);
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
-    handoffReason: "bot_indisponivel",
+    handoffReason: "bot_unavailable",
   });
   expect((await repository.listMessages(conversationId))!.messages).toContainEqual(
     expect.objectContaining({ origin: "bot", status: "failed", wamid: null }),
@@ -799,7 +799,7 @@ test("a Model that keeps failing hands off as unavailable on the job's last atte
   await worker.run(conversationId, { attempt: botTurnAttempts });
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
-    handoffReason: "bot_indisponivel",
+    handoffReason: "bot_unavailable",
   });
   // Only the Handoff reply, telling the Contact the team will answer.
   expect(sender.sent).toHaveLength(1);
@@ -812,7 +812,7 @@ test("a Model error that is not transient hands off on the first attempt", async
   await worker.run(conversationId, { attempt: 1 });
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
-    handoffReason: "bot_indisponivel",
+    handoffReason: "bot_unavailable",
   });
 });
 
@@ -848,7 +848,7 @@ test("a send Meta keeps refusing fails and hands off after the last retry", asyn
   expect(sender.sent).toHaveLength(0);
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
-    handoffReason: "bot_indisponivel",
+    handoffReason: "bot_unavailable",
   });
   expect((await repository.listMessages(conversationId))!.messages).toContainEqual(
     expect.objectContaining({ origin: "bot", status: "failed", wamid: null }),
@@ -867,7 +867,7 @@ test("a send that may have reached Meta, such as a timeout, is never retried", a
   expect(dependencies.sleeps).toEqual([]);
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
-    handoffReason: "bot_indisponivel",
+    handoffReason: "bot_unavailable",
   });
 });
 
@@ -895,7 +895,7 @@ test("a send refused for the credential marks the Channel unhealthy, and no Bot 
   expect(await channelHealth()).toEqual({ health: "credential_rejected" });
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
-    handoffReason: "bot_indisponivel",
+    handoffReason: "bot_unavailable",
   });
 
   // Another Contact writes: nothing is enqueued, nothing is generated or sent.
@@ -981,7 +981,7 @@ test("a retry finding a pending reply without wamid never calls Meta", async () 
   expect(sender.sent).toHaveLength(0);
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
-    handoffReason: "bot_indisponivel",
+    handoffReason: "bot_unavailable",
   });
 });
 
@@ -1035,7 +1035,7 @@ test("the sweep leaves a Conversation with a live turn or with the team", async 
   expect(queue.take()).toEqual([]);
   await db
     .update(conversation)
-    .set({ botLeaseToken: null, botLeaseUntil: null, owner: "team", handoffReason: "assumida" })
+    .set({ botLeaseToken: null, botLeaseUntil: null, owner: "team", handoffReason: "claimed" })
     .where(eq(conversation.id, conversationId));
   await worker.sweep();
   expect(queue.take()).toEqual([]);
@@ -1150,7 +1150,7 @@ test("the sweep fails stuck sends and clears expired leases", async () => {
   expect(sender.sent).toHaveLength(0);
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
-    handoffReason: "bot_indisponivel",
+    handoffReason: "bot_unavailable",
   });
   const [stored] = await db.select().from(conversation).where(eq(conversation.id, conversationId));
   expect(stored.botLeaseToken).toBeNull();
@@ -1166,7 +1166,7 @@ test("Handoff and service-window expiry during generation each block the send", 
   model.generate = async (request) => {
     await db
       .update(conversation)
-      .set({ owner: "team", handoffReason: "pedido_do_contato" })
+      .set({ owner: "team", handoffReason: "contact_request" })
       .where(eq(conversation.id, conversationId));
     return generate(request);
   };
@@ -1200,7 +1200,7 @@ test("allowance is rechecked after generation before a live reply is reserved", 
   expect(sender.sent).toHaveLength(0);
   expect(await repository.getConversation(conversationId)).toMatchObject({
     owner: "team",
-    handoffReason: "limite_atingido",
+    handoffReason: "allowance_exhausted",
   });
 });
 
@@ -1465,7 +1465,7 @@ test("a live Handoff first asks for missing required details, leaving the Bot in
   });
   await activation.activate(scope);
   model.script({
-    toolCalls: [{ id: "call-1", name: "handoff", input: { reason: "pedido_do_contato" } }],
+    toolCalls: [{ id: "call-1", name: "handoff", input: { reason: "contact_request" } }],
   });
 
   expect(await worker.run(conversationId)).toBe("sent");

@@ -219,7 +219,7 @@ describe("Model failures", () => {
       clock: createTestClock(new Date("2026-03-10T12:00:00.000Z")),
     });
     using console = captureConsoleErrors();
-    expect(await core.respond(turn)).toMatchObject({ kind: "handoff", reason: "bot_indisponivel" });
+    expect(await core.respond(turn)).toMatchObject({ kind: "handoff", reason: "bot_unavailable" });
     expect(console.entries()).toEqual([
       expect.objectContaining({
         kind: "bot_decision_failed",

@@ -90,7 +90,7 @@ test("Testar Bot reads its Tenant's saved links on each turn, including edits an
     model.script({ toolCalls: [send(otherLink.id)] }, { toolCalls: [send(otherLink.id)] });
     expect(
       await sandbox.respond(owner, { text: "Envie o link do outro negócio", history: [] }),
-    ).toMatchObject({ ok: true, outcome: { kind: "handoff", reason: "bot_indisponivel" } });
+    ).toMatchObject({ ok: true, outcome: { kind: "handoff", reason: "bot_unavailable" } });
     expect(model.requests.at(-1)?.instructions).not.toContain(otherLink.id);
     await editor.saveLinks(owner, { enabled: false, links: [booking] });
     model.script({ toolCalls: [send(booking.id)] }, { toolCalls: [send(booking.id)] });
@@ -104,7 +104,7 @@ test("Testar Bot reads its Tenant's saved links on each turn, including edits an
         text: "Me envie novamente",
         history: [],
       }),
-    ).toMatchObject({ ok: true, outcome: { kind: "handoff", reason: "bot_indisponivel" } });
+    ).toMatchObject({ ok: true, outcome: { kind: "handoff", reason: "bot_unavailable" } });
     expect(network).not.toHaveBeenCalled();
   } finally {
     network.mockRestore();
@@ -180,7 +180,7 @@ test("a failed Gateway request hands off without retrying the direct key or anot
     });
     expect(await sandbox.respond(owner, { text: "Oi", history: [] })).toMatchObject({
       ok: true,
-      outcome: { kind: "handoff", reason: "bot_indisponivel" },
+      outcome: { kind: "handoff", reason: "bot_unavailable" },
       allowance: { used: 1, limit: 50 },
     });
     expect(network).toHaveBeenCalledTimes(1);
@@ -399,7 +399,7 @@ test("sandbox Handoffs and refused capture/send calls make no network requests o
     model,
   });
   model.script(
-    { toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "pedido_do_contato" } }] },
+    { toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "contact_request" } }] },
     {
       toolCalls: [
         { id: "capture", name: "capture_details", input: { contactId, name: "Nome de teste" } },
@@ -415,11 +415,11 @@ test("sandbox Handoffs and refused capture/send calls make no network requests o
       await sandbox.respond(owner, { text: "Quero falar com alguém", history: [] }),
     ).toMatchObject({
       ok: true,
-      outcome: { kind: "handoff", reason: "pedido_do_contato" },
+      outcome: { kind: "handoff", reason: "contact_request" },
     });
     expect(await sandbox.respond(owner, { text: "Meu nome é Teste", history: [] })).toMatchObject({
       ok: true,
-      outcome: { kind: "handoff", reason: "bot_indisponivel" },
+      outcome: { kind: "handoff", reason: "bot_unavailable" },
     });
     expect(network).not.toHaveBeenCalled();
   } finally {
@@ -464,7 +464,7 @@ test("sandbox captures return to the browser and never reach production Contacts
       text: "Prazer, Bia!",
       toolCalls: [{ id: "call-1", name: "capture_contact_details", input: { name: "Bia" } }],
     },
-    { toolCalls: [{ id: "call-2", name: "handoff", input: { reason: "pedido_do_contato" } }] },
+    { toolCalls: [{ id: "call-2", name: "handoff", input: { reason: "contact_request" } }] },
   );
 
   const first = await sandbox.respond(owner, { text: "Sou a Bia", history: [] });
@@ -525,7 +525,7 @@ test("provider failures use the core's safe Handoff and still consume a sandbox 
   model.script(new Error("Provider unavailable"));
   expect(await sandbox.respond(owner, { text: "Oi", history: [] })).toMatchObject({
     ok: true,
-    outcome: { kind: "handoff", reason: "bot_indisponivel" },
+    outcome: { kind: "handoff", reason: "bot_unavailable" },
     allowance: { used: 1, limit: 50 },
   });
 });

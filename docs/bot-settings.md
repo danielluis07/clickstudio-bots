@@ -26,7 +26,7 @@ commercial promises.
 | Greeting | Up to 300 characters |
 | Rules (free text) | Up to 2,000 characters |
 | Refused topics | Up to 20 topics, one per line, each up to 100 characters. The Bot politely declines them without a Handoff. |
-| Handoff topics | Up to 20 topics, one per line, each up to 100 characters. The Bot hands the Conversation off as `regra_do_negocio`. |
+| Handoff topics | Up to 20 topics, one per line, each up to 100 characters. The Bot hands the Conversation off as `handoff_topic`. |
 | Schedule | Always on, or outside business hours only. Defaults to always on. Outside business hours only needs at least one open day. |
 
 ## Prompt

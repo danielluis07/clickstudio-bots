@@ -75,7 +75,7 @@ const setup = async () => {
     withTeam: () =>
       db
         .update(conversation)
-        .set({ owner: "team", handoffReason: "assumida", waiting: true })
+        .set({ owner: "team", handoffReason: "claimed", waiting: true })
         .where(eq(conversation.id, conversationId)),
     // Thursday 09:00 in São Paulo is within testBehaviour's Business hours.
     outsideSchedule: () =>
@@ -88,9 +88,9 @@ const setup = async () => {
 
 const replyCheckpoints = ["beforeModel", "beforeSend"] as const;
 const skip: ReplyDecision = { kind: "skip" };
-const limit: ReplyDecision = { kind: "handoff", reason: "limite_atingido" };
-const unavailable: ReplyDecision = { kind: "handoff", reason: "bot_indisponivel" };
-const contactLimit: ReplyDecision = { kind: "handoff", reason: "limite_do_contato" };
+const limit: ReplyDecision = { kind: "handoff", reason: "allowance_exhausted" };
+const unavailable: ReplyDecision = { kind: "handoff", reason: "bot_unavailable" };
+const contactLimit: ReplyDecision = { kind: "handoff", reason: "contact_cap_reached" };
 
 describe("reply gate", () => {
   test("an eligible Conversation in its service window may reply", async () => {

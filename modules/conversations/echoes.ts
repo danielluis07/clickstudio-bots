@@ -54,8 +54,7 @@ export const resolveUnresolvedEchoes = async (
       ),
     )
     .returning({ id: message.id });
-  if (handsOff && resolved.length)
-    await handOff(tx, { tenantId }, conversationId, "resposta_no_app");
+  if (handsOff && resolved.length) await handOff(tx, { tenantId }, conversationId, "app_reply");
 };
 
 // Gives the Tenant's sent message the wamid Meta answered with. Its echo may
@@ -174,7 +173,7 @@ export const recordMessageEcho = (db: Database, route: ChannelRoute, echo: Messa
           .onConflictDoNothing({ target: [message.tenantId, message.wamid] })
           .returning({ origin: message.origin, conversationId: message.conversationId });
         if (inserted) await applyEarlyStatus(tx, route.tenantId, echo.wamid);
-        if (inserted && !botSending) await handOff(tx, route, conversationId, "resposta_no_app");
+        if (inserted && !botSending) await handOff(tx, route, conversationId, "app_reply");
         // A concurrent job stored the same wamid first.
         return classify(inserted ?? (await findStored()));
       },

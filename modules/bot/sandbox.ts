@@ -120,7 +120,7 @@ export const createBotSandbox = ({
       const outcome = await core.respond({ scope, conversationId: "sandbox" });
       if (
         outcome.kind === "answer" ||
-        (outcome.kind === "handoff" && outcome.reason !== "bot_indisponivel")
+        (outcome.kind === "handoff" && outcome.reason !== "bot_unavailable")
       ) {
         await activation.markTested(scope, now);
       }

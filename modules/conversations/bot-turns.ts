@@ -301,7 +301,7 @@ const createConversationBotRepository = (db: Database, scope: ChannelRoute) => {
           .returning({ id: message.id });
         if (!failed.length) return false;
         // A Member's earlier Handoff keeps its reason.
-        await handOff(tx, scope, conversationId, "bot_indisponivel");
+        await handOff(tx, scope, conversationId, "bot_unavailable");
         // Now with the team, whatever those echoes were.
         await resolveUnresolvedEchoes(tx, scope.tenantId, conversationId, { handOff: false });
         return true;
