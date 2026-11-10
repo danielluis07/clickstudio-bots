@@ -209,6 +209,8 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
             before(message.sentAt, message.id, cursor && { at: cursor.sentAt, id: cursor.id }),
           ),
         )
+        // Meta's timestamps are whole seconds; within one, insertion order
+        // decides (docs/whatsapp-setup.md#message-order).
         .orderBy(desc(message.sentAt), desc(message.id))
         .limit(limit + 1);
       const { page, nextCursor } = toPage(rows, limit, (row): MessageCursor => ({
