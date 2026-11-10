@@ -99,6 +99,34 @@ notifications for committed Handoffs. It also re-enqueues a Contact message
 whose job never ran, once it is two minutes old and for up to one hour, when the
 reply gate would not skip it.
 
+## Transient provider failures
+
+Issue: [#138](https://github.com/danielluis07/clickstudio-bots/issues/138).
+
+Adapters reject with `RetryableError` (`platform/retryable.ts`) only when a
+call certainly had no effect and may succeed later. Anything else hands off as
+before. There is still no fallback provider.
+
+- **Model.** A timeout, a 408/409/429 or a 5xx (Anthropic or AI Gateway) is
+  retryable. The adapter never retries within the turn. Instead the turn
+  reserves nothing and releases its lease, and the job answers 503 without
+  alerting, so QStash delivers it again (about 12 s, then 2.5 min later). The
+  job reads its attempt from `Upstash-Retried`. On attempt `botTurnAttempts`
+  (3), or when the count is missing, the turn hands off as **Bot
+  indisponível**: a Contact waits about three minutes at most. Each attempt
+  generates the reply again. A Model error that is not retryable, such as a
+  400, hands off at once.
+- **Meta.** A send Meta refused, which was not sent, is retried. That is a
+  429, a 5xx carrying Meta's error code, or a throttling or "try again" code
+  (`4`, `80007`, `130429`, `131056`, `1`, `2`, `131000`, `131016`). The worker
+  resends the same pending reply within the turn after 1 s, then 3 s. If the
+  last try is refused too, the reply fails and hands off. A timeout, a dropped
+  connection, a 5xx without Meta's body or an unreadable success may have
+  sent, so it is never resent: the reply fails and hands off, as before.
+
+The pending row stays the only send barrier. A Meta retry reuses it, and a
+Model retry happens before any reservation.
+
 The gate asks `BotAllowance.canReply`; reservation calls `BotAllowance.reserve`
 in the same transaction. The monthly accounting is described in
 [Bot reply allowance](bot-reply-allowance.md). Sandbox counters remain separate

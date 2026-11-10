@@ -5,6 +5,7 @@ import {
   type WhatsAppCredentialContext,
 } from "@/platform/whatsapp-credentials";
 import { logError } from "@/platform/diagnostics";
+import { RetryableError } from "@/platform/retryable";
 
 // Delivery statuses arrive under `messages`; there is no `statuses` field.
 export const whatsAppWebhookFields = [
@@ -59,6 +60,19 @@ const readMetaError = async (response: Response) => {
   const parsed = metaErrorSchema.safeParse(await response.json().catch(() => null));
   return parsed.success ? parsed.data.error : {};
 };
+
+// Meta's throttling codes (application, WABA, Cloud API and pair rate
+// limits) and its "try again later" codes.
+const transientMetaCodes = new Set([1, 2, 4, 80007, 130429, 131000, 131016, 131056]);
+
+// A send Meta answered with a refusal it may lift: a 429, or a 5xx or
+// transient code in Meta's own error body. Meta did not send it. A timeout,
+// a dropped connection or a 5xx without Meta's body may have sent.
+const isRetryableSend = (error: unknown) =>
+  error instanceof WhatsAppRequestError &&
+  (error.httpStatus === 429 ||
+    (error.metaCode !== undefined &&
+      ((error.httpStatus ?? 0) >= 500 || transientMetaCodes.has(error.metaCode))));
 
 // Every failed call is recorded here, as an expected failure that does not
 // alert, so callers may answer "unavailable" and discard the error.
@@ -257,6 +271,8 @@ export const createWhatsAppAdapter = (options: Options) => {
         return { wamid: sent.id };
       } catch (error) {
         recordFailure("sendText", error, input);
+        if (isRetryableSend(error))
+          throw new RetryableError("WhatsApp send refused", { cause: error });
         throw new Error("WhatsApp send failed", { cause: error });
       }
     },

@@ -2,7 +2,9 @@ import { Client, Receiver } from "@upstash/qstash";
 
 // Delivery retries per job type, never left to the plan's default. QStash
 // backs off about 12 s, 2.5 min, then 30 min: enough to outlast a crashed
-// Bot turn's two-minute lease. The sweep re-enqueues whatever is still stuck.
+// Bot turn's two-minute lease, and for `botTurnAttempts` (`@/modules/bot`)
+// deliveries after a transient Model failure. The sweep re-enqueues whatever
+// is still stuck.
 const deliveryRetries = { "process-inbox-event": 3, "run-bot-turn": 3 } as const;
 
 // A job is its type plus ids; the type names the route that handles it.

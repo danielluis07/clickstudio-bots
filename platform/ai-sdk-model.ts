@@ -7,6 +7,7 @@ import {
   type LanguageModel,
   type ModelMessage as SdkMessage,
 } from "ai";
+import { RetryableError } from "@/platform/retryable";
 
 // Implements the Bot's Model port (`@/modules/bot`) with the Vercel AI SDK.
 // The shapes below mirror that port, which platform code cannot import.
@@ -80,6 +81,15 @@ const toSdkMessage = (message: Request["messages"][number]): SdkMessage => {
   }
 };
 
+// A timeout, or a provider error the SDK marks retryable (408, 409, 429, 5xx
+// and a failed connection, for both Anthropic and AI Gateway): the call
+// produced nothing, and asking again may succeed.
+const isTransient = (error: unknown) =>
+  error instanceof Error &&
+  (error.name === "TimeoutError" ||
+    error.name === "AbortError" ||
+    (error as { isRetryable?: unknown }).isRetryable === true);
+
 export const createAiSdkModel = ({
   model,
   timeoutMs = 10_000,
@@ -116,9 +126,14 @@ export const createAiSdkModel = ({
       messages: request.messages.map(toSdkMessage),
       providerOptions,
       maxOutputTokens,
-      // A failure hands off at once rather than retry past the reply budget.
+      // Never retried within the turn's time budget: the Bot job retries a
+      // transient failure later, with backoff.
       maxRetries: 0,
       timeout: timeoutMs,
+    }).catch((error: unknown) => {
+      throw isTransient(error)
+        ? new RetryableError("Model temporarily unavailable", { cause: error })
+        : error;
     });
     const { inputTokenDetails } = result.usage;
     const cacheReadTokens = inputTokenDetails.cacheReadTokens ?? 0;

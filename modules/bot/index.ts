@@ -17,7 +17,13 @@ export {
   type CaptureMode,
   type CaptureSettings,
 } from "@/modules/bot/capture";
-export { createLiveBot, type LiveBot, type BotJob, type BotJobQueue } from "@/modules/bot/live";
+export {
+  botTurnAttempts,
+  createLiveBot,
+  type LiveBot,
+  type BotJob,
+  type BotJobQueue,
+} from "@/modules/bot/live";
 export {
   createReplyGate,
   type BotAllowance,

@@ -20,6 +20,7 @@ import {
 import type { Clock } from "@/platform/clock";
 import { annotateError, logError } from "@/platform/diagnostics";
 import type { Notifier } from "@/platform/notifier";
+import { RetryableError } from "@/platform/retryable";
 
 export type BotJob = { type: "run-bot-turn"; conversationId: string };
 export interface BotJobQueue {
@@ -36,6 +37,18 @@ const strandedPerSweep = 100;
 // Pages a sweep may scan when the reply gate skips whole Tenants.
 const strandedPages = 3;
 
+// Deliveries of one Bot job that may meet a transient Model failure. Each
+// earlier one fails the job, so the queue delivers it again, about 12 s and
+// then 2.5 min later; the last hands off. A Contact waits about three minutes
+// at most. The queue must allow at least this many deliveries.
+export const botTurnAttempts = 3;
+
+// Waits before resending a reply Meta refused, within the turn's lease and
+// its job's time limit. A send that fails after the last one hands off.
+const sendRetryDelaysMs = [1_000, 3_000];
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 export const createLiveBot = ({
   db,
   clock,
@@ -44,6 +57,7 @@ export const createLiveBot = ({
   notifier,
   getSender,
   allowance,
+  sleep = wait,
 }: {
   db: Database;
   clock: Clock;
@@ -52,6 +66,7 @@ export const createLiveBot = ({
   notifier: Notifier;
   getSender: () => WhatsAppSender;
   allowance: BotAllowance;
+  sleep?: (ms: number) => Promise<void>;
 }) => {
   const gate = createReplyGate({ db, clock, allowance });
   const enqueue = async (scope: ChannelRoute, conversationId: string) => {
@@ -66,7 +81,21 @@ export const createLiveBot = ({
     tokens?: TurnTokens;
   };
 
-  const decide = async (turn: LiveBotTurn): Promise<Ended> => {
+  // Null when the send failed: Meta refused it on every try, or may have
+  // received it. Only a refusal is retried, with the same pending reply.
+  const send = async (sender: WhatsAppSender, input: Parameters<WhatsAppSender["sendText"]>[0]) => {
+    for (const delay of [...sendRetryDelaysMs, null]) {
+      try {
+        return await sender.sendText(input);
+      } catch (error) {
+        if (delay === null || !(error instanceof RetryableError)) return null;
+        await sleep(delay);
+      }
+    }
+    return null;
+  };
+
+  const decide = async (turn: LiveBotTurn, retryTransient: boolean): Promise<Ended> => {
     const { scope, conversationId } = turn;
     // Every Handoff the gate decides is fenced by this turn's lease.
     const settle = async (
@@ -98,7 +127,7 @@ export const createLiveBot = ({
         listRecentMessages: async () => context,
       },
     });
-    const outcome = await core.respond(turn);
+    const outcome = await core.respond(turn, { retryTransient });
     if (outcome.kind === "nothing_to_answer") {
       await turn.consume();
       return { result: "skipped" };
@@ -117,10 +146,9 @@ export const createLiveBot = ({
       beforeReserve: (tx) => allowance.reserve(tx, turn),
     });
     if (!messageId) return { result: "skipped", tokens };
-    // A pending row is the durable send barrier. Never retry a send without a wamid.
-    const sent = await sender
-      .sendText({ ...turn.recipient, text: outcome.reply })
-      .catch(() => null);
+    // A pending row is the durable send barrier. Never retry a send that may
+    // have reached Meta; a later turn fails a pending reply without a wamid.
+    const sent = await send(sender, { ...turn.recipient, text: outcome.reply });
     if (!sent) {
       await turn.fail();
       // A Model-requested Handoff, already stored, keeps its reason.
@@ -135,9 +163,9 @@ export const createLiveBot = ({
 
   // Records how every completed turn ended (#137). A turn that throws is
   // retried by its job and recorded when it completes.
-  const respond = async (turn: LiveBotTurn) => {
+  const respond = async (turn: LiveBotTurn, retryTransient: boolean) => {
     const startedAt = clock.now();
-    const ended = await decide(turn);
+    const ended = await decide(turn, retryTransient);
     const at = clock.now();
     await recordBotTurn(db, turn.scope, {
       at,
@@ -158,7 +186,10 @@ export const createLiveBot = ({
 
   return {
     enqueue,
-    async run(conversationId: string) {
+    // `attempt` counts this job's deliveries from 1. Without one, the turn is
+    // the last: a transient Model failure hands off. "retry" asks the queue to
+    // deliver the job again; the turn released its lease and reserved nothing.
+    async run(conversationId: string, { attempt = botTurnAttempts }: { attempt?: number } = {}) {
       // The job knows only the Conversation; a failure also names its Tenant.
       let tenantId: string | undefined;
       try {
@@ -167,7 +198,7 @@ export const createLiveBot = ({
           conversationId,
           (turn) => {
             tenantId = turn.scope.tenantId;
-            return respond(turn);
+            return respond(turn, attempt < botTurnAttempts);
           },
           async (scope, followUp) => {
             tenantId = scope.tenantId;
@@ -178,6 +209,8 @@ export const createLiveBot = ({
           },
         );
       } catch (error) {
+        // Expected, and already recorded as the Model failure it was.
+        if (error instanceof RetryableError) return "retry" as const;
         throw annotateError(error, { tenantId, conversationId });
       }
     },

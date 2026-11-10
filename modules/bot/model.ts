@@ -54,7 +54,9 @@ export type ModelResponse = {
   usage: ModelUsage;
 };
 
-// Rejects on any provider error or timeout. There is no fallback provider.
+// Rejects on any provider error or timeout. There is no fallback provider. A
+// `RetryableError` (`@/platform/retryable`) is transient: a timeout, rate
+// limit or provider outage that a later attempt may get past.
 export interface Model {
   generate(request: ModelRequest): Promise<ModelResponse>;
 }

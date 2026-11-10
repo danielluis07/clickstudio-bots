@@ -25,6 +25,7 @@ export const errorClasses = [
   "ZodError",
   "TRPCError",
   "WhatsAppRequestError",
+  "RetryableError",
   "AI_APICallError",
   "AI_RetryError",
   "AI_NoOutputGeneratedError",

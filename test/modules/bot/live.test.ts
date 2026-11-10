@@ -10,9 +10,11 @@ import {
   createCaptureSettingsEditor,
   createLiveBot,
   createBotAllowance,
+  botTurnAttempts,
   type BotJob,
   type BotAllowance,
 } from "@/modules/bot";
+import { RetryableError } from "@/platform/retryable";
 import { eq, sql } from "drizzle-orm";
 import { botReplyUsage, channel, contact, conversation, message, organization } from "@/db/schema";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
@@ -71,6 +73,7 @@ const setup = async (allowance?: BotAllowance) => {
     text: "Quanto custa?",
     sentAt: clock.now(),
   }))!;
+  const sleeps: number[] = [];
   const dependencies = {
     db,
     clock,
@@ -79,6 +82,11 @@ const setup = async (allowance?: BotAllowance) => {
     notifier: createTestNotifier(),
     getSender: () => sender,
     allowance: allowance ?? createBotAllowance({ db, clock, mailer: createTestMailer() }),
+    // Waits between Meta sends are recorded, not slept.
+    sleeps,
+    sleep: async (ms: number) => {
+      sleeps.push(ms);
+    },
   };
   const worker = createLiveBot(dependencies);
   const inboxJobs = createTestJobQueue();
@@ -638,6 +646,109 @@ test("an uncertain Meta send fails and hands off without resending on retry", as
   expect((await repository.listMessages(conversationId))!.messages).toContainEqual(
     expect.objectContaining({ origin: "bot", status: "failed", wamid: null }),
   );
+});
+
+const overloaded = () =>
+  new RetryableError("Model temporarily unavailable", { cause: new Error("529 overloaded") });
+
+test("a transient Model failure retries the job, then answers with the Bot still in charge", async () => {
+  const { scope, model, sender, activation, conversationId, worker, repository } = await setup();
+  await activation.activate(scope);
+  model.script(overloaded(), { text: "O corte custa R$ 80." });
+  expect(await worker.run(conversationId, { attempt: 1 })).toBe("retry");
+  expect(sender.sent).toHaveLength(0);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "bot",
+    handoffReason: null,
+  });
+  expect(await worker.run(conversationId, { attempt: 2 })).toBe("sent");
+  expect(sender.sent).toEqual([expect.objectContaining({ text: "O corte custa R$ 80." })]);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "bot",
+    handoffReason: null,
+  });
+});
+
+test("a Model that keeps failing hands off as unavailable on the job's last attempt", async () => {
+  const { scope, model, sender, activation, conversationId, worker, repository } = await setup();
+  await activation.activate(scope);
+  model.script(...Array.from({ length: botTurnAttempts }, overloaded));
+  for (let attempt = 1; attempt < botTurnAttempts; attempt++)
+    expect(await worker.run(conversationId, { attempt })).toBe("retry");
+  expect(await repository.getConversation(conversationId)).toMatchObject({ owner: "bot" });
+  await worker.run(conversationId, { attempt: botTurnAttempts });
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "team",
+    handoffReason: "bot_indisponivel",
+  });
+  // Only the Handoff reply, telling the Contact the team will answer.
+  expect(sender.sent).toHaveLength(1);
+});
+
+test("a Model error that is not transient hands off on the first attempt", async () => {
+  const { scope, model, activation, conversationId, worker, repository } = await setup();
+  await activation.activate(scope);
+  model.script(new Error("400 invalid request"));
+  await worker.run(conversationId, { attempt: 1 });
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "team",
+    handoffReason: "bot_indisponivel",
+  });
+});
+
+test("a send Meta refuses is retried with the same reply and sent once", async () => {
+  const { scope, model, sender, activation, conversationId, worker, repository, dependencies } =
+    await setup();
+  await activation.activate(scope);
+  model.script({ text: "O corte custa R$ 80." });
+  sender.refuseNext(2);
+  expect(await worker.run(conversationId)).toBe("sent");
+  expect(sender.attempts).toBe(3);
+  expect(sender.sent).toEqual([expect.objectContaining({ text: "O corte custa R$ 80." })]);
+  expect(dependencies.sleeps).toEqual([1_000, 3_000]);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "bot",
+    handoffReason: null,
+  });
+  const replies = (await repository.listMessages(conversationId))!.messages.filter(
+    ({ origin }) => origin === "bot",
+  );
+  expect(replies).toEqual([expect.objectContaining({ wamid: "wamid.OUT1" })]);
+  await worker.run(conversationId);
+  expect(sender.attempts).toBe(3);
+});
+
+test("a send Meta keeps refusing fails and hands off after the last retry", async () => {
+  const { scope, model, sender, activation, conversationId, worker, repository } = await setup();
+  await activation.activate(scope);
+  model.script({ text: "O corte custa R$ 80." });
+  sender.refuseNext(3);
+  expect(await worker.run(conversationId)).toBe("handoff");
+  expect(sender.attempts).toBe(3);
+  expect(sender.sent).toHaveLength(0);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "team",
+    handoffReason: "bot_indisponivel",
+  });
+  expect((await repository.listMessages(conversationId))!.messages).toContainEqual(
+    expect.objectContaining({ origin: "bot", status: "failed", wamid: null }),
+  );
+});
+
+test("a send that may have reached Meta, such as a timeout, is never retried", async () => {
+  const { scope, model, sender, activation, conversationId, worker, repository, dependencies } =
+    await setup();
+  await activation.activate(scope);
+  model.script({ text: "O corte custa R$ 80." });
+  sender.failNext();
+  expect(await worker.run(conversationId, { attempt: 1 })).toBe("handoff");
+  await worker.run(conversationId, { attempt: 2 });
+  expect(sender.attempts).toBe(1);
+  expect(dependencies.sleeps).toEqual([]);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "team",
+    handoffReason: "bot_indisponivel",
+  });
 });
 
 test("pause and Schedule changes during generation prevent sending without Handoff", async () => {
