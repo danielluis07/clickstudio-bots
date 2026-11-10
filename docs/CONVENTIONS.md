@@ -40,3 +40,7 @@ Rules (enforced by `test/architecture.test.ts`; see ADR 0005):
 - The one exception is inbound Meta events, which have no Member. They write Tenant-owned data under a `ChannelRoute` (`@/modules/channels`). Only `resolveChannelPhoneNumber` and `resolveChannelWaba` create one, from the phone-number-id or the WABA id (entry id) of a signed event. Never build either proof from a request's Tenant id.
 - Route handlers in `app/` stay one line each. Their request adapters (status codes, headers, body parsing) live in `server/` (for example `server/webhook-routes.ts`), or in `trpc/handler.ts` for tRPC, so tests can exercise them with plain `Request` objects.
 - Start a module when a glossary area gets its first code. Do not create empty folders ahead of time.
+
+## Locks and leases
+
+Before adding a `for("update")`, `for("share")`, advisory lock or lease column, or making a transaction write to a table it did not write before, read [Locks and leases](locking.md). It lists every lock and lease, the one order they are taken in, and why none is held across an external call. Update it in the same change.
