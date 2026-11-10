@@ -78,6 +78,7 @@ suite("live turns on real Postgres", () => {
       notifier: createTestNotifier(),
       getSender: () => sender,
       allowance,
+      burst: null,
     };
     return {
       db,

@@ -10,10 +10,12 @@ import {
   createCaptureSettingsEditor,
   createLiveBot,
   createBotAllowance,
+  burstWait,
   botTurnAttempts,
   dailyContactReplyLimit,
   type BotJob,
   type BotAllowance,
+  type BurstWait,
 } from "@/modules/bot";
 import { RetryableError } from "@/platform/retryable";
 import { eq, sql } from "drizzle-orm";
@@ -55,7 +57,7 @@ afterEach(async () => {
   if (db) await closeTestDatabase(db);
 });
 
-const setup = async (allowance?: BotAllowance) => {
+const setup = async (allowance?: BotAllowance, burst: BurstWait | null = null) => {
   db = await createTestDatabase();
   const seeded = await seedLiveBot(db);
   const { scope, route, clock } = seeded;
@@ -92,6 +94,8 @@ const setup = async (allowance?: BotAllowance) => {
     notifier: createTestNotifier(),
     getSender: () => sender,
     allowance: allowance ?? createBotAllowance({ db, clock, mailer: createTestMailer() }),
+    // Every job answers at once unless a test asks for the burst wait.
+    burst,
     // Waits between Meta sends are recorded, not slept.
     sleeps,
     sleep: async (ms: number) => {
@@ -1195,6 +1199,120 @@ test("a later Contact message gets a follow-up turn with prior Conversation cont
   await worker.run(conversationId);
   expect(model.requests.at(-1)!.messages).toContainEqual(
     expect.objectContaining({ text: "Quanto custa?" }),
+  );
+  expect(sender.sent).toHaveLength(2);
+});
+
+// A Contact writing in a burst, with each job delivered as QStash would: after
+// its delay, in order (#144).
+const setupBurst = async () => {
+  const seeded = await setup(undefined, burstWait);
+  const { scope, route, clock, queue, activation, conversationId, worker } = seeded;
+  await activation.activate(scope);
+  const write = async (text: string) => {
+    await recordInboundTextMessage(db, route, {
+      wamid: crypto.randomUUID(),
+      from: "5511999990001",
+      profileName: null,
+      text,
+      sentAt: clock.now(),
+    });
+    await worker.enqueue(route, conversationId);
+  };
+  // When each job falls due, stamped as it is enqueued.
+  const dueAt = new Map<BotJob, number>();
+  const enqueue = queue.enqueue;
+  queue.enqueue = async (jobs) => {
+    for (const job of jobs) dueAt.set(job, clock.now().getTime() + (job.delaySeconds ?? 0) * 1_000);
+    await enqueue(jobs);
+  };
+  // Only live turns count, not the sandbox test that activated the Bot.
+  seeded.model.requests.splice(0);
+  // The setup's message was written now; it enqueues its job like any other.
+  await worker.enqueue(route, conversationId);
+  const due: { at: number; job: BotJob }[] = [];
+  const deliver = async () => {
+    due.push(...queue.take().map((job) => ({ at: dueAt.get(job)!, job })));
+    const next = due.shift()!;
+    clock.set(new Date(Math.max(next.at, clock.now().getTime())));
+    return worker.run(next.job.conversationId);
+  };
+  return { ...seeded, write, deliver, due };
+};
+
+test("three Contact messages within the wait get one Bot reply covering all three", async () => {
+  const { clock, model, sender, queue, write, deliver, due } = await setupBurst();
+  clock.advance(1_000);
+  await write("Vocês abrem sábado?");
+  clock.advance(1_000);
+  await write("E fazem barba?");
+  expect(queue.jobs.map(({ delaySeconds }) => delaySeconds)).toEqual([3, 3, 3]);
+  model.script({ text: "O corte custa R$ 80, abrimos sábado e fazemos barba." });
+
+  // The first job finds a message written a second ago and leaves the burst
+  // to the later jobs.
+  expect(await deliver()).toBe("waiting");
+  expect(await deliver()).toBe("sent");
+  expect(await deliver()).toBe("skipped");
+  expect(due).toHaveLength(0);
+  expect(model.requests).toHaveLength(1);
+  // The burst is one Contact turn.
+  expect(model.requests[0].messages.at(-1)).toEqual({
+    role: "user",
+    text: "Quanto custa?\n\nVocês abrem sábado?\n\nE fazem barba?",
+  });
+  expect(sender.sent).toHaveLength(1);
+});
+
+test("a single Contact message is answered once its job's delay has passed", async () => {
+  const { clock, model, sender, deliver } = await setupBurst();
+  const writtenAt = clock.now().getTime();
+  model.script({ text: "O corte custa R$ 80." });
+  expect(await deliver()).toBe("sent");
+  expect(clock.now().getTime() - writtenAt).toBe(burstWait.delaySeconds * 1_000);
+  expect(sender.sent).toHaveLength(1);
+});
+
+test("a Contact who keeps writing is answered once their first message reaches the ceiling", async () => {
+  const { clock, model, sender, worker, conversationId, write } = await setupBurst();
+  const firstAt = clock.now().getTime();
+  model.script({ text: "Resposta." });
+  let result: unknown = "waiting";
+  while (result === "waiting") {
+    clock.advance(1_500);
+    await write(`Mensagem ${clock.now().getTime()}`);
+    result = await worker.run(conversationId);
+  }
+  expect(result).toBe("sent");
+  expect(clock.now().getTime() - firstAt).toBeGreaterThanOrEqual(burstWait.maxWaitMs);
+  expect(clock.now().getTime() - firstAt).toBeLessThan(burstWait.maxWaitMs + 1_500);
+  expect(sender.sent).toHaveLength(1);
+});
+
+test("a message arriving after the turn started gets its own delayed follow-up turn", async () => {
+  const { route, clock, model, sender, queue, conversationId, deliver } = await setupBurst();
+  const generate = model.generate;
+  let injected = false;
+  model.generate = async (request) => {
+    if (!injected) {
+      injected = true;
+      clock.advance(1);
+      await recordInboundTextMessage(db, route, {
+        wamid: "later",
+        from: "5511999990001",
+        profileName: null,
+        text: "E a barba?",
+        sentAt: clock.now(),
+      });
+    }
+    return generate(request);
+  };
+  model.script({ text: "O corte custa R$ 80." }, { text: "Fazemos barba também." });
+  expect(await deliver()).toBe("sent");
+  expect(queue.jobs).toEqual([{ type: "run-bot-turn", conversationId, delaySeconds: 3 }]);
+  expect(await deliver()).toBe("sent");
+  expect(model.requests[1].messages).toContainEqual(
+    expect.objectContaining({ text: "E a barba?" }),
   );
   expect(sender.sent).toHaveLength(2);
 });

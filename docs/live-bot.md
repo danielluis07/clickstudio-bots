@@ -52,6 +52,21 @@ All unanswered texts are grouped into the current Contact turn, independently
 of the core's bounded historical replay. A burst cannot silently mark questions
 answered when they were omitted from the Model input.
 
+### Bursts of messages
+
+People often send several short messages in a row
+([#144](https://github.com/danielluis07/clickstudio-bots/issues/144)). Each
+`run-bot-turn` job from a Contact message, or from a follow-up, is delivered
+3 s after it is enqueued (QStash `delay`). A job whose newest unanswered Contact
+message is under 2 s old does nothing and returns 200: that message's own job
+answers the whole burst in one turn. Each new message therefore extends the
+wait. A Contact who keeps writing is answered once their oldest unanswered
+message is 15 s old. A single message waits only the 3 s delay before its turn.
+The quiet threshold stays below the delay, because Meta timestamps are truncated
+to the second, so a job never waits on its own message. If the later job is
+lost, the sweep recovers the burst after two minutes. Sweep jobs are not delayed.
+The values are `burstWait` in `modules/bot/live.ts`.
+
 ## Reply gate
 
 Whether the Bot may send its next reply is decided in one place,

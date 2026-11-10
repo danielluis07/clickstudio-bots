@@ -61,6 +61,7 @@ const setup = async ({ sender = true } = {}) => {
   }))!;
   const whatsapp = createTestWhatsAppSender();
   const worker = createLiveBot({
+    burst: null,
     db,
     clock,
     model: {

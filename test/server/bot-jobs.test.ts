@@ -30,6 +30,7 @@ beforeAll(async () => {
     sentAt: clock.now(),
   }))!;
   const bot = createLiveBot({
+    burst: null,
     db,
     clock,
     model: null,
@@ -81,6 +82,7 @@ test("a failed Bot job reports its error class, Conversation and Tenant without 
   const failing = createBotJobRoute(
     {
       bot: createLiveBot({
+        burst: null,
         db,
         clock,
         model: null,
