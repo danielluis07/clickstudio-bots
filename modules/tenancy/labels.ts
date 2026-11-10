@@ -1,7 +1,9 @@
-const memberRoleLabels: Record<string, string> = {
+import type { MemberRole } from "@/modules/tenancy/scope";
+
+const memberRoleLabels: Record<MemberRole, string> = {
   owner: "Responsável",
   admin: "Administrador(a)",
   member: "Membro",
 };
 
-export const memberRoleLabel = (role: string) => memberRoleLabels[role] ?? role;
+export const memberRoleLabel = (role: MemberRole) => memberRoleLabels[role];
