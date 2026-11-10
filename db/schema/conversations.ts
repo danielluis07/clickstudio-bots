@@ -1,5 +1,13 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { id, timestamps } from "@/db/columns";
 import { channel } from "@/db/schema/channels";
 import { member, organization } from "@/db/schema/tenancy";
@@ -139,6 +147,8 @@ export const message = pgTable(
     authorMemberId: text("author_member_id").references(() => member.id, { onDelete: "set null" }),
     // Delivery of an outbound message; null for inbound ones. Only moves forward.
     status: text("status", { enum: ["pending", "sent", "delivered", "read", "failed"] }),
+    // Meta's error code for a `failed` delivery status, when it gave one.
+    failureCode: integer("failure_code"),
     // Media keeps only its kind and optional caption, never the attachment.
     type: text("type", {
       enum: ["text", "audio", "image", "video", "document", "sticker", "unsupported"],
@@ -213,6 +223,7 @@ export const earlyMessageStatus = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     wamid: text("wamid").notNull(),
     status: text("status", { enum: ["sent", "delivered", "read", "failed"] }).notNull(),
+    failureCode: integer("failure_code"),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
   },
   (t) => [

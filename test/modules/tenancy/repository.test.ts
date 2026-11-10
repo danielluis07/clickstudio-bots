@@ -111,7 +111,7 @@ describe("Tenant-scoped data access", () => {
       ["earlier-member", "member"],
       ["owner-b", "owner"],
       ["owner-a", "owner"],
-    ]) {
+    ] as const) {
       await db.insert(user).values({ id, name: id, email: `${id}@a.example` });
       await db.insert(member).values({
         id,

@@ -20,10 +20,7 @@ export const getWhatsAppSignupConfig = () => {
   };
 };
 
-// Callers treat a throw as "WhatsApp unavailable" and discard it. Missing
-// configuration is expected locally; configuration that is present but
-// invalid (malformed keys) is recorded, or every send would fail unseen.
-export const createWhatsAppGateway = () => {
+const buildWhatsAppAdapter = () => {
   if (!getWhatsAppSignupConfig()) throw new Error("WhatsApp is not configured");
   try {
     return createWhatsAppAdapter({
@@ -37,4 +34,23 @@ export const createWhatsAppGateway = () => {
     logError("whatsapp_configuration_invalid", error);
     throw error;
   }
+};
+
+// The environment never changes while the process runs, so the adapter, or
+// the reason there is none, is settled on first use.
+let built: { adapter: ReturnType<typeof createWhatsAppAdapter> } | { error: unknown } | undefined;
+
+// Callers treat a throw as "WhatsApp unavailable" and discard it. Missing
+// configuration is expected locally; configuration that is present but
+// invalid (malformed keys) is recorded, or every send would fail unseen.
+export const createWhatsAppGateway = () => {
+  if (!built) {
+    try {
+      built = { adapter: buildWhatsAppAdapter() };
+    } catch (error) {
+      built = { error };
+    }
+  }
+  if ("error" in built) throw built.error;
+  return built.adapter;
 };

@@ -1,8 +1,8 @@
 import { RemoveMemberButton } from "@/components/dashboard/remove-member-button";
-import { memberRoleLabel } from "@/modules/tenancy";
+import { memberRoleLabel, type MemberRole } from "@/modules/tenancy";
 
 type MemberListProps = {
-  members: { id: string; name: string; email: string; role: string }[];
+  members: { id: string; name: string; email: string; role: MemberRole }[];
   // Shown to the owner, who is the only one allowed to remove Members.
   canRemove: boolean;
 };

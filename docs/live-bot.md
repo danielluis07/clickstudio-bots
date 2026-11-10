@@ -98,7 +98,9 @@ fenced by its lease and publishes an inbox notification.
 
 Reservation atomically fences out expired holders and rechecks eligibility and
 the service window. It uses the same SQL predicates as the gate
-(`modules/conversations/bot-turns.ts`), so the two cannot disagree.
+(`modules/conversations/bot-turns.ts`, with the service window from
+`modules/conversations/repository.ts`, which the dashboard shares), so the two
+cannot disagree.
 It inserts a pending Bot message and marks the snapshot's Contact messages
 covered before calling Meta. A Model-requested Handoff is persisted in that same
 reservation, so a crash after sending cannot lose the ownership change.

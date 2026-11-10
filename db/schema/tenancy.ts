@@ -20,6 +20,10 @@ export const organization = pgTable(
   (t) => [index("organization_canceled_at_idx").on(t.canceledAt)],
 );
 
+// The organization plugin's default roles and invitation statuses.
+export const memberRoles = ["owner", "admin", "member"] as const;
+const invitationStatuses = ["pending", "accepted", "rejected", "canceled"] as const;
+
 export const member = pgTable(
   "member",
   {
@@ -30,7 +34,7 @@ export const member = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    role: text("role").notNull().default("member"),
+    role: text("role", { enum: memberRoles }).notNull().default("member"),
     ...timestamps(),
   },
   (t) => [
@@ -47,8 +51,8 @@ export const invitation = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
-    role: text("role"),
-    status: text("status").notNull().default("pending"),
+    role: text("role", { enum: memberRoles }),
+    status: text("status", { enum: invitationStatuses }).notNull().default("pending"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     inviterId: text("inviter_id")
       .notNull()

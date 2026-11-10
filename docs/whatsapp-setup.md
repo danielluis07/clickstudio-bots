@@ -105,8 +105,9 @@ Architecture: [ADR 0002](adr/0002-serverless-only-with-qstash-and-postgres-lease
 `POST /api/webhooks/whatsapp` checks `X-Hub-Signature-256` against the app secret
 and rejects a bad signature with 401, storing nothing. It splits a valid delivery
 into one `inbox_event` row per message, status or other change. Each row is keyed by
-`<field>:<wamid>` when that wamid identifies the event, otherwise by a hash of the
-event. A status, edit or revoke only refers to a message, so it is hashed. Several
+`<field>:<phone-number-id>:<wamid>` when that wamid identifies the event, otherwise
+by a hash of the event. Meta does not promise a wamid is unique across numbers, so
+the same wamid on two numbers stays two events. A status, edit or revoke only refers to a message, so it is hashed. Several
 statuses about one message therefore stay separate events. Redelivering an event,
 in any batch, never stores it twice.
 
@@ -130,13 +131,25 @@ see #61). Processing is idempotent, so QStash retries and duplicate jobs are
 safe. A job that keeps failing goes to QStash's dead-letter queue; inspecting
 and replaying those uses the [internal recovery view](inbox-operations.md).
 
-A delivery status moves its outbound message's status forward, never back. Meta's
+A delivery status moves its outbound message's status forward, never back. A
+`failed` status keeps Meta's first error code in `failure_code`, and the inbox
+shows it with a Portuguese reason for the common ones. Meta's
 first status can be processed before the platform stores the wamid Meta answered
 the send with (#146). Such a status settles as `processed` and is kept in
 `early_message_status`, under the same per-wamid lock that storing the wamid
 takes. Storing the wamid, from a send's answer or an app echo, applies it. Early
 statuses whose wamid is never stored are dropped by the daily `prune-early-statuses`
 task after a day.
+
+### Message order
+
+A Conversation shows its messages by `sent_at`, then by insertion (`id`, a
+UUIDv7). Meta's timestamps have one-second precision, and each event is
+processed by its own job, so two Contact messages sent within the same second
+can show, and reach the Bot's turn, in either order. Meta gives nothing finer to
+order them by, and a swap inside one second rarely changes meaning, so this is
+accepted. Dashboard and Bot replies take the server clock in milliseconds and
+are not affected.
 
 ### Coexistence echoes, edits and revokes
 

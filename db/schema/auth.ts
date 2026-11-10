@@ -14,7 +14,7 @@ export const user = pgTable("user", {
   role: userRoleEnum("role").notNull().default("user"),
   banned: boolean("banned").notNull().default(false),
   banReason: text("ban_reason"),
-  banExpires: timestamp("ban_expires"),
+  banExpires: timestamp("ban_expires", { withTimezone: true }),
   ...timestamps(),
 });
 
@@ -22,7 +22,7 @@ export const session = pgTable(
   "session",
   {
     id: id(),
-    expiresAt: timestamp("expires_at").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     token: text("token").notNull().unique(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
@@ -48,8 +48,8 @@ export const account = pgTable(
     accessToken: text("access_token"),
     refreshToken: text("refresh_token"),
     idToken: text("id_token"),
-    accessTokenExpiresAt: timestamp("access_token_expires_at"),
-    refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
     scope: text("scope"),
     password: text("password"),
     ...timestamps(),
@@ -66,7 +66,7 @@ export const verification = pgTable(
     id: id(),
     identifier: text("identifier").notNull(),
     value: text("value").notNull(),
-    expiresAt: timestamp("expires_at").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     ...timestamps(),
   },
   (t) => [index("verification_identifier_idx").on(t.identifier)],

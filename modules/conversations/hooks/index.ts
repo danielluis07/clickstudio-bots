@@ -14,6 +14,7 @@ export {
   messageAuthorLabel,
   messageEditedLabel,
   messageDisplayText,
+  messageFailureReason,
   messagePlaceholder,
   messageStatusLabels,
 } from "@/modules/conversations/hooks/message-display";

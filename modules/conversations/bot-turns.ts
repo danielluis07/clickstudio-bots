@@ -28,7 +28,7 @@ import {
 } from "@/modules/conversations/handoff";
 import {
   createConversationRepository,
-  serviceWindowHours,
+  serviceWindowOpen,
 } from "@/modules/conversations/repository";
 import type { WhatsAppSender } from "@/modules/conversations/whatsapp-sender";
 import type { Clock } from "@/platform/clock";
@@ -111,14 +111,6 @@ const botEligible = sql`(${conversation.owner} = 'bot' and exists(
   and exists(select 1 from ${organization} where ${organization.id} = ${channel.tenantId}
     and ${organization.canceledAt} is null)
 ))`;
-
-// WhatsApp's service window for the Bot, opened by the Contact's latest live
-// message. Imported history never reopens it.
-const serviceWindowOpen = (now: Date) => sql`exists(
-  select 1 from ${message} where ${message.conversationId} = ${conversation.id}
-  and ${message.origin} = 'contact' and not ${message.imported}
-  and ${message.sentAt} > ${now.toISOString()}::timestamptz - make_interval(hours => ${serviceWindowHours})
-)`;
 
 // Only verified jobs and daily maintenance call this resolver. It derives
 // proof from the stored Channel phone-number-id, never a request's Tenant id.

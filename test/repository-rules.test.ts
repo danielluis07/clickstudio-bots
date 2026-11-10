@@ -16,3 +16,11 @@ test("the main ruleset requires the check name published by the CI workflow", as
   for (const { context } of statusRule.parameters.required_status_checks)
     expect(contexts).toContain(context);
 });
+
+// The direct `@better-auth/core` pin keeps one copy of it in the lockfile, so
+// `better-auth`, which pins its own core exactly, must move with it.
+test("better-auth and @better-auth/core are pinned to one exact version", async () => {
+  const { dependencies } = await Bun.file(`${import.meta.dir}/../package.json`).json();
+  expect(dependencies["better-auth"]).toMatch(/^\d+\.\d+\.\d+$/);
+  expect(dependencies["@better-auth/core"]).toBe(dependencies["better-auth"]);
+});

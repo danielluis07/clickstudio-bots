@@ -37,7 +37,9 @@ const historyThreads = (item: unknown): unknown[] => {
 };
 
 // Arrays that batch several events inside one change, per webhook field.
-// Items of `byWamid` arrays are identified by their own wamid; a status only
+// Items of `byWamid` arrays are identified by their own wamid on the number
+// that received or sent them, since Meta does not promise a wamid is unique
+// across numbers; a status only
 // refers to a message, so many distinct statuses share one wamid. `split`
 // divides an item further.
 const eventArrays: Record<
@@ -109,8 +111,8 @@ export const splitDelivery = (delivery: unknown): InboxEventInput[] => {
           const { id, type } = itemSchema.catch({}).parse(item);
           return {
             dedupeKey:
-              byWamid && id && !referencingTypes.has(type ?? "")
-                ? `${field}:${id}`
+              byWamid && id && phoneNumberId && !referencingTypes.has(type ?? "")
+                ? `${field}:${phoneNumberId}:${id}`
                 : hashKey({ field, phoneNumberId, [key]: item }),
             field,
             phoneNumberId,
@@ -205,6 +207,11 @@ const statusEventSchema = z.object({
       z.object({
         id: z.string().min(1),
         status: z.enum(["sent", "delivered", "read", "failed"]),
+        // Why Meta could not deliver it; only a failed status carries it.
+        errors: z
+          .array(z.object({ code: z.number().int() }))
+          .optional()
+          .catch(undefined),
       }),
     ]),
   }),
@@ -214,8 +221,12 @@ const statusEventSchema = z.object({
 export const readMessageStatus = (payload: unknown): MessageStatusUpdate | null => {
   const parsed = statusEventSchema.safeParse(payload);
   if (!parsed.success) return null;
-  const [{ id, status }] = parsed.data.value.statuses;
-  return { wamid: id, status };
+  const [{ id, status, errors }] = parsed.data.value.statuses;
+  return {
+    wamid: id,
+    status,
+    failureCode: status === "failed" ? (errors?.[0]?.code ?? null) : null,
+  };
 };
 
 const messageEchoEventSchema = z.object({

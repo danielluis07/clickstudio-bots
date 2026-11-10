@@ -1,6 +1,8 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import type { Database } from "@/db/database";
-import { member, organization } from "@/db/schema";
+import { member, organization, type memberRoles } from "@/db/schema";
+
+export type MemberRole = (typeof memberRoles)[number];
 
 declare const tenantScopeBrand: unique symbol;
 
@@ -10,7 +12,7 @@ export type TenantScope = {
   readonly tenantId: string;
   readonly userId: string;
   readonly memberId: string;
-  readonly role: string;
+  readonly role: MemberRole;
   readonly [tenantScopeBrand]: true;
 };
 
