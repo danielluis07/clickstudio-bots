@@ -202,6 +202,7 @@ export const sweepRoute = createSweepRoute({
   diagnostics,
   tasks: [
     { name: "requeue-inbox-events", run: async () => webhookInbox?.requeueStalled() },
+    { name: "retry-failed-inbox-events", run: async () => webhookInbox?.retryFailed() },
     { name: "sweep-bot-turns", run: async () => liveBot?.sweep() },
   ],
 });

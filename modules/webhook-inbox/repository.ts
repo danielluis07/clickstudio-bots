@@ -22,7 +22,8 @@ export const createInboxRepository = (db: Database) => ({
   },
 
   // Pending events received by `receivedBy` that never failed, or whose last
-  // failure was by `failedBy`. Oldest first, from the (status, received_at) index.
+  // failure and last replay were both by `failedBy`. Oldest first, from the
+  // (status, received_at) index.
   async listPendingBefore(
     { receivedBy, failedBy }: { receivedBy: Date; failedBy: Date },
     limit: number,
@@ -35,11 +36,74 @@ export const createInboxRepository = (db: Database) => ({
           eq(inboxEvent.status, "pending"),
           lte(inboxEvent.receivedAt, receivedBy),
           or(isNull(inboxEvent.failedAt), lte(inboxEvent.failedAt, failedBy)),
+          or(isNull(inboxEvent.retriedAt), lte(inboxEvent.retriedAt, failedBy)),
         ),
       )
       .orderBy(asc(inboxEvent.receivedAt), asc(inboxEvent.id))
       .limit(limit);
     return found.map(({ id }) => id);
+  },
+
+  // Failed, unalerted events due for automatic replay number `n`: those with
+  // `n` replays so far whose last failure was by `failedBy[n]`. Oldest first.
+  async listRetryDue(failedBy: readonly Date[], limit: number) {
+    const found = await db
+      .select({ id: inboxEvent.id })
+      .from(inboxEvent)
+      .where(
+        and(
+          eq(inboxEvent.status, "failed"),
+          isNull(inboxEvent.alertedAt),
+          or(
+            ...failedBy.map((cutoff, retries) =>
+              and(eq(inboxEvent.autoRetries, retries), lte(inboxEvent.failedAt, cutoff)),
+            ),
+          ),
+        ),
+      )
+      .orderBy(asc(inboxEvent.receivedAt), asc(inboxEvent.id))
+      .limit(limit);
+    return found.map(({ id }) => id);
+  },
+
+  // Puts failed events back to pending for one more automatic replay. Returns
+  // the ids it moved, so a concurrent sweep cannot count a replay twice.
+  async markRetried(ids: string[], retriedAt: Date) {
+    if (ids.length === 0) return [];
+    const moved = await db
+      .update(inboxEvent)
+      .set({
+        status: "pending",
+        retriedAt,
+        autoRetries: sql`${inboxEvent.autoRetries} + 1`,
+      })
+      .where(
+        and(
+          inArray(inboxEvent.id, ids),
+          eq(inboxEvent.status, "failed"),
+          isNull(inboxEvent.alertedAt),
+        ),
+      )
+      .returning({ id: inboxEvent.id });
+    return moved.map(({ id }) => id);
+  },
+
+  // An administrator's bulk replay: puts listed failures (all of them, or the
+  // given ids) back to pending with a fresh set of automatic replays and a
+  // fresh alert. Returns the ids it moved.
+  async resetFailures(ids: string[] | null, retriedAt: Date) {
+    const moved = await db
+      .update(inboxEvent)
+      .set({ status: "pending", retriedAt, autoRetries: 0, alertedAt: null })
+      .where(
+        and(
+          inArray(inboxEvent.status, ["pending", "failed"]),
+          isNotNull(inboxEvent.errorClass),
+          ids ? inArray(inboxEvent.id, ids) : undefined,
+        ),
+      )
+      .returning({ id: inboxEvent.id });
+    return moved.map(({ id }) => id);
   },
 
   async find(id: string) {
@@ -65,6 +129,8 @@ export const createInboxRepository = (db: Database) => ({
         errorClass: inboxEvent.errorClass,
         receivedAt: inboxEvent.receivedAt,
         failedAt: inboxEvent.failedAt,
+        alertedAt: inboxEvent.alertedAt,
+        autoRetries: inboxEvent.autoRetries,
       })
       .from(inboxEvent)
       .where(
@@ -98,7 +164,7 @@ export const createInboxRepository = (db: Database) => ({
           isNull(inboxEvent.alertedAt),
         ),
       )
-      .returning({ errorClass: inboxEvent.errorClass });
+      .returning({ errorClass: inboxEvent.errorClass, autoRetries: inboxEvent.autoRetries });
     return failed ?? null;
   },
 

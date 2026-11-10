@@ -1,4 +1,4 @@
-import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { id } from "@/db/columns";
 import { errorClasses } from "@/platform/diagnostics";
 
@@ -19,6 +19,10 @@ export const inboxEvent = pgTable(
     errorClass: text("error_class", { enum: errorClasses }),
     failedAt: timestamp("failed_at", { withTimezone: true }),
     alertedAt: timestamp("alerted_at", { withTimezone: true }),
+    // Automatic replays of a failed event so far, and when the latest one, or
+    // an administrator's bulk replay, put it back on the queue (#135).
+    autoRetries: integer("auto_retries").notNull().default(0),
+    retriedAt: timestamp("retried_at", { withTimezone: true }),
     ignoredReason: text("ignored_reason", { enum: ["unknown_channel", "unsupported_event"] }),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
     processedAt: timestamp("processed_at", { withTimezone: true }),

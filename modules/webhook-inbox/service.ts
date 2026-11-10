@@ -38,6 +38,14 @@ const stalledAfterMs = 5 * 60_000;
 const stalledAfterFailureMs = 35 * 60_000;
 // Bounds one sweep; the next one continues where it stopped.
 const stalledPerSweep = 100;
+// Automatic replays of a failed event (#135), each measured from the failure
+// before it and each a full QStash delivery with its own retries. Together
+// they outlast an outage of several hours and alert well inside WhatsApp's
+// 24-hour service window. After the last one, the event waits for a person.
+export const autoRetryDelaysMs = [10 * 60_000, 60 * 60_000, 4 * 60 * 60_000] as const;
+const retriedPerSweep = 100;
+// QStash takes a batch of jobs per request; a bulk replay sends several.
+const enqueueBatchSize = 100;
 
 // The inbox-first delivery contract of ADR 0002: store each signed event once,
 // enqueue it, and only then acknowledge the delivery.
@@ -59,6 +67,15 @@ export const createWebhookInbox = ({
   bot?: Pick<LiveBot, "enqueue"> | null;
 }) => {
   const repository = createInboxRepository(db);
+
+  const enqueue = async (ids: string[]) => {
+    for (let start = 0; start < ids.length; start += enqueueBatchSize)
+      await queue.enqueue(
+        ids
+          .slice(start, start + enqueueBatchSize)
+          .map((inboxEventId) => ({ type: "process-inbox-event" as const, inboxEventId })),
+      );
+  };
 
   // Records what the event carries under the route's Tenant; null when it
   // carries nothing the platform handles yet.
@@ -189,7 +206,8 @@ export const createWebhookInbox = ({
 
     // The sweep: re-enqueues pending events whose job was lost, for example
     // with its failure callback. Processing is idempotent, so a job that was
-    // only slow costs a duplicate delivery. Failed events wait for a replay.
+    // only slow costs a duplicate delivery. Failed events wait for
+    // `retryFailed` or an administrator.
     async requeueStalled() {
       const now = clock.now().getTime();
       const ids = await repository.listPendingBefore(
@@ -199,15 +217,29 @@ export const createWebhookInbox = ({
         },
         stalledPerSweep,
       );
-      await queue.enqueue(
-        ids.map((inboxEventId) => ({ type: "process-inbox-event" as const, inboxEventId })),
-      );
+      await enqueue(ids);
       return ids.length;
     },
 
+    // The sweep: replays failed events whose next automatic replay is due, by
+    // putting them back to pending and on the queue. If the enqueue fails, the
+    // stalled-event scan picks them up 35 minutes later.
+    async retryFailed() {
+      const now = clock.now().getTime();
+      const ids = await repository.listRetryDue(
+        autoRetryDelaysMs.map((delay) => new Date(now - delay)),
+        retriedPerSweep,
+      );
+      const moved = await repository.markRetried(ids, clock.now());
+      await enqueue(moved);
+      return moved.length;
+    },
+
+    // QStash's failure callback. An event with automatic replays left stays
+    // quiet: the sweep replays it. Only the last failure alerts.
     async fail(inboxEventId: string, jobId: string) {
       const failed = await repository.fail(inboxEventId, clock.now());
-      if (!failed) return;
+      if (!failed || failed.autoRetries < autoRetryDelaysMs.length) return;
       await diagnostics?.alert({
         kind: "inbox_dead_letter",
         inboxEventId,
@@ -220,10 +252,37 @@ export const createWebhookInbox = ({
     async listFailures(actorId: string, page = 1) {
       if (!(await isPlatformAdmin(db, actorId)))
         return { ok: false as const, error: "forbidden" as const };
-      const failures = await repository.listFailures(
+      const { events, hasMore } = await repository.listFailures(
         Number.isSafeInteger(page) && page >= 1 ? page : 1,
       );
-      return { ok: true as const, ...failures };
+      return {
+        ok: true as const,
+        hasMore,
+        events: events.map(({ alertedAt, ...event }) => {
+          const delay: number | undefined = autoRetryDelaysMs[event.autoRetries];
+          const lastFailure = event.status === "failed" && !alertedAt ? event.failedAt : null;
+          return {
+            ...event,
+            nextAutoRetryAt:
+              lastFailure && delay !== undefined ? new Date(lastFailure.getTime() + delay) : null,
+          };
+        }),
+      };
+    },
+
+    // Puts the given listed failures, or all of them, back on the queue with a
+    // fresh set of automatic replays. Takes event ids only: each job resolves
+    // its Tenant from the stored event, as any other.
+    async replayFailures(actorId: string, inboxEventIds?: readonly string[]) {
+      if (!(await isPlatformAdmin(db, actorId)))
+        return { ok: false as const, error: "forbidden" as const };
+      if (inboxEventIds?.length === 0) return { ok: true as const, requeued: 0 };
+      const moved = await repository.resetFailures(
+        inboxEventIds ? [...inboxEventIds] : null,
+        clock.now(),
+      );
+      await enqueue(moved);
+      return { ok: true as const, requeued: moved.length };
     },
 
     async replay(actorId: string, inboxEventId: string) {

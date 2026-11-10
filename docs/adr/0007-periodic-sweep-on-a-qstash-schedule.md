@@ -3,8 +3,11 @@
 A sweep runs every five minutes and puts stuck work back on the queue (#134). A QStash schedule with the fixed id `sweep` calls `POST /api/jobs/sweep`. The route runs only for a QStash signature bound to that exact URL, verified the same way as the job routes. Each run does three things:
 
 - It re-enqueues `pending` inbox events received at least five minutes earlier, or, for an event whose job already failed, at least 35 minutes after the last failure.
+- It replays failed inbox events automatically, up to three times with backoff, before they alert and wait for an administrator (#135).
 - It recovers Bot turns whose lease expired.
 - It re-enqueues Bot-owned, eligible Conversations with no live lease whose newest unanswered Contact message is between two minutes and one hour old and passes the reply gate.
+
+Automatic replay lives in the sweep rather than in a task of its own, for the same reason the sweep is the only recovery mechanism: one schedule, one authenticated endpoint, and the same failure boundaries. The Sentry alert moves from the first failure callback to the one after the last automatic replay.
 
 Each scan handles at most 100 rows, and every step stays idempotent (ADR 0002). This is a third QStash-delivered endpoint beside ADR 0002's two job kinds, and it amends that ADR's recovery story. Before the sweep, a turn whose job ran out of retries waited for the Contact to write again, a crashed turn waited for the daily cron, and an event whose failure callback was lost stayed `pending` until it was pruned.
 

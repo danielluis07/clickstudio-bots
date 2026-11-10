@@ -17,7 +17,11 @@ export function FailedInboxEventRow({ event }: { event: FailurePage["events"][nu
       <TableCell className="font-mono">{event.id}</TableCell>
       <TableCell>{event.errorClass}</TableCell>
       <TableCell>
-        {event.status === "failed" ? "Tentativas esgotadas" : "Aguardando nova tentativa"}
+        {event.status === "pending"
+          ? "Aguardando nova tentativa"
+          : event.nextAutoRetryAt
+            ? `Nova tentativa automática em ${dateFormat.format(event.nextAutoRetryAt)}`
+            : "Tentativas esgotadas"}
       </TableCell>
       <TableCell>{dateFormat.format(event.receivedAt)}</TableCell>
       <TableCell>{event.failedAt ? dateFormat.format(event.failedAt) : "—"}</TableCell>
