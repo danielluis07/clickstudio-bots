@@ -39,8 +39,7 @@ store. To rotate, add a new key and change the active version; retain every old
 version while stored Channels still use it. Removing an old key prevents those
 Channels from authenticating. Restore that key before retrying their subscription.
 
-Run `bun run db:migrate` against the direct database endpoint before deploying the
-new code. The migration adds a Channel table with unique Tenant, WABA and
+CI applies the migration in production before the new code serves ([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)). The migration adds a Channel table with unique Tenant, WABA and
 phone-number IDs. It does not modify existing Tenant data. A Tenant's Channel is
 deleted when its Tenant is deleted.
 
@@ -178,7 +177,7 @@ direction. Changes never move a Conversation's latest activity.
 
 Issue: [#49](https://github.com/danielluis07/clickstudio-bots/issues/49).
 
-Run `bun run db:migrate` before deploying. The migration adds the Channel's
+CI applies the migration in production before the new code serves ([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)). The migration adds the Channel's
 `contacts_sync` and `history_sync` states (default `pending`), the Contact's
 `app_name` and `app_name_changed_at`, and the message's `imported` flag
 (default `false`). Existing rows keep their data.
@@ -225,7 +224,7 @@ Contact's wa_id are ignored.
 
 Issue: [#145](https://github.com/danielluis07/clickstudio-bots/issues/145).
 
-Run `bun run db:migrate` before deploying. The migration adds the Channel's
+CI applies the migration in production before the new code serves ([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)). The migration adds the Channel's
 `health` (default `healthy`), `health_changed_at`, `health_alerted_at` and
 `restricted_until`.
 

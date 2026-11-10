@@ -58,6 +58,6 @@ changes.
 
 ## Deployment
 
-Run `bun run db:migrate` before deploying. The migration adds the
+CI applies the migration in production before the new code serves ([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)). The migration adds the
 `bot_settings` table (one row per Tenant, created on the first save) and does
 not change existing data.

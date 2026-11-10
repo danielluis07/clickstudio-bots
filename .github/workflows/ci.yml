@@ -53,6 +53,13 @@ jobs:
       - name: Test
         run: bun run test
 
+      # Cache Components reports some errors only at build time (ADR 0006).
+      - name: Build
+        run: bun run build
+
+      - name: Dependency audit
+        run: bun audit --audit-level=high
+
   postgres:
     name: Real Postgres Bot turns
     runs-on: ubuntu-latest
@@ -95,3 +102,36 @@ jobs:
           api_key: ${{ secrets.NEON_API_KEY }}
           project_id: ${{ vars.NEON_PROJECT_ID }}
           branch: ${{ steps.branch.outputs.branch_id }}
+
+  # Applies pending migrations to production before Vercel promotes the new
+  # deployment. Vercel Deployment Checks require this job, so a failed
+  # migration leaves the previous deployment serving (ADR 0009).
+  migrate:
+    name: Migrate production
+    needs: [check, postgres]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production-database
+    # Never run two migrations at once, and never cancel one halfway.
+    concurrency:
+      group: production-migrations
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_DIRECT_URL }}
+      # Placeholders so env validation passes; drizzle-kit reads only DATABASE_URL.
+      BETTER_AUTH_SECRET: ci-secret
+      APP_URL: http://localhost:3000
+      RESEND_API_KEY: ci-resend-key
+      EMAIL_FROM: ci@example.com
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Require the production connection string
+        run: |
+          test -n "$DATABASE_URL" || { echo 'Configure the PRODUCTION_DATABASE_DIRECT_URL secret on the production-database environment.'; exit 1; }
+      - name: Apply migrations
+        run: bun run db:migrate

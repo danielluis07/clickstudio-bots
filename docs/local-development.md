@@ -84,9 +84,11 @@ The active [Require PR and CI on main ruleset](https://github.com/danielluis07/c
 targets only `refs/heads/main`. Its request payload is tracked in
 [`.github/rulesets/main.json`](../.github/rulesets/main.json).
 
-The rule requires a pull request and a successful `check` context published by
-GitHub Actions (integration id 15368), with the branch tested against the latest
-base. It requires zero approving reviews, so a solo maintainer can merge after CI
+The rule requires a pull request and successful `check` and
+`Real Postgres Bot turns` contexts published by GitHub Actions (integration id
+15368), with the branch tested against the latest base. Pull requests from forks
+skip `Real Postgres Bot turns`, because they cannot read the Neon secret; a
+skipped job still satisfies the rule. It requires zero approving reviews, so a solo maintainer can merge after CI
 passes. No bypass actors are configured.
 
 The JSON file documents the setting; committing it does not apply GitHub rules.

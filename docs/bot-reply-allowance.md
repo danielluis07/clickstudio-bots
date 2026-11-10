@@ -86,7 +86,7 @@ concurrent turns).
 
 ## Deployment
 
-Run `bun run db:migrate` before deploying. The production wiring lives in
+CI applies the migration in production before the new code serves ([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)). The production wiring lives in
 `server/services.ts`. Public behavior tests are in
 `test/modules/bot/allowance.test.ts`, `test/modules/bot/live.test.ts`,
 `test/trpc/router.test.ts`, and `test/components/bot-usage.test.tsx`.
