@@ -38,6 +38,9 @@ const stalledAfterMs = 5 * 60_000;
 const stalledAfterFailureMs = 35 * 60_000;
 // Bounds one sweep; the next one continues where it stopped.
 const stalledPerSweep = 100;
+// Past two requeues, a pending event that never failed means the queue is not
+// draining (#137). Failed events alert on their own, after their last replay.
+export const staleQueueAfterMs = 15 * 60_000;
 // Automatic replays of a failed event (#135), each measured from the failure
 // before it and each a full QStash delivery with its own retries. Together
 // they outlast an outage of several hours and alert well inside WhatsApp's
@@ -215,6 +218,18 @@ export const createWebhookInbox = ({
       );
       await enqueue(ids);
       return ids.length;
+    },
+
+    // The sweep: alerts while the oldest pending event that never failed is
+    // older than `staleQueueAfterMs`. Returns its age in seconds, or null.
+    async alertStaleQueue() {
+      const oldest = await repository.oldestPendingReceivedAt();
+      if (!oldest) return null;
+      const ageMs = clock.now().getTime() - oldest.getTime();
+      if (ageMs < staleQueueAfterMs) return null;
+      const ageSeconds = Math.floor(ageMs / 1000);
+      await diagnostics?.alert({ kind: "inbox_queue_stale", ageSeconds });
+      return ageSeconds;
     },
 
     // The sweep: replays failed events whose next automatic replay is due, by

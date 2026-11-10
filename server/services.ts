@@ -26,6 +26,8 @@ import {
   createCaptureSettingsEditor,
   createLinkSettingsEditor,
   createLiveBot,
+  alertBotHandoffSpikes,
+  pruneBotTurnRecords,
 } from "@/modules/bot";
 import { createBotModel } from "@/platform/ai-sdk-model";
 import { createWhatsAppGateway } from "@/server/whatsapp";
@@ -109,8 +111,6 @@ export const liveBot = queue
       queue,
       notifier,
       getSender: createWhatsAppGateway,
-      // Production cost reporting is separate from the acknowledged reply allowance.
-      meter: { record: async () => {} },
       allowance: botAllowance,
     })
   : null;
@@ -186,6 +186,7 @@ export const dailyCronRoute = createDailyCronRoute({
     { name: "delete-canceled-tenants", run: () => pruneCanceledTenants(db, systemClock) },
     { name: "prune-inbox", run: () => pruneInboxEvents(db, systemClock) },
     { name: "retry-reply-warnings", run: () => botAllowance.retryWarnings() },
+    { name: "prune-bot-turn-records", run: () => pruneBotTurnRecords(db, systemClock) },
   ],
 });
 
@@ -206,6 +207,11 @@ export const sweepRoute = createSweepRoute({
     { name: "requeue-inbox-events", run: async () => webhookInbox?.requeueStalled() },
     { name: "retry-failed-inbox-events", run: async () => webhookInbox?.retryFailed() },
     { name: "sweep-bot-turns", run: async () => liveBot?.sweep() },
+    { name: "alert-stale-inbox", run: async () => webhookInbox?.alertStaleQueue() },
+    {
+      name: "alert-bot-handoff-spikes",
+      run: () => alertBotHandoffSpikes({ db, clock: systemClock, diagnostics }),
+    },
   ],
 });
 

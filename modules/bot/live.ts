@@ -2,10 +2,10 @@ import type { Database } from "@/db/database";
 import { readBotConfiguration } from "@/modules/bot/configuration";
 import { recordBotReplyUsage } from "@/modules/bot/allowance";
 import { liveTurnContext } from "@/modules/bot/context";
-import { createBotCore } from "@/modules/bot/turn";
+import { createBotCore, type TurnTokens } from "@/modules/bot/turn";
 import { createReplyGate, type BotAllowance, type ReplyDecision } from "@/modules/bot/reply-gate";
 import type { Model } from "@/modules/bot/model";
-import type { UsageMeter } from "@/modules/bot/usage";
+import { recordBotTurn, type BotTurnRecord } from "@/modules/bot/turn-records";
 import type { ChannelRoute } from "@/modules/channels";
 import {
   hasUnansweredContactMessages,
@@ -18,7 +18,7 @@ import {
   type WhatsAppSender,
 } from "@/modules/conversations";
 import type { Clock } from "@/platform/clock";
-import { annotateError } from "@/platform/diagnostics";
+import { annotateError, logError } from "@/platform/diagnostics";
 import type { Notifier } from "@/platform/notifier";
 
 export type BotJob = { type: "run-bot-turn"; conversationId: string };
@@ -43,7 +43,6 @@ export const createLiveBot = ({
   queue,
   notifier,
   getSender,
-  meter,
   allowance,
 }: {
   db: Database;
@@ -52,7 +51,6 @@ export const createLiveBot = ({
   queue: BotJobQueue;
   notifier: Notifier;
   getSender: () => WhatsAppSender;
-  meter: UsageMeter;
   allowance: BotAllowance;
 }) => {
   const gate = createReplyGate({ db, clock, allowance });
@@ -62,26 +60,34 @@ export const createLiveBot = ({
       await queue.enqueue([{ type: "run-bot-turn", conversationId }]);
   };
 
-  const respond = async (turn: LiveBotTurn) => {
+  type Ended = {
+    result: "sent" | "skipped" | "handoff";
+    handoffReason?: BotTurnRecord["handoffReason"];
+    tokens?: TurnTokens;
+  };
+
+  const decide = async (turn: LiveBotTurn): Promise<Ended> => {
     const { scope, conversationId } = turn;
     // Every Handoff the gate decides is fenced by this turn's lease.
-    const settle = async (decision: Exclude<ReplyDecision, { kind: "reply" }>) => {
-      if (decision.kind === "skip") return "skipped" as const;
+    const settle = async (
+      decision: Exclude<ReplyDecision, { kind: "reply" }>,
+      tokens?: TurnTokens,
+    ): Promise<Ended> => {
+      if (decision.kind === "skip") return { result: "skipped", tokens };
       await turn.handOff(decision.reason);
-      return "handoff" as const;
+      return { result: "handoff", handoffReason: decision.reason, tokens };
     };
     const context = liveTurnContext(turn.snapshot, clock.now());
     if (!context) {
       await turn.consume();
-      return "skipped" as const;
+      return { result: "skipped" };
     }
     const beforeModel = await gate.check(turn, "beforeModel", model !== null);
     if (beforeModel.kind !== "reply") return settle(beforeModel);
-    if (!model) return "skipped" as const;
+    if (!model) return { result: "skipped" };
     const core = createBotCore({
       model,
       clock,
-      meter,
       repository: {
         getConfiguration: () => readBotConfiguration(db, scope),
         getContactDetails: () => readConversationContactDetails(db, scope, conversationId),
@@ -95,33 +101,59 @@ export const createLiveBot = ({
     const outcome = await core.respond(turn);
     if (outcome.kind === "nothing_to_answer") {
       await turn.consume();
-      return "skipped" as const;
+      return { result: "skipped" };
     }
+    const { tokens } = outcome;
     const sender = await Promise.resolve()
       .then(getSender)
       .catch(() => null);
     // Everything may have changed during the Model call.
     const beforeSend = await gate.check(turn, "beforeSend", sender !== null);
-    if (beforeSend.kind !== "reply") return settle(beforeSend);
-    if (!sender) return "skipped" as const;
+    if (beforeSend.kind !== "reply") return settle(beforeSend, tokens);
+    if (!sender) return { result: "skipped", tokens };
+    const handoffReason = outcome.kind === "handoff" ? outcome.reason : undefined;
     const messageId = await turn.reserve(outcome.reply, {
-      handoffReason: outcome.kind === "handoff" ? outcome.reason : undefined,
+      handoffReason,
       beforeReserve: (tx) => allowance.reserve(tx, turn),
     });
-    if (!messageId) return "skipped" as const;
+    if (!messageId) return { result: "skipped", tokens };
     // A pending row is the durable send barrier. Never retry a send without a wamid.
     const sent = await sender
       .sendText({ ...turn.recipient, text: outcome.reply })
       .catch(() => null);
     if (!sent) {
       await turn.fail();
-      return "handoff" as const;
+      // A Model-requested Handoff, already stored, keeps its reason.
+      return { result: "handoff", handoffReason: handoffReason ?? "bot_indisponivel", tokens };
     }
     const acknowledgedAt = clock.now();
     await turn.acknowledge(messageId, sent.wamid, (tx) =>
       recordBotReplyUsage(tx, scope, acknowledgedAt),
     );
-    return "sent" as const;
+    return { result: "sent", handoffReason, tokens };
+  };
+
+  // Records how every completed turn ended (#137). A turn that throws is
+  // retried by its job and recorded when it completes.
+  const respond = async (turn: LiveBotTurn) => {
+    const startedAt = clock.now();
+    const ended = await decide(turn);
+    const at = clock.now();
+    await recordBotTurn(db, turn.scope, {
+      at,
+      // A Model-requested Handoff may also send a reply; it still counts as a Handoff.
+      outcome: ended.handoffReason ? "handoff" : ended.result,
+      handoffReason: ended.handoffReason,
+      tokens: ended.tokens,
+      durationMs: at.getTime() - startedAt.getTime(),
+    }).catch((error: unknown) =>
+      // A lost record must not fail a turn whose reply was already sent.
+      logError("bot_turn_record_failed", error, {
+        tenantId: turn.scope.tenantId,
+        conversationId: turn.conversationId,
+      }),
+    );
+    return ended.result;
   };
 
   return {

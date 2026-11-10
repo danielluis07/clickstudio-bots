@@ -8,7 +8,6 @@ import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestMailer } from "@/test/support/mailer";
 import { createTestModel } from "@/test/support/model";
 import { createTestNotifier } from "@/test/support/notifier";
-import { createTestUsageMeter } from "@/test/support/bot";
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
 
 let db: Database;
@@ -29,7 +28,6 @@ test("the sweep's recovery scans use their partial indexes", async () => {
     queue: createTestJobQueue<BotJob>(),
     notifier,
     getSender: () => createTestWhatsAppSender(),
-    meter: createTestUsageMeter(),
     allowance: createBotAllowance({ db, clock, mailer: createTestMailer() }),
   });
   const inbox = createWebhookInbox({

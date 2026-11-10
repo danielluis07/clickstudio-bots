@@ -55,7 +55,7 @@ continue even if another task fails; a failed disconnection reports a failed tas
 
 Deletion removes the Tenant, memberships, invitations, legal acceptances, Channel
 and encrypted token, Contacts, Conversations, messages/changes, deletion markers,
-Knowledge base, all Bot settings, activation and usage records. Matching raw inbox
+Knowledge base, all Bot settings, activation, usage and Bot turn records. Matching raw inbox
 events are removed by Channel phone-number-id or WABA id. Unroutable raw events
 remain subject to the existing 30-day inbox retention. Exclusive Member identities,
 accounts, sessions and password-reset verifications are removed. Shared identities
@@ -85,7 +85,8 @@ dataset to the requested Tenant. It includes Member names/emails and roles,
 invitations, legal acceptances, Channel metadata, Contacts and captured details,
 Conversations, messages and edits, Knowledge base, behaviour/capture/link settings,
 activation and usage. It excludes passwords, sessions, reset tokens, encrypted
-Meta credentials, lease tokens, replay barriers and raw webhook payloads.
+Meta credentials, lease tokens, replay barriers, raw webhook payloads and Bot turn
+records, which are the platform's operational metadata (counts only).
 Shared Members' other memberships are never exported.
 
 CSV uses UTF-8, quoted fields, doubled quotes and CRLF row separators; nested

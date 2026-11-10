@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -8,6 +9,7 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
+import { id } from "@/db/columns";
 import { member, organization } from "@/db/schema/tenancy";
 
 // A Tenant's Bot behaviour settings, saved by its owner. Absent until the
@@ -89,6 +91,43 @@ export const botReplyUsage = pgTable(
     warningSentAt: timestamp("warning_sent_at", { withTimezone: true }),
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.period] })],
+);
+
+// One row per live Bot turn (#137): how it ended, what its Model requests
+// cost and how long it took. Counts and codes only, never message text, names
+// or phone numbers, so it survives Contact deletion. Kept 13 months, deleted
+// with the Tenant and left out of the Tenant export.
+export const botTurnRecord = pgTable(
+  "bot_turn_record",
+  {
+    id: id(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    // When the turn finished.
+    at: timestamp("at", { withTimezone: true }).notNull(),
+    // "handoff" whenever the turn handed off, even with a reply sent.
+    outcome: text("outcome", { enum: ["sent", "skipped", "handoff"] }).notNull(),
+    handoffReason: text("handoff_reason", {
+      enum: [
+        "sem_resposta",
+        "pedido_do_contato",
+        "regra_do_negocio",
+        "bot_indisponivel",
+        "limite_atingido",
+      ],
+    }),
+    inputTokens: integer("input_tokens").notNull(),
+    outputTokens: integer("output_tokens").notNull(),
+    cacheReadTokens: integer("cache_read_tokens").notNull(),
+    cacheWriteTokens: integer("cache_write_tokens").notNull(),
+    toolRoundTrips: integer("tool_round_trips").notNull(),
+    durationMs: integer("duration_ms").notNull(),
+  },
+  (t) => [
+    index("bot_turn_record_tenant_id_at_idx").on(t.tenantId, t.at),
+    index("bot_turn_record_at_idx").on(t.at),
+  ],
 );
 
 // Only the test time is retained, never the sandbox transcript.

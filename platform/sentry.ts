@@ -7,6 +7,7 @@ import {
   type NodeOptions,
 } from "@sentry/node";
 import {
+  conditionKinds,
   isUsSentryDsn,
   scrubDiagnostic,
   type Diagnostic,
@@ -43,6 +44,11 @@ const diagnosticOf = (event: ErrorEvent) => {
     : event.tags;
 };
 
+const fingerprintOf = (diagnostic: Diagnostic) =>
+  (conditionKinds as readonly string[]).includes(diagnostic.kind)
+    ? { fingerprint: [diagnostic.kind, diagnostic.tenantId ?? "all"] }
+    : {};
+
 // Rebuilt from the scrubbed Diagnostic alone: nothing the SDK collected on its
 // own (request, user, breadcrumbs, frame variables or context lines) survives.
 // Stack frames are code locations and go to Sentry; messages never do.
@@ -60,6 +66,7 @@ export const scrubSentryEvent = (event: ErrorEvent): ErrorEvent => {
     platform: "node",
     level: "error",
     message: clean.kind,
+    ...fingerprintOf(clean),
     tags: toTags(clean),
     exception: {
       values: [

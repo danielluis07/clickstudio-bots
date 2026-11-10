@@ -129,3 +129,30 @@ test("a rejected Sentry delivery is retryable instead of being acknowledged when
     expect(requests).toBe(2);
   }
 });
+
+test("condition alerts keep their counts and group in Sentry by kind and Tenant", () => {
+  const tenantId = "019a0871-5e00-7000-8000-000000000002";
+  const spike = { kind: "bot_handoff_spike", tenantId, handoffs: 4, turns: 9 };
+  expect(scrubDiagnostic({ ...spike, handoffs: -1, turns: "9", ageSeconds: 1.5 })).toEqual({
+    kind: "bot_handoff_spike",
+    tenantId,
+  });
+  expect(scrubSentryEvent({ type: undefined, extra: { diagnostic: spike } })).toMatchObject({
+    message: "bot_handoff_spike",
+    fingerprint: ["bot_handoff_spike", tenantId],
+    tags: spike,
+  });
+  expect(
+    scrubSentryEvent({
+      type: undefined,
+      extra: { diagnostic: { kind: "inbox_queue_stale", ageSeconds: 960 } },
+    }),
+  ).toMatchObject({
+    fingerprint: ["inbox_queue_stale", "all"],
+    tags: { kind: "inbox_queue_stale", ageSeconds: 960 },
+  });
+  // Thrown errors keep Sentry's own grouping.
+  expect(
+    scrubSentryEvent({ type: undefined, extra: { diagnostic: { kind: "bot_job_failed" } } }),
+  ).not.toHaveProperty("fingerprint");
+});

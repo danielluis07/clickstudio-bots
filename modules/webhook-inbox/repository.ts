@@ -44,6 +44,17 @@ export const createInboxRepository = (db: Database) => ({
     return found.map(({ id }) => id);
   },
 
+  // When the oldest pending event that never failed arrived, or null.
+  async oldestPendingReceivedAt() {
+    const [oldest] = await db
+      .select({ receivedAt: inboxEvent.receivedAt })
+      .from(inboxEvent)
+      .where(and(eq(inboxEvent.status, "pending"), isNull(inboxEvent.failedAt)))
+      .orderBy(asc(inboxEvent.receivedAt))
+      .limit(1);
+    return oldest?.receivedAt ?? null;
+  },
+
   // Failed, unalerted events due for automatic replay number `n`: those with
   // `n` replays so far whose last failure was by `failedBy[n]`. Oldest first.
   async listRetryDue(failedBy: readonly Date[], limit: number) {

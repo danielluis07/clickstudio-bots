@@ -6,7 +6,7 @@ import type { BotActivation } from "@/modules/bot/activation";
 import { readBotConfiguration } from "@/modules/bot/configuration";
 import type { Model } from "@/modules/bot/model";
 import { botTimeZone } from "@/modules/bot/schedule";
-import { createBotCore } from "@/modules/bot/turn";
+import { createBotCore, splitTokens } from "@/modules/bot/turn";
 import {
   contactDetailSchemas,
   noContactDetails,
@@ -116,8 +116,6 @@ export const createBotSandbox = ({
           },
           listRecentMessages: async () => messages,
         },
-        // Production cost and reply metering are never given to the sandbox.
-        meter: { record: async () => {} },
       });
       const outcome = await core.respond({ scope, conversationId: "sandbox" });
       if (
@@ -128,7 +126,8 @@ export const createBotSandbox = ({
       }
       return {
         ok: true as const,
-        outcome,
+        // Token counts are production cost data; the sandbox never shows them.
+        outcome: splitTokens(outcome).decision,
         contact,
         allowance: { used: reserved.used, limit: sandboxDailyCap },
       };

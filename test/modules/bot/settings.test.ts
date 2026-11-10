@@ -13,7 +13,7 @@ import {
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
 import { createConversationRepository, recordInboundTextMessage } from "@/modules/conversations";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
-import { createTestBotRepository, createTestUsageMeter } from "@/test/support/bot";
+import { createTestBotRepository } from "@/test/support/bot";
 import { createTestClock, type TestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestModel } from "@/test/support/model";
@@ -70,7 +70,7 @@ const instructionsOfNextTurn = async (scope: TenantScope | ChannelRoute = routeA
   const repository = createTestBotRepository();
   repository.messages = [{ author: "contact", text: "Oi", sentAt: clock.now() }];
   repository.getConfiguration = (turn) => readBotConfiguration(db, turn.scope);
-  await createBotCore({ model, repository, meter: createTestUsageMeter(), clock }).respond({
+  await createBotCore({ model, repository, clock }).respond({
     scope,
     conversationId: "conversation-a",
   });

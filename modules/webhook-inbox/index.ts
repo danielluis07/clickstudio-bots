@@ -4,6 +4,7 @@ export type { Job, JobQueue } from "@/modules/webhook-inbox/job-queue";
 export {
   autoRetryDelaysMs,
   createWebhookInbox,
+  staleQueueAfterMs,
   type WebhookInbox,
 } from "@/modules/webhook-inbox/service";
 export { answerSubscriptionChallenge } from "@/modules/webhook-inbox/signature";

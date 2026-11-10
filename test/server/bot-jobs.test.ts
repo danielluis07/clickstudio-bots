@@ -10,7 +10,7 @@ import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
-import { createTestBotAllowance, createTestUsageMeter } from "@/test/support/bot";
+import { createTestBotAllowance } from "@/test/support/bot";
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
 import { qstashSigningKeys, signQStashRequest } from "@/test/support/qstash";
 import { createTestDiagnostics } from "@/test/support/diagnostics";
@@ -36,7 +36,6 @@ beforeAll(async () => {
     queue: createTestJobQueue<BotJob>(),
     notifier: createTestNotifier(),
     getSender: createTestWhatsAppSender,
-    meter: createTestUsageMeter(),
     allowance: createTestBotAllowance(),
   });
   jobs = createBotJobRoute({ bot, url, verifier: createQStashJobVerifier(qstashSigningKeys) });
@@ -86,7 +85,6 @@ test("a failed Bot job reports its error class, Conversation and Tenant without 
         queue: createTestJobQueue<BotJob>(),
         notifier: createTestNotifier(),
         getSender: createTestWhatsAppSender,
-        meter: createTestUsageMeter(),
         allowance: {
           ...createTestBotAllowance(),
           notifyWarning: async () => {

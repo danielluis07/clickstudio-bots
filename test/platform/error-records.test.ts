@@ -12,7 +12,7 @@ import {
 } from "@/platform/diagnostics";
 import { createWhatsAppAdapter } from "@/platform/whatsapp";
 import { createWhatsAppTokenCipher } from "@/platform/whatsapp-credentials";
-import { createTestBotRepository, createTestUsageMeter } from "@/test/support/bot";
+import { createTestBotRepository } from "@/test/support/bot";
 import { createTestClock } from "@/test/support/clock";
 import { captureConsoleErrors, createTestDiagnostics } from "@/test/support/diagnostics";
 import { createTestModel } from "@/test/support/model";
@@ -216,7 +216,6 @@ describe("Model failures", () => {
     const core = createBotCore({
       model,
       repository,
-      meter: createTestUsageMeter(),
       clock: createTestClock(new Date("2026-03-10T12:00:00.000Z")),
     });
     using console = captureConsoleErrors();

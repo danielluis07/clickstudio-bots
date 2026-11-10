@@ -4,16 +4,13 @@ import { noContactDetails } from "@/modules/conversations";
 import {
   createBotCore,
   disabledCapture,
+  splitTokens,
   type BotTurn,
   type CaptureSettings,
   type ContextMessage,
+  type TurnTokens,
 } from "@/modules/bot";
-import {
-  createTestBotRepository,
-  createTestUsageMeter,
-  type TestBotRepository,
-  type TestUsageMeter,
-} from "@/test/support/bot";
+import { createTestBotRepository, type TestBotRepository } from "@/test/support/bot";
 import { createTestClock } from "@/test/support/clock";
 import { createTestModel, type TestModel } from "@/test/support/model";
 
@@ -26,7 +23,8 @@ const start = new Date("2026-03-10T12:00:00.000Z");
 const clock = createTestClock(start);
 let model: TestModel;
 let repository: TestBotRepository;
-let meter: TestUsageMeter;
+// The latest turn's tokens; undefined when it made no Model request.
+let tokens: TurnTokens | undefined;
 
 const minutesAgo = (minutes: number) => new Date(clock.now().getTime() - minutes * 60_000);
 const fromContact = (text: string, sentAt = minutesAgo(1)): ContextMessage => ({
@@ -35,14 +33,23 @@ const fromContact = (text: string, sentAt = minutesAgo(1)): ContextMessage => ({
   sentAt,
 });
 
-const core = (options: Partial<Parameters<typeof createBotCore>[0]> = {}) =>
-  createBotCore({ model, repository, meter, clock, ...options });
+// Answers with the decision alone; the turn's tokens go to `tokens`.
+const core = (options: Partial<Parameters<typeof createBotCore>[0]> = {}) => {
+  const bot = createBotCore({ model, repository, clock, ...options });
+  return {
+    async respond(turn: BotTurn) {
+      const outcome = await bot.respond(turn);
+      tokens = outcome.kind === "nothing_to_answer" ? undefined : outcome.tokens;
+      return splitTokens(outcome).decision;
+    },
+  };
+};
 
 beforeEach(() => {
   clock.set(start);
   model = createTestModel();
   repository = createTestBotRepository();
-  meter = createTestUsageMeter();
+  tokens = undefined;
   repository.messages = [fromContact("Quanto custa o corte?")];
 });
 
@@ -183,7 +190,7 @@ describe("configured Tenant links", () => {
     const outcome = await core().respond(turn);
     expect(outcome).toMatchObject({ kind: "answer", reply: expect.stringContaining(booking.url) });
     expect(outcome).not.toMatchObject({ reply: expect.stringContaining("evil.example") });
-    expect(meter.records[0].usage.toolRoundTrips).toBe(1);
+    expect(tokens!.toolRoundTrips).toBe(1);
   });
 
   test("the next turn uses edited links and refuses removed IDs", async () => {
@@ -549,7 +556,6 @@ describe("tool call validation", () => {
       reply: "Certo, vou chamar alguém da equipe para continuar o atendimento.",
     });
     expect(repository.turns).toEqual([turn]);
-    expect(meter.records.map((record) => record.tenantId)).toEqual(["tenant-a"]);
   });
 });
 
@@ -577,7 +583,7 @@ describe("provider failures", () => {
     });
   });
 
-  test("a provider error during the retry hands off and still meters the first request", async () => {
+  test("a provider error during the retry hands off and still counts the first request", async () => {
     model.script(
       { toolCalls: [handoffCall("talvez")], usage: { inputTokens: 30, outputTokens: 5 } },
       new Error("500"),
@@ -588,7 +594,7 @@ describe("provider failures", () => {
       reason: "bot_indisponivel",
       reply: unavailable,
     });
-    expect(meter.records[0].usage).toEqual({
+    expect(tokens).toEqual({
       inputTokens: 30,
       outputTokens: 5,
       cacheReadTokens: 0,
@@ -710,7 +716,7 @@ describe("Conversation context", () => {
 
     expect(await core().respond(turn)).toEqual({ kind: "nothing_to_answer" });
     expect(model.requests).toHaveLength(0);
-    expect(meter.records).toHaveLength(0);
+    expect(tokens).toBeUndefined();
   });
 
   test("forwards only author and text, so a Contact phone number never reaches the model", async () => {
@@ -728,8 +734,8 @@ describe("Conversation context", () => {
   });
 });
 
-describe("usage metering", () => {
-  test("records tokens, cache and tool round trips per Tenant, summed over the turn", async () => {
+describe("turn tokens", () => {
+  test("the outcome carries tokens, cache and tool round trips, summed over the turn", async () => {
     model.script(
       {
         toolCalls: [handoffCall("talvez")],
@@ -741,39 +747,28 @@ describe("usage metering", () => {
       },
     );
 
-    await core().respond(turn);
-
-    expect(meter.records).toEqual([
-      {
-        tenantId: "tenant-a",
-        at: clock.now(),
-        usage: {
-          inputTokens: 100,
-          outputTokens: 32,
-          cacheReadTokens: 9000,
-          cacheWriteTokens: 9000,
-          toolRoundTrips: 1,
-        },
+    expect(await createBotCore({ model, repository, clock }).respond(turn)).toEqual({
+      kind: "answer",
+      reply: "O corte custa R$ 80.",
+      tokens: {
+        inputTokens: 100,
+        outputTokens: 32,
+        cacheReadTokens: 9000,
+        cacheWriteTokens: 9000,
+        toolRoundTrips: 1,
       },
-    ]);
+    });
   });
 
-  test("records no message content", async () => {
-    repository.messages = [fromContact("Meu CPF é 123.456.789-00")];
-    model.script({ text: "Não posso ajudar com isso." });
+  test("splitting the tokens off leaves only the decision", async () => {
+    model.script({ text: "O corte custa R$ 80.", usage: { inputTokens: 10, outputTokens: 4 } });
 
-    await core().respond(turn);
+    const { decision, tokens } = splitTokens(
+      await createBotCore({ model, repository, clock }).respond(turn),
+    );
 
-    const recorded = JSON.stringify(meter.records);
-    expect(recorded).not.toContain("CPF");
-    expect(recorded).not.toContain("Não posso ajudar");
-  });
-
-  test("a metering failure does not lose the reply", async () => {
-    meter.failNext();
-    model.script({ text: "O corte custa R$ 80." });
-
-    expect(await core().respond(turn)).toEqual({ kind: "answer", reply: "O corte custa R$ 80." });
+    expect(decision).toEqual({ kind: "answer", reply: "O corte custa R$ 80." });
+    expect(tokens).toMatchObject({ inputTokens: 10, outputTokens: 4 });
   });
 });
 
@@ -840,7 +835,7 @@ describe("Contact capture", () => {
         results: [{ callId: "call-1", name: "capture_contact_details", output: "Saved." }],
       },
     ]);
-    expect(meter.records[0].usage.toolRoundTrips).toBe(1);
+    expect(tokens!.toolRoundTrips).toBe(1);
   });
 
   test.each([

@@ -6,8 +6,8 @@ import type {
   LinkSettings,
   ModelResponse,
   ModelToolCall,
-  TurnOutcome,
-  TurnUsage,
+  TurnDecision,
+  TurnTokens,
 } from "@/modules/bot";
 
 export type EvaluationTenant = {
@@ -48,12 +48,12 @@ export type EvaluationResult = {
   id: string;
   tenantId: string;
   expected: EvaluationCase["expected"];
-  outcome: TurnOutcome;
+  outcome: TurnDecision;
   attempts: EvaluationAttempt[];
   toolRefusalProbe: boolean;
   injectedRefusal: ModelToolCall | null;
   latencyMs: number;
-  usage: TurnUsage;
+  usage: TurnTokens;
   cost: number;
 };
 export type EvaluationRun = { cases: EvaluationResult[]; pricing: EvaluationPricing };

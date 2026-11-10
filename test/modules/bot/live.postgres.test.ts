@@ -20,7 +20,7 @@ import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import { createPostgresTestDatabase } from "@/test/support/postgres";
 import { seedLiveBot } from "@/test/support/live-bot";
 import { createTestModel } from "@/test/support/model";
-import { createTestUsageMeter, testBehaviour } from "@/test/support/bot";
+import { testBehaviour } from "@/test/support/bot";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
@@ -74,7 +74,6 @@ suite("live turns on real Postgres", () => {
       queue,
       notifier: createTestNotifier(),
       getSender: () => sender,
-      meter: createTestUsageMeter(),
       allowance,
     };
     return {

@@ -30,6 +30,7 @@ then answer what the caller expects. Two kinds of failure are told apart:
 | Failure | Where it goes |
 | --- | --- |
 | Unexpected: the WhatsApp webhook cannot store a delivery, a Bot job or the inbox failure callback throws, a sweep or daily task fails, a tRPC procedure fails with an internal error, the dead letter | Structured log **and** Sentry |
+| Condition: the inbox queue is not draining, or a Tenant's **Bot indisponível** Handoffs jump (see [the sweep](#the-sweep)) | Structured log **and** Sentry, grouped into one issue per kind and Tenant |
 | Expected: a Meta call fails (4xx, 5xx, timeout), the Model fails and the turn hands off, an inbox job attempt fails (retries end in the dead letter), an invitation e-mail or realtime ping fails, the queue refuses an enqueue | Structured log only |
 
 Successful message processing and dashboard requests make no Sentry network
@@ -183,7 +184,9 @@ Vercel invokes `GET /api/cron/daily` daily at **05:00 UTC** (`0 5 * * *`) after
 production deployment. The endpoint rejects missing/incorrect credentials with
 401, compares the bearer token in constant time, and disables caching. It deletes
 raw inbox rows strictly older than 30 days by `receivedAt`, in every status.
-Rows exactly 30 days old remain until the next run. Duplicate calls are safe.
+Rows exactly 30 days old remain until the next run. It also deletes
+[Bot turn records](live-bot.md#turn-records) older than 13 months. Duplicate
+calls are safe.
 
 The same endpoint retries canceled Channels' disconnections and hard-deletes
 Tenants at their 30-day recovery deadline. See the
@@ -223,6 +226,18 @@ verifies the QStash signature against its own URL and returns 401 otherwise, or
    Schedule and allowance are per Tenant, so a skip leaves that Tenant's other
    Conversations out of the run, which scans up to three pages. Canceled
    Tenants are left out of lease recovery.
+5. Alerts `inbox_queue_stale` with its age in seconds while the oldest
+   `pending` inbox event that never failed was received more than 15 minutes
+   ago, past two requeues. Failed events alert on their own, after their last
+   automatic replay.
+6. Alerts `bot_handoff_spike` with counts for each Tenant whose
+   [turn records](live-bot.md#turn-records) in the last hour show at least
+   three **Bot indisponível** Handoffs, at least 20% of its turns that were not
+   skipped, and at least twice its rate over the six days before. A Tenant with
+   no earlier turns is judged on the first two conditions.
+
+Both alerts repeat on every sweep while the condition holds; Sentry groups them
+into one issue per kind (and Tenant), so its issue alert fires once.
 
 Each task has its own failure boundary, as in the daily endpoint. A failed task
 logs `sweep_task_failed` with its error class only. Running the sweep again

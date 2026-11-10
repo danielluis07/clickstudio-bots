@@ -12,7 +12,7 @@ import {
 } from "@/db/schema";
 import { createConversationRepository } from "@/modules/conversations";
 import { resolveTenantScope } from "@/modules/tenancy";
-import { autoRetryDelaysMs, createWebhookInbox } from "@/modules/webhook-inbox";
+import { autoRetryDelaysMs, createWebhookInbox, staleQueueAfterMs } from "@/modules/webhook-inbox";
 import type { Diagnostic } from "@/platform/diagnostics";
 import { createTestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
@@ -489,4 +489,35 @@ test("only an administrator can replay listed failures in bulk, each with a fres
     autoRetries: 0,
     nextAutoRetryAt: new Date(clock.now().getTime() + autoRetryDelaysMs[0]),
   });
+});
+
+test("the sweep alerts while the oldest pending event that never failed is too old", async () => {
+  restoreClock();
+  const alerts: Diagnostic[] = [];
+  inbox = alertingInbox(alerts);
+  expect(await inbox.alertStaleQueue()).toBeNull();
+  const body = metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.STUCK" }));
+  await inbox.receive({ body, signature: signMetaDelivery(body) });
+  queue.take();
+
+  clock.advance(staleQueueAfterMs - 1);
+  expect(await inbox.alertStaleQueue()).toBeNull();
+  clock.advance(1);
+  expect(await inbox.alertStaleQueue()).toBe(staleQueueAfterMs / 1000);
+  expect(alerts).toEqual([{ kind: "inbox_queue_stale", ageSeconds: staleQueueAfterMs / 1000 }]);
+});
+
+test("a failing event alerts through its own replays, not as a stale queue", async () => {
+  restoreClock();
+  const alerts: Diagnostic[] = [];
+  inbox = alertingInbox(alerts);
+  const body = metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.FAILING" }));
+  await inbox.receive({ body, signature: signMetaDelivery(body) });
+  const [job] = queue.take();
+  notifier.failNext();
+  await expect(inbox.process(job.inboxEventId)).rejects.toThrow();
+
+  clock.advance(2 * staleQueueAfterMs);
+  expect(await inbox.alertStaleQueue()).toBeNull();
+  expect(alerts).toEqual([]);
 });

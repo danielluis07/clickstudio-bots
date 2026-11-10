@@ -14,6 +14,7 @@ import type {
   ModelResponse,
   ModelToolOutput,
   ModelToolRefusal,
+  ModelUsage,
 } from "@/modules/bot/model";
 import {
   renderContactDetails,
@@ -22,20 +23,51 @@ import {
 } from "@/modules/bot/prompt";
 import type { BotRepository, BotTurn } from "@/modules/bot/repository";
 import { checkToolCalls, handoffReply, modelTools, type HandoffReason } from "@/modules/bot/tools";
-import type { TurnUsage, UsageMeter } from "@/modules/bot/usage";
 import type { Clock } from "@/platform/clock";
 import { logError } from "@/platform/diagnostics";
 
+// Counts, never content: what a Bot turn's Model requests cost.
+export type TurnTokens = ModelUsage & {
+  // Requests that returned tool results to the model.
+  toolRoundTrips: number;
+};
+
 // A Handoff's reply tells the Contact the team will answer; with a mixed
-// question it also carries the answerable part.
+// question it also carries the answerable part. Every outcome that called the
+// Model carries its tokens, including a Handoff after a provider error.
 export type TurnOutcome =
-  | { kind: "answer"; reply: string }
-  | { kind: "handoff"; reason: HandoffReason; reply: string }
+  | { kind: "answer"; reply: string; tokens: TurnTokens }
+  | { kind: "handoff"; reason: HandoffReason; reply: string; tokens: TurnTokens }
   | { kind: "nothing_to_answer" };
+
+type Decision =
+  { kind: "answer"; reply: string } | { kind: "handoff"; reason: HandoffReason; reply: string };
+
+export type TurnDecision = Decision | { kind: "nothing_to_answer" };
+
+const noTokens: TurnTokens = {
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  toolRoundTrips: 0,
+};
+
+// Separates what a turn decided from what it cost, for callers that show or
+// store the decision without production cost data.
+export const splitTokens = (
+  outcome: TurnOutcome,
+): { decision: TurnDecision; tokens: TurnTokens } => {
+  if (outcome.kind === "nothing_to_answer") return { decision: outcome, tokens: { ...noTokens } };
+  if (outcome.kind === "answer")
+    return { decision: { kind: outcome.kind, reply: outcome.reply }, tokens: outcome.tokens };
+  const { kind, reason, reply, tokens } = outcome;
+  return { decision: { kind, reason, reply }, tokens };
+};
 
 const tokenKeys = ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens"] as const;
 
-const handoff = (reason: HandoffReason, answered = ""): TurnOutcome => ({
+const handoff = (reason: HandoffReason, answered = ""): Decision => ({
   kind: "handoff",
   reason,
   reply: handoffReply(reason, answered),
@@ -46,13 +78,11 @@ const handoff = (reason: HandoffReason, answered = ""): TurnOutcome => ({
 export const createBotCore = ({
   model,
   repository,
-  meter,
   clock,
   context = defaultContextLimits,
 }: {
   model: Model;
   repository: BotRepository;
-  meter: UsageMeter;
   clock: Clock;
   context?: ContextLimits;
 }) => ({
@@ -81,20 +111,14 @@ export const createBotCore = ({
       contact: renderContactDetails(capture, details),
       messages,
     };
-    const usage: TurnUsage = {
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      toolRoundTrips: 0,
-    };
+    const usage: TurnTokens = { ...noTokens };
     const generate = async (messages: ModelMessage[]) => {
       const response = await model.generate({ ...request, messages });
       for (const key of tokenKeys) usage[key] += response.usage[key];
       return response;
     };
 
-    const decide = async (): Promise<TurnOutcome> => {
+    const decide = async (): Promise<Decision> => {
       let messages = request.messages;
       let retried = false;
       let continued = false;
@@ -154,15 +178,11 @@ export const createBotCore = ({
     const ids = { tenantId: turn.scope.tenantId, conversationId: turn.conversationId };
     // A timeout or provider error never falls back to another provider. It is
     // expected, so it is logged with the provider's status but does not alert.
-    const outcome = await decide().catch((error: unknown) => {
+    const decision = await decide().catch((error: unknown) => {
       logError("bot_decision_failed", error, ids);
       return handoff("bot_indisponivel");
     });
-    // Metering must not lose a reply the model already produced.
-    await meter
-      .record(turn.scope, clock.now(), usage)
-      .catch((error: unknown) => logError("bot_usage_metering_failed", error, ids));
-    return outcome;
+    return { ...decision, tokens: usage };
   },
 });
 
