@@ -52,8 +52,10 @@ const eventArrays: Record<
   smb_app_state_sync: [{ key: "state_sync", byWamid: false }],
 };
 
-// Edits and revokes are about another message; never let them collide with it.
-const referencingTypes = new Set(["edit", "revoke"]);
+// Edits, revokes and reactions are about another message; never let them
+// collide with it. None is the Contact's live message, so a reaction is never
+// stored, never opens the service window and never hands off.
+const referencingTypes = new Set(["edit", "revoke", "reaction"]);
 
 const itemSchema = z.looseObject({ id: z.string().min(1).optional(), type: z.string().optional() });
 

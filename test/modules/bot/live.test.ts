@@ -38,6 +38,7 @@ import {
   signMetaDelivery,
   textMessageChange,
   mediaMessageChange,
+  reactionChange,
 } from "@/test/support/meta-webhook";
 
 let db: Database;
@@ -108,13 +109,16 @@ const setup = async (allowance?: BotAllowance) => {
     worker,
     dependencies,
     repository: createConversationRepository(db, scope),
-    async receive(change: Parameters<typeof metaDelivery>[number]) {
+    async receive(
+      change: Parameters<typeof metaDelivery>[number],
+      status: "processed" | "ignored" = "processed",
+    ) {
       const body = metaDelivery(change);
       expect(await inbox.receive({ body, signature: signMetaDelivery(body) })).toEqual({
         ok: true,
       });
       for (const job of inboxJobs.take())
-        expect(await inbox.process(job.inboxEventId)).toMatchObject({ status: "processed" });
+        expect(await inbox.process(job.inboxEventId)).toMatchObject({ status });
     },
   };
 };
@@ -166,6 +170,52 @@ test.each([
     }
   },
 );
+
+test.each([
+  ["a reaction", "👍"],
+  ["a removed reaction", ""],
+])("%s on the Bot's answer leaves the Conversation with the Bot", async (_name, emoji) => {
+  const {
+    phoneNumberId,
+    clock,
+    scope,
+    activation,
+    conversationId,
+    repository,
+    receive,
+    model,
+    sender,
+    worker,
+    queue,
+  } = await setup();
+  await activation.activate(scope);
+  model.script({ text: "O corte custa R$ 80." });
+  await worker.run(conversationId);
+  queue.take();
+  const before = await repository.getConversation(conversationId);
+  const messages = (await repository.listMessages(conversationId))!.messages;
+  const answer = messages.find((row) => row.direction === "outbound")!;
+  clock.advance(60 * 60 * 1000);
+  await receive(
+    reactionChange({
+      phoneNumberId,
+      wamid: "reaction-wamid",
+      reactedWamid: answer.wamid!,
+      from: "5511999990001",
+      emoji,
+      timestamp: String(clock.now().getTime() / 1000),
+    }),
+    "ignored",
+  );
+  const after = (await repository.getConversation(conversationId))!;
+  expect(after).toMatchObject({ owner: "bot", waiting: false, handoffReason: null });
+  // Only the Contact's live messages open or extend the service window.
+  expect(after.serviceWindowClosesAt).toEqual(before!.serviceWindowClosesAt);
+  expect((await repository.listMessages(conversationId))!.messages).toEqual(messages);
+  expect(queue.take()).toHaveLength(0);
+  expect(model.requests).toHaveLength(2); // The sandbox turn and the answer.
+  expect(sender.sent).toHaveLength(1);
+});
 
 test.each(["image", "video", "document"])(
   "an answerable %s caption is answered without Handoff or a media download",
