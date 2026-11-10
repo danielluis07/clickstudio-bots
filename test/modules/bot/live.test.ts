@@ -25,7 +25,7 @@ import {
 } from "@/modules/conversations";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
-import { createTestBotAllowance, testBehaviour } from "@/test/support/bot";
+import { createTestBotAllowance, createTestInboxBot, testBehaviour } from "@/test/support/bot";
 import { createTestModel } from "@/test/support/model";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
@@ -91,13 +91,14 @@ const setup = async (allowance?: BotAllowance) => {
   };
   const worker = createLiveBot(dependencies);
   const inboxJobs = createTestJobQueue();
+  const inboxBot = createTestInboxBot(worker);
   const inbox = createWebhookInbox({
     db,
     clock,
     queue: inboxJobs,
     notifier: dependencies.notifier,
     appSecret: metaAppSecret,
-    bot: worker,
+    bot: inboxBot,
   });
   return {
     ...seeded,
@@ -107,6 +108,7 @@ const setup = async (allowance?: BotAllowance) => {
     activation,
     conversationId,
     worker,
+    inboxBot,
     dependencies,
     repository: createConversationRepository(db, scope),
     async receive(
@@ -386,9 +388,17 @@ test("a voice note arriving during generation blocks the pending Bot reply", asy
   expect(sender.sent).toHaveLength(0);
 });
 
-test("retrying media after a failed inbox ping preserves a Member's return to the Bot", async () => {
-  const { scope, phoneNumberId, clock, conversationId, repository, receive, dependencies } =
-    await setup();
+test("retrying media after a failed inbox event preserves a Member's return to the Bot", async () => {
+  const {
+    scope,
+    phoneNumberId,
+    clock,
+    conversationId,
+    repository,
+    receive,
+    inboxBot,
+    dependencies,
+  } = await setup();
   const change = mediaMessageChange({
     phoneNumberId,
     wamid: "retried-media",
@@ -396,8 +406,8 @@ test("retrying media after a failed inbox ping preserves a Member's return to th
     timestamp: String(clock.now().getTime() / 1000),
     type: "image",
   });
-  dependencies.notifier.failNext();
-  await expect(receive(change)).rejects.toThrow("Notifier unavailable");
+  inboxBot.failNext();
+  await expect(receive(change)).rejects.toThrow("Bot queue unavailable");
   await createHandoffControls(dependencies).returnToBot(scope, conversationId);
   await receive(change);
   expect(await repository.getConversation(conversationId)).toMatchObject({ owner: "bot" });
@@ -540,9 +550,13 @@ test("the 4,000th acknowledged reply warns the owner; email failure never resend
     .values({ tenantId: scope.tenantId, period: "2026-10-01", replies: 3999 });
   model.script({ text: "Resposta que atinge o aviso." });
   mailer.failNext();
-  await expect(worker.run(conversationId)).rejects.toThrow("Mailer unavailable");
-  await worker.run(conversationId);
+  // A failed email does not fail a turn whose reply was sent.
+  expect(await worker.run(conversationId)).toBe("sent");
+  expect(mailer.sent).toHaveLength(0);
+  // The daily task delivers it once the Mailer recovers.
   await allowance.retryWarnings();
+  await allowance.retryWarnings();
+  await worker.run(conversationId);
   expect(await allowance.status(scope)).toMatchObject({ used: 4000, warning: true });
   expect(mailer.sent).toHaveLength(1);
   expect(sender.sent).toHaveLength(1);

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { eq } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import {
   channel,
@@ -14,6 +15,8 @@ import {
 import { createConversationRepository, createReplyService } from "@/modules/conversations";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
 import { createWebhookInbox } from "@/modules/webhook-inbox";
+import type { Diagnostic } from "@/platform/diagnostics";
+import { createTestInboxBot } from "@/test/support/bot";
 import { createTestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue, type TestJobQueue } from "@/test/support/job-queue";
@@ -126,17 +129,42 @@ describe("Webhook inbox", () => {
     expect(found.messages[0].text).toBe("Conteúdo privado");
   });
 
-  test("a failed ping is retried without duplicating the committed message", async () => {
+  test("a failed ping still settles the event and enqueues one Bot job", async () => {
+    const bot = createTestInboxBot();
+    const logged: Diagnostic[] = [];
+    inbox = createWebhookInbox({
+      db,
+      clock,
+      queue,
+      notifier,
+      appSecret: metaAppSecret,
+      bot,
+      diagnostics: { log: (entry) => logged.push(entry), alert: async () => {} },
+    });
     await receive(metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.RETRY" })));
     const [job] = queue.take();
     notifier.failNext();
-    await expect(inbox.process(job.inboxEventId)).rejects.toThrow("Notifier unavailable");
-    expect((await conversationsOf(tenantA))[0].messages).toHaveLength(1);
-
     expect(await inbox.process(job.inboxEventId)).toEqual({ ok: true, status: "processed" });
+    // A duplicate delivery finds it settled and enqueues nothing more.
+    expect(await inbox.process(job.inboxEventId)).toEqual({ ok: true, status: "processed" });
+
     const [found] = await conversationsOf(tenantA);
     expect(found.messages).toHaveLength(1);
-    expect(notifier.pings).toEqual([{ tenantId: "tenant-a", ping: { conversationId: found.id } }]);
+    expect(bot.enqueued).toEqual([found.id]);
+    expect(notifier.pings).toEqual([]);
+    expect(logged).toEqual([
+      expect.objectContaining({
+        kind: "notification_failed",
+        tenantId: "tenant-a",
+        conversationId: found.id,
+      }),
+    ]);
+    expect(
+      await db
+        .select({ status: inboxEvent.status, failedAt: inboxEvent.failedAt })
+        .from(inboxEvent)
+        .where(eq(inboxEvent.id, job.inboxEventId)),
+    ).toEqual([{ status: "processed", failedAt: null }]);
   });
 
   test("app replies and their delivery statuses notify only their Conversation's Tenant", async () => {
@@ -152,9 +180,7 @@ describe("Webhook inbox", () => {
       metaDelivery(statusChange({ phoneNumberId: "301", wamid: "wamid.APP-PING", status: "read" })),
     );
     const [job] = queue.take();
-    notifier.failNext();
-    await expect(inbox.process(job.inboxEventId)).rejects.toThrow("Notifier unavailable");
-    await inbox.process(job.inboxEventId);
+    expect(await inbox.process(job.inboxEventId)).toEqual({ ok: true, status: "processed" });
     expect(notifier.pings).toEqual([{ tenantId: "tenant-b", ping: { conversationId: found.id } }]);
     expect((await conversationsOf(tenantB))[0].messages[0].status).toBe("read");
   });

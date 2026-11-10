@@ -17,6 +17,7 @@ import type { Diagnostic } from "@/platform/diagnostics";
 import { createTestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestJobQueue } from "@/test/support/job-queue";
+import { createTestInboxBot } from "@/test/support/bot";
 import { createTestNotifier } from "@/test/support/notifier";
 import {
   metaAppSecret,
@@ -29,6 +30,8 @@ let db: Database;
 const clock = createTestClock(new Date("2026-10-21T12:00:00Z"));
 let queue = createTestJobQueue();
 let notifier = createTestNotifier();
+// Fails an event's processing after its write commits.
+let inboxBot = createTestInboxBot();
 let inbox: ReturnType<typeof createWebhookInbox>;
 
 afterAll(() => closeTestDatabase(db));
@@ -73,7 +76,15 @@ beforeEach(async () => {
   await db.delete(inboxEvent);
   queue = createTestJobQueue();
   notifier = createTestNotifier();
-  inbox = createWebhookInbox({ db, clock, queue, notifier, appSecret: metaAppSecret });
+  inboxBot = createTestInboxBot();
+  inbox = createWebhookInbox({
+    db,
+    clock,
+    queue,
+    notifier,
+    appSecret: metaAppSecret,
+    bot: inboxBot,
+  });
 });
 
 test("only an administrator can inspect and replay a failed event, using its original Tenant route", async () => {
@@ -82,7 +93,7 @@ test("only an administrator can inspect and replay a failed event, using its ori
   );
   await inbox.receive({ body, signature: signMetaDelivery(body) });
   const [job] = queue.take();
-  notifier.failNext();
+  inboxBot.failNext();
   await expect(inbox.process(job.inboxEventId)).rejects.toThrow();
 
   for (const actor of ["owner-a", "owner-b", "missing", "banned-admin"]) {
@@ -131,6 +142,7 @@ const alertingInbox = (alerts: Diagnostic[]) =>
     clock,
     queue,
     notifier,
+    bot: inboxBot,
     appSecret: metaAppSecret,
     diagnostics: {
       log() {},
@@ -152,7 +164,7 @@ test("an event that failed during an outage is replayed automatically once its b
   const body = metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.OUTAGE" }));
   await inbox.receive({ body, signature: signMetaDelivery(body) });
   const [job] = queue.take();
-  notifier.failNext();
+  inboxBot.failNext();
   await expect(inbox.process(job.inboxEventId)).rejects.toThrow();
   // QStash's retries ran out during the outage.
   await inbox.fail(job.inboxEventId, "msg_outage");
@@ -198,7 +210,7 @@ test("an event that keeps failing is replayed three times with backoff, then ale
   await inbox.receive({ body, signature: signMetaDelivery(body) });
   const [job] = queue.take();
   for (const delay of autoRetryDelaysMs) {
-    notifier.failNext();
+    inboxBot.failNext();
     await expect(inbox.process(job.inboxEventId)).rejects.toThrow();
     await inbox.fail(job.inboxEventId, "msg_failed");
     expect(alerts).toEqual([]);
@@ -208,7 +220,7 @@ test("an event that keeps failing is replayed three times with backoff, then ale
     expect(await inbox.retryFailed()).toBe(1);
     expect(queue.take()).toEqual([{ type: "process-inbox-event", inboxEventId: job.inboxEventId }]);
   }
-  notifier.failNext();
+  inboxBot.failNext();
   await expect(inbox.process(job.inboxEventId)).rejects.toThrow();
   await inbox.fail(job.inboxEventId, "msg_failed");
   await inbox.fail(job.inboxEventId, "msg_failed");
@@ -293,6 +305,7 @@ test("a failure callback can retry an interrupted alert without losing the faile
     clock,
     queue,
     notifier,
+    bot: inboxBot,
     appSecret: metaAppSecret,
     diagnostics: {
       log() {},
@@ -425,7 +438,7 @@ test("the sweep leaves a failing event to QStash's retries until 35 minutes afte
   const [job] = queue.take();
   clock.advance(3 * 60_000);
   // Its third attempt fails; QStash's last retry comes about 30 minutes later.
-  notifier.failNext();
+  inboxBot.failNext();
   await expect(inbox.process(job.inboxEventId)).rejects.toThrow();
 
   clock.advance(35 * 60_000 - 1);
@@ -514,7 +527,7 @@ test("a failing event alerts through its own replays, not as a stale queue", asy
   const body = metaDelivery(textMessageChange({ phoneNumberId: "300", wamid: "wamid.FAILING" }));
   await inbox.receive({ body, signature: signMetaDelivery(body) });
   const [job] = queue.take();
-  notifier.failNext();
+  inboxBot.failNext();
   await expect(inbox.process(job.inboxEventId)).rejects.toThrow();
 
   clock.advance(2 * staleQueueAfterMs);
