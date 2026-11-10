@@ -43,8 +43,8 @@ export function DataDeletion() {
           até 15 dias.
         </p>
         <p>
-          A exclusão abrange o contato, suas conversas e campos capturados. Eventos brutos recebidos
-          da Meta ainda podem conter texto e telefone por até 30 dias. Backups deixam de conter os
+          A exclusão abrange o contato, suas conversas, campos capturados e o conteúdo dos eventos
+          brutos recebidos da Meta sobre ele, como textos e telefone. Backups deixam de conter os
           dados conforme a janela de recuperação divulgada na Política de Privacidade. Se você
           enviar uma nova mensagem depois, será criado um novo contato.
         </p>

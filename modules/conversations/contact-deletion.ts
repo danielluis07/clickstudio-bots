@@ -2,9 +2,11 @@ import { createHash } from "node:crypto";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
 import {
+  channel,
   contact,
   contactDeletion,
   conversation,
+  inboxEvent,
   message,
   messageChange,
   organization,
@@ -132,6 +134,41 @@ export const withContactAdmission = <Event, Result>(
     });
   });
 
+// Raw Meta events about this address on the Tenant's Channel keep their row,
+// so the dedupe key still makes a redelivery a no-op, but lose their content.
+// Unsettled ones settle now: a queued job, sweep or replay finds nothing to do.
+const eraseInboxEvents = async (
+  tx: Transaction,
+  tenantId: string,
+  phone: string,
+  erasedAt: Date,
+) => {
+  const events = and(
+    inArray(
+      inboxEvent.phoneNumberId,
+      tx
+        .select({ phoneNumberId: channel.phoneNumberId })
+        .from(channel)
+        .where(eq(channel.tenantId, tenantId)),
+    ),
+    eq(inboxEvent.contactPhone, phone),
+  );
+  await tx
+    .update(inboxEvent)
+    .set({
+      status: "ignored",
+      ignoredReason: "contact_deleted",
+      processedAt: erasedAt,
+      errorClass: null,
+      failedAt: null,
+    })
+    .where(and(events, inArray(inboxEvent.status, ["pending", "failed"])));
+  await tx
+    .update(inboxEvent)
+    .set({ payload: { erased: true } })
+    .where(events);
+};
+
 export const deleteContact = async ({
   db,
   scope,
@@ -190,6 +227,7 @@ export const deleteContact = async ({
         target: [contactDeletion.tenantId, contactDeletion.addressHash],
         set: { deletedAt },
       });
+    await eraseInboxEvents(tx, scope.tenantId, found.phone, deletedAt);
     return true;
   });
   if (!deleted) return { ok: false as const, error: "not_found" as const };

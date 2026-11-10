@@ -175,8 +175,44 @@ WhatsApp timestamps have only second precision. A message sent in the same
 second as deletion is ambiguous, even if received later, and is suppressed to
 avoid restoring old content. A fresh message timestamped in a subsequent second
 can create the new Contact.
-Terminal processed/ignored events remain no-ops. Raw inbox events keep their
-existing retention policy below; deletion does not extend it.
+Terminal processed/ignored events remain no-ops.
+
+### Raw inbox events of a deleted Contact
+
+Issue: [#150](https://github.com/danielluis07/clickstudio-bots/issues/150).
+
+Deletion also erases, in the same transaction, the raw inbox events about the
+Contact's address on the Tenant's Channel. Each split event is about at most
+one address, which the generated `contact_phone` column reads from its
+payload: a message's, edit's or reaction's sender, a status's or echo's
+recipient, a history thread's wa_id or an app contact's number, with any `+`
+removed. Events about no Contact, such as `account_update`, have none.
+
+Every matching row, in any status, keeps its id, dedupe key and timestamps,
+but its payload becomes `{"erased": true}` and its `contact_phone` becomes
+null. Keeping the dedupe key means a Meta redelivery of the same event stays a
+no-op instead of storing the content again. Pending and failed rows settle as
+`ignored` with reason `contact_deleted` and leave **Eventos com falha**, so a
+queued job, the sweep, an automatic or bulk replay and **Reprocessar** all
+find a settled event and do nothing. Even an unsettled tombstone would be
+ignored as unsupported. A job that read the payload before the deletion
+committed is still refused by the replay barrier above.
+
+Run `bun run db:migrate` before deploying. The migration adds the generated
+column and its index; Postgres computes the column for existing rows, so
+events stored before the deployment are erased too.
+
+What this does not cover:
+
+- An event delivered after the deletion that carries older content, such as a
+  late history chunk, is not filed (see above) but keeps its payload under
+  the 30-day retention below.
+- A signed delivery the platform could not split is stored whole as
+  `unrecognized`, with no address, and also follows the 30-day retention.
+- A hash dedupe key is a SHA-256 of the event's content. It holds no readable
+  text or phone, but someone who already knows the exact content can match it.
+- Backups keep the deleted rows for the recovery window disclosed on the
+  Privacy page; a restore must reapply pending deletions.
 
 ## Daily tasks
 

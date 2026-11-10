@@ -103,7 +103,7 @@ export function PrivacyPolicy() {
           </li>
           <li>
             Eventos brutos recebidos da Meta: até 30 dias, inclusive quando contêm textos e
-            telefones.
+            telefones. Os de um contato excluído perdem o conteúdo no momento da exclusão.
           </li>
           <li>
             Cancelamento: o canal é desconectado e o Bot para na data do cancelamento. Há 30 dias
@@ -111,9 +111,9 @@ export function PrivacyPolicy() {
             dados do negócio, inclusive base de conhecimento, configurações e tokens da Meta.
           </li>
           <li>
-            Exclusão solicitada pelo negócio: até 15 dias para os dados nos sistemas ativos. Eventos
-            brutos remanescentes expiram em até 30 dias e cópias de recuperação seguem a janela de
-            backup descrita abaixo.
+            Exclusão solicitada pelo negócio: até 15 dias para os dados nos sistemas ativos. Os
+            eventos brutos de um contato excluído perdem o conteúdo junto com ele; os demais expiram
+            em até 30 dias e cópias de recuperação seguem a janela de backup descrita abaixo.
           </li>
           <li>
             Membro removido: cadastro, autenticação e sessões são excluídos imediatamente, salvo
