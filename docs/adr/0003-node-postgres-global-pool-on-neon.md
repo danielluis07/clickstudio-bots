@@ -21,7 +21,7 @@ The `pg` client speaks plain Postgres. Tests and local runs can point the same c
 ## Consequences
 
 - **No session-level features on the pooled endpoint.** It runs PgBouncer in transaction mode (`pool_mode=transaction`), so session-level advisory locks, `LISTEN`/`NOTIFY`, `SET`/`RESET` of session variables and SQL-level `PREPARE` are unavailable there. This matches ADR 0002: the Conversation lease is a column, not a lock.
-- **Migrations use the direct endpoint.** Neon recommends a direct (unpooled) connection for schema migrations because tools may not support transaction pooling. Run `bun run db:migrate` with `DATABASE_URL` set to the direct connection string.
+- **Migrations use the direct endpoint.** Neon recommends a direct (unpooled) connection for schema migrations because tools may not support transaction pooling. Run `bun run db:migrate` with `DATABASE_OWNER_URL` set to the owner's direct connection string; the app's role cannot change the schema (ADR 0009).
 - **`pg` is bundled via `transpilePackages`.** By default Next.js excludes `pg` from the bundle. Turbopack then loads it through a hashed alias it links into the build output while `next dev` runs. Bun caches the failed lookup from before the link exists, so under `bun --bun next dev` every database request failed. Bundling `pg` avoids the alias. Revisit when Bun or Next.js fixes this.
 - **Single queries lose the HTTP driver's speed.** Neon calls HTTP "the fastest option for single queries", so a one-off query on a fresh instance gives up that edge. A warm instance reuses a pooled connection instead.
 - **Revisit triggers.** Reopen this decision if any route must run on the Edge runtime, which has no TCP sockets, or if Fluid compute stops reusing instances.

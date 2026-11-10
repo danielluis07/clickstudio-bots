@@ -18,6 +18,7 @@ The report checks:
 - Presence of the required environment variables and valid database/app URL protocols.
 - Selected provider and key presence, using Gateway precedence. This does not establish that a key is valid or the model is available.
 - Database connectivity and applied migration names against this checkout's migration folders, matching the installed Drizzle migrator. Missing history counts as pending; migrations unknown to this branch also fail readiness.
+- That `DATABASE_URL` connects as the application role: it cannot create or alter tables in `public`, and its sessions start with the expected `statement_timeout`, `lock_timeout` and `idle_in_transaction_session_timeout`. A failure names the settings that are missing or different; run `bun run db:app-role` (see [Database roles](../README.md#database-roles)).
 - Presence of an owner membership. This does not verify a password or browser session.
 - An HTTP 200 response from `/entrar` at the configured `APP_URL` origin.
 

@@ -1,7 +1,16 @@
+import { differingTimeouts, type readApplicationRole } from "@/db/application-role";
+
 export type DoctorEnvironment = Record<string, string | undefined>;
 export type DoctorCheck = {
   name:
-    "environment" | "provider" | "database" | "migrations" | "owner" | "server" | "provider_probe";
+    | "environment"
+    | "provider"
+    | "database"
+    | "database_role"
+    | "migrations"
+    | "owner"
+    | "server"
+    | "provider_probe";
   status: "pass" | "fail" | "skip";
   message: string;
 };
@@ -9,6 +18,7 @@ export type DoctorCheck = {
 export type DatabaseReadiness = {
   appliedMigrationNames: string[] | null;
   ownerAvailable: boolean;
+  role: Awaited<ReturnType<typeof readApplicationRole>>;
 };
 
 export type DoctorDependencies = {
@@ -85,6 +95,16 @@ export const runDoctor = async ({
     try {
       const database = await dependencies.inspectDatabase(environment.DATABASE_URL!);
       add("database", "pass", "Conexão e inspeção somente leitura concluídas.");
+      const missingTimeouts = differingTimeouts(database.role.timeouts);
+      add(
+        "database_role",
+        database.role.canChangeSchema || missingTimeouts.length ? "fail" : "pass",
+        database.role.canChangeSchema
+          ? "DATABASE_URL usa um papel que pode criar ou alterar tabelas. Use o papel do aplicativo e configure-o com bun run db:app-role."
+          : missingTimeouts.length
+            ? `Limites de tempo do papel ausentes ou diferentes do esperado: ${missingTimeouts.join(", ")}. Execute bun run db:app-role.`
+            : "O papel do aplicativo não altera o esquema e tem os limites de tempo esperados.",
+      );
       if (!dependencies.migrationNames.length) {
         add(
           "migrations",
@@ -117,11 +137,13 @@ export const runDoctor = async ({
         "fail",
         "Não foi possível inspecionar o banco. Confira DATABASE_URL, conexão e permissões de leitura.",
       );
+      add("database_role", "skip", "Verificação depende do banco acessível.");
       add("migrations", "skip", "Verificação depende do banco acessível.");
       add("owner", "skip", "Verificação depende do banco acessível.");
     }
   } else {
     add("database", "skip", "Configure uma DATABASE_URL válida para inspecionar o banco.");
+    add("database_role", "skip", "Verificação depende do banco acessível.");
     add("migrations", "skip", "Verificação depende do banco acessível.");
     add("owner", "skip", "Verificação depende do banco acessível.");
   }
