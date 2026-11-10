@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
-import { eq } from "drizzle-orm";
-import { conversation, member, user } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
+import { conversation, member, message, user } from "@/db/schema";
 import { resolveTenantScope } from "@/modules/tenancy";
 import {
   createBotActivation,
@@ -16,7 +16,9 @@ import {
   createHandoffControls,
   handOffAndNotify,
   createReplyService,
+  recordInboundMessage,
   recordInboundTextMessage,
+  returnQuietHandoffs,
 } from "@/modules/conversations";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
@@ -519,4 +521,187 @@ test("a live turn's Handoff needs its lease, and only a change of hands notifies
   expect(notifier.pings.slice(pings)).toEqual([
     { tenantId: route.tenantId, ping: { conversationId } },
   ]);
+});
+
+type Fixture = Awaited<ReturnType<typeof setup>>;
+
+const dayMs = 24 * 60 * 60 * 1000;
+
+const unansweredTexts = async (conversationId: string) =>
+  (
+    await db
+      .select({ text: message.text })
+      .from(message)
+      .where(
+        and(
+          eq(message.conversationId, conversationId),
+          eq(message.origin, "contact"),
+          eq(message.botAnswered, false),
+        ),
+      )
+  ).map(({ text }) => text);
+
+// The Model fails, so the turn hands the Conversation off as "Bot indisponível".
+const failModel = async ({ model, conversationId, worker, ownership }: Fixture) => {
+  model.script(new Error("provider down"));
+  await worker.run(conversationId);
+  expect(await ownership()).toEqual({
+    owner: "team",
+    handoffReason: "bot_indisponivel",
+    waiting: true,
+  });
+};
+
+test("after a Bot indisponível Handoff, the Contact's next messages return the Bot, which answers them", async () => {
+  const fixture = await setup();
+  const { model, sender, conversationId, receive, worker, ownership } = fixture;
+  await failModel(fixture);
+  const sentBefore = sender.sent.length;
+
+  await receive("Alô?");
+  // Still waiting, with its reason, as after "Devolver ao Bot".
+  expect(await ownership()).toEqual({
+    owner: "bot",
+    handoffReason: "bot_indisponivel",
+    waiting: true,
+  });
+  await receive("Ainda estão aí?");
+  model.script({ text: "Estamos sim! O corte custa R$ 80." });
+  await worker.run(conversationId);
+
+  expect(sender.sent.slice(sentBefore).map(({ text }) => text)).toEqual([
+    "Estamos sim! O corte custa R$ 80.",
+  ]);
+  const contactTexts = model.requests
+    .at(-1)!
+    .messages.filter((entry) => entry.role === "user")
+    .map((entry) => ("text" in entry ? entry.text : ""));
+  // One turn answers both messages.
+  expect(contactTexts.at(-1)).toBe("Alô?\n\nAinda estão aí?");
+  expect(await unansweredTexts(conversationId)).toEqual([]);
+});
+
+test.each([
+  [
+    "Assumir",
+    ({ scope, controls, conversationId }: Fixture) => controls.takeOver(scope, conversationId),
+  ],
+  [
+    "a dashboard reply",
+    ({ scope, replies, conversationId }: Fixture) =>
+      replies.sendReply(scope, { conversationId, text: "Já vejo para você" }),
+  ],
+  [
+    "an app reply",
+    ({ phoneNumberId, deliver, timestamp }: Fixture) =>
+      deliver(
+        messageEchoChange({
+          phoneNumberId,
+          wamid: "wamid.APP1",
+          to: contactPhone,
+          timestamp: timestamp(),
+        }),
+      ),
+  ],
+] as const)(
+  "after %s, a Bot indisponível Handoff stays with the team on the Contact's next message",
+  async (_action, act) => {
+    const fixture = await setup();
+    const { sender, conversationId, receive, worker, ownership } = fixture;
+    await failModel(fixture);
+    await act(fixture);
+    const sentBefore = sender.sent.length;
+
+    await receive("Alô?");
+    await worker.run(conversationId);
+
+    expect(await ownership()).toEqual({
+      owner: "team",
+      handoffReason: "bot_indisponivel",
+      waiting: true,
+    });
+    expect(sender.sent.length).toBe(sentBefore);
+  },
+);
+
+test("other Handoffs stay with the team on the Contact's next message", async () => {
+  const { route, notifier, conversationId, receive, ownership } = await setup();
+  await handOffAndNotify(db, notifier, route, conversationId, "limite_atingido");
+
+  await receive("Alô?");
+
+  expect(await ownership()).toEqual({
+    owner: "team",
+    handoffReason: "limite_atingido",
+    waiting: true,
+  });
+});
+
+test("an audio after a Bot indisponível Handoff returns the Bot, which hands off again for the audio", async () => {
+  const fixture = await setup();
+  const { route, clock, ownership } = fixture;
+  await failModel(fixture);
+
+  clock.advance(1000);
+  await recordInboundMessage(db, route, {
+    wamid: "wamid.AUDIO1",
+    from: contactPhone,
+    profileName: "Ana",
+    type: "audio",
+    text: null,
+    sentAt: clock.now(),
+  });
+
+  expect(await ownership()).toEqual({ owner: "team", handoffReason: "sem_resposta", waiting: true });
+});
+
+test("a Handoff quiet for a whole service window returns to the Bot, which answers only the next message", async () => {
+  const fixture = await setup();
+  const { scope, model, sender, clock, notifier, conversationId, receive, worker, controls } =
+    fixture;
+  const { ownership } = fixture;
+  await controls.takeOver(scope, conversationId);
+  await receive("Alguém aí?");
+  const sweep = () => returnQuietHandoffs({ db, clock, notifier });
+
+  clock.advance(dayMs - 1000);
+  await sweep();
+  expect(await ownership()).toEqual({ owner: "team", handoffReason: "assumida", waiting: true });
+
+  clock.advance(1000);
+  const pings = notifier.pings.length;
+  await sweep();
+  expect(await ownership()).toEqual({ owner: "bot", handoffReason: "assumida", waiting: true });
+  expect(notifier.pings.slice(pings)).toEqual([
+    { tenantId: scope.tenantId, ping: { conversationId } },
+  ]);
+  // The Handoff backlog is settled, as after "Devolver ao Bot".
+  expect(await unansweredTexts(conversationId)).toEqual([]);
+
+  await receive("Vocês abrem sábado?");
+  model.script({ text: "Abrimos sim." });
+  await worker.run(conversationId);
+  expect(sender.sent.map(({ text }) => text)).toEqual(["Abrimos sim."]);
+});
+
+test("a message from either side keeps a Handoff with the team for another service window", async () => {
+  const { scope, clock, notifier, conversationId, receive, controls, replies, ownership } =
+    await setup();
+  await controls.takeOver(scope, conversationId);
+  const sweep = () => returnQuietHandoffs({ db, clock, notifier });
+
+  clock.advance(20 * 60 * 60 * 1000);
+  await replies.sendReply(scope, { conversationId, text: "Já vejo para você" });
+  clock.advance(20 * 60 * 60 * 1000);
+  await sweep();
+  expect((await ownership()).owner).toBe("team");
+
+  await receive("Obrigada!");
+  clock.advance(dayMs - 1000);
+  await sweep();
+  expect((await ownership()).owner).toBe("team");
+
+  clock.advance(1000);
+  await sweep();
+  expect((await ownership()).owner).toBe("bot");
 });

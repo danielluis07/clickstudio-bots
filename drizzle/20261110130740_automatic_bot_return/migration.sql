@@ -1,0 +1,2 @@
+ALTER TABLE "conversation" ADD COLUMN "resume_on_contact_message" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+CREATE INDEX "conversation_team_last_message_at_idx" ON "conversation" ("last_message_at") WHERE "owner" = 'team';
