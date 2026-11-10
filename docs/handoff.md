@@ -13,11 +13,7 @@ window, since there is no telling whether a Member acted on it.
 The reasons were renamed from Portuguese identifiers to English in
 [#173](https://github.com/danielluis07/clickstudio-bots/issues/173). Its
 migration rewrites the stored `conversation.handoff_reason` and
-`bot_turn_record.handoff_reason` values. Since it runs before the deploy, it
-also adds a trigger on both columns that rewrites an old spelling on write, so
-an instance still on the old code cannot store one. A follow-up migration drops
-the trigger and its functions once no old instance remains. An old instance
-shows no reason for a Conversation whose reason is already English.
+`bot_turn_record.handoff_reason` values.
 
 ## What Members see
 
