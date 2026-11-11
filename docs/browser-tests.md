@@ -12,6 +12,7 @@ real browser and that Cache Components serve the protected segments.
 | Accept an owner invitation, Terms checkbox included | `test/e2e/invitation.e2e.ts` |
 | Open a Conversation and send a reply through the fake Meta | `test/e2e/inbox.e2e.ts` |
 | A Member cannot open another Tenant's Conversation by id | `test/e2e/inbox.e2e.ts` |
+| The owner reaches Configurações from the sidebar and sees Canal, Equipe and Termos aceitos | `test/e2e/settings.e2e.ts` |
 
 Spec files end in `.e2e.ts`, not `.spec.ts` or `.test.ts`, so `bun test`
 does not pick them up.
