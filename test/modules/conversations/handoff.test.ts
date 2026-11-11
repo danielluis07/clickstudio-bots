@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { and, eq } from "drizzle-orm";
-import { conversation, member, message, user } from "@/db/schema";
+import { conversation, handoffEvent, member, message, user } from "@/db/schema";
 import { resolveTenantScope } from "@/modules/tenancy";
 import {
   createBotActivation,
@@ -19,6 +19,7 @@ import {
   createReplyService,
   recordInboundMessage,
   recordInboundTextMessage,
+  recordSentWamid,
   returnQuietHandoffs,
   type ConversationHandoffReason,
 } from "@/modules/conversations";
@@ -782,6 +783,27 @@ const ownershipColumns = async (conversationId: string) => {
   return columns;
 };
 
+// The Handoff events recorded for a Conversation, oldest first.
+const handoffEvents = async (conversationId: string) =>
+  (
+    await db
+      .select({
+        tenantId: handoffEvent.tenantId,
+        reason: handoffEvent.reason,
+        actor: handoffEvent.actor,
+        memberId: handoffEvent.memberId,
+        occurredAt: handoffEvent.occurredAt,
+      })
+      .from(handoffEvent)
+      .where(eq(handoffEvent.conversationId, conversationId))
+      .orderBy(handoffEvent.occurredAt, handoffEvent.id)
+  ).map(({ occurredAt, ...event }) => {
+    expect(occurredAt).toBeInstanceOf(Date);
+    return event;
+  });
+
+const memberReasons: ConversationHandoffReason[] = ["claimed", "dashboard_reply", "app_reply"];
+
 const appEcho = ({ phoneNumberId, deliver, timestamp }: Fixture) =>
   deliver(
     messageEchoChange({
@@ -895,7 +917,7 @@ const handoffTransitions: HandoffTransition[] = [
 ];
 
 test.each(handoffTransitions.map((transition) => [transition.trigger, transition] as const))(
-  "Handoff by %s moves a Bot-owned Conversation to the team",
+  "Handoff by %s moves a Bot-owned Conversation to the team and records one event",
   async (_trigger, { reason, canReply, act }) => {
     const fixture = await setup({ canReply });
 
@@ -908,8 +930,124 @@ test.each(handoffTransitions.map((transition) => [transition.trigger, transition
       resumeOnContactMessage: reason === "bot_unavailable",
       returnedByMemberAt: null,
     });
+    // Only Assumir and a dashboard reply know which Member acted.
+    const knownMember = reason === "claimed" || reason === "dashboard_reply";
+    expect(await handoffEvents(fixture.conversationId)).toEqual([
+      {
+        tenantId: fixture.scope.tenantId,
+        reason,
+        actor: memberReasons.includes(reason) ? "member" : "bot",
+        memberId: knownMember ? fixture.scope.memberId : null,
+      },
+    ]);
   },
 );
+
+test("every Handoff reason records one event when the Conversation changes hands, and none when it does not", async () => {
+  const { scope, route, notifier, conversationId, controls } = await setup();
+  const reasons: ConversationHandoffReason[] = [
+    "no_answer",
+    "contact_request",
+    "handoff_topic",
+    "bot_unavailable",
+    "allowance_exhausted",
+    "contact_cap_reached",
+    "claimed",
+    "dashboard_reply",
+    "app_reply",
+  ];
+
+  for (const reason of reasons) {
+    expect(await handOffAndNotify(db, notifier, route, conversationId, reason)).toBe(true);
+    // Already with the team: no change of hands, no event.
+    expect(await handOffAndNotify(db, notifier, route, conversationId, reason)).toBe(false);
+    await controls.returnToBot(scope, conversationId);
+  }
+
+  expect(await handoffEvents(conversationId)).toEqual(
+    reasons.map((reason) => ({
+      tenantId: route.tenantId,
+      reason,
+      actor: memberReasons.includes(reason) ? "member" : "bot",
+      memberId: null,
+    })),
+  );
+});
+
+test("a Member's Handoff records that Member, and a Member's no-op Handoff records nothing", async () => {
+  const { scope, conversationId, controls, replies } = await setup();
+  const attendant = await addAttendant(scope.tenantId);
+
+  await controls.takeOver(attendant, conversationId);
+  await controls.takeOver(scope, conversationId);
+  await replies.sendReply(scope, { conversationId, text: "Já vejo para você" });
+
+  expect(await handoffEvents(conversationId)).toEqual([
+    {
+      tenantId: scope.tenantId,
+      reason: "claimed",
+      actor: "member",
+      memberId: attendant.memberId,
+    },
+  ]);
+});
+
+test("a Handoff event commits or rolls back with the change of hands", async () => {
+  const { route, clock, conversationId, ownership } = await setup();
+  const [pending] = await db
+    .insert(message)
+    .values({
+      tenantId: route.tenantId,
+      conversationId,
+      direction: "outbound",
+      origin: "bot",
+      status: "pending",
+      type: "text",
+      text: "O corte custa R$ 80.",
+      sentAt: clock.now(),
+      createdAt: clock.now(),
+    })
+    .returning({ id: message.id });
+  // A Member's app reply filed while the Bot's reply awaited its wamid.
+  await db.insert(message).values({
+    tenantId: route.tenantId,
+    conversationId,
+    wamid: "wamid.APP1",
+    direction: "outbound",
+    origin: "app",
+    status: "sent",
+    type: "text",
+    text: "Oi, aqui é da equipe",
+    sentAt: clock.now(),
+    echoUnresolved: true,
+  });
+  // Storing the wamid hands off as app_reply; the caller's next write fails.
+  const acknowledge = (fail: boolean) =>
+    db.transaction(async (tx) => {
+      await recordSentWamid(tx, route, pending!.id, "wamid.OUT1");
+      if (fail) throw new Error("reply usage write failed");
+    });
+
+  await expect(acknowledge(true)).rejects.toThrow("reply usage write failed");
+  expect(await ownership()).toEqual({ owner: "bot", handoffReason: null, waiting: false });
+  expect(await handoffEvents(conversationId)).toEqual([]);
+
+  await acknowledge(false);
+  expect(await ownership()).toEqual({ owner: "team", handoffReason: "app_reply", waiting: true });
+  expect(await handoffEvents(conversationId)).toEqual([
+    { tenantId: route.tenantId, reason: "app_reply", actor: "member", memberId: null },
+  ]);
+});
+
+test("Handoff events are deleted with their Conversation", async () => {
+  const { scope, conversationId, controls } = await setup();
+  await controls.takeOver(scope, conversationId);
+  expect(await handoffEvents(conversationId)).toHaveLength(1);
+
+  await db.delete(conversation).where(eq(conversation.id, conversationId));
+
+  expect(await handoffEvents(conversationId)).toEqual([]);
+});
 
 test("a Handoff of a Conversation back with the Bot but still waiting takes the new reason", async () => {
   const { scope, clock, conversationId, controls, model, worker, receive } = await setup();

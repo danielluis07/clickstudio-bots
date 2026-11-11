@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, lte, or, type SQL } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
-import { conversation, message } from "@/db/schema";
+import { conversation, handoffEvent, message } from "@/db/schema";
 import { serviceWindowHours } from "@/modules/conversations/repository";
 import { recordMemberActivity, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
@@ -41,18 +41,19 @@ export const unansweredContactMessages = (
 // and puts it on the waiting list, which only "Resolvida" leaves. One already
 // with the team keeps the reason of the Handoff that put it there, but a
 // Member Handoff still stops it returning on the Contact's next message. With
-// `leaseToken`, only the live turn holding that lease may hand off. True when
-// it changed hands. Inside a transaction, the caller notifies the inbox after
-// it commits.
+// `leaseToken`, only the live turn holding that lease may hand off. A change
+// of hands is recorded as a Handoff event in the same transaction; with a
+// TenantScope, a Member Handoff records that Member. True when it changed
+// hands. The caller notifies the inbox after the transaction commits.
 export const handOff = async (
-  db: Database | Transaction,
-  scope: { tenantId: string },
+  tx: Transaction,
+  scope: { tenantId: string } | TenantScope,
   conversationId: string,
   reason: ConversationHandoffReason,
   { leaseToken }: { leaseToken?: string } = {},
 ) => {
   const byMember = memberHandoffReasons.includes(reason);
-  const changed = await db
+  const changed = await tx
     .update(conversation)
     .set({
       owner: "team",
@@ -70,8 +71,20 @@ export const handOff = async (
       ),
     )
     .returning({ id: conversation.id });
-  if (changed.length === 0 && byMember)
-    await db
+  if (changed.length > 0) {
+    // The update above already holds the Conversation row, so the insert's
+    // reference to it never waits (docs/locking.md).
+    await tx.insert(handoffEvent).values({
+      tenantId: scope.tenantId,
+      conversationId,
+      reason,
+      actor: byMember ? "member" : "bot",
+      memberId: byMember && "memberId" in scope ? scope.memberId : null,
+    });
+    return true;
+  }
+  if (byMember)
+    await tx
       .update(conversation)
       .set({ resumeOnContactMessage: false, unavailableNoticeSent: false })
       .where(
@@ -83,7 +96,7 @@ export const handOff = async (
           ),
         ),
       );
-  return changed.length > 0;
+  return false;
 };
 
 // A Handoff outside a transaction, published to the inbox once it is written.
@@ -95,7 +108,7 @@ export const handOffAndNotify = async (
   reason: ConversationHandoffReason,
   options: { leaseToken?: string } = {},
 ) => {
-  const changed = await handOff(db, scope, conversationId, reason, options);
+  const changed = await db.transaction((tx) => handOff(tx, scope, conversationId, reason, options));
   if (changed) await notifyInbox(notifier, scope.tenantId, { conversationId });
   return changed;
 };

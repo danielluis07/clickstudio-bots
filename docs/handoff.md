@@ -11,6 +11,10 @@ with the team are put on the waiting list. The automatic return's migration
 window, since there is no telling whether a Member acted on it. The
 notice-once migration (#185) adds `unavailable_notice_sent`, false for existing
 rows: their next unavailability sends the notice once more.
+The Handoff events migration
+([#194](https://github.com/danielluis07/clickstudio-bots/issues/194)) adds the
+empty `handoff_event` table. Past Handoffs cannot be recovered, so events, and
+any stats built on them, start from that deploy.
 
 The reasons were renamed from Portuguese identifiers to English in
 [#173](https://github.com/danielluis07/clickstudio-bots/issues/173). Its
@@ -212,6 +216,8 @@ Each one calls `handOff(reason)`. Applied to a Conversation in **Bot** or
 | `resume_on_contact_message` | true for `bot_unavailable`, false otherwise |
 | `returned_by_member_at` | unchanged |
 
+It also records one [Handoff event](#handoff-events) in the same transaction.
+
 | Trigger | Reason | Writer |
 | --- | --- | --- |
 | Member command: **Assumir** | `claimed` | `takeOver`, `handoff.ts` |
@@ -261,6 +267,39 @@ An audio or a captionless media message that returns a **Team, returns on the
 Contact's message** Conversation then hands it straight off again as
 `no_answer`, in the same transaction: the end state is **Team** with reason
 `no_answer`.
+
+## Handoff events
+
+Issue: [#194](https://github.com/danielluis07/clickstudio-bots/issues/194).
+
+`conversation.handoff_reason` holds only the latest Handoff, and **Devolver ao
+Bot** or **Resolvida** later overwrite it. So `handOff` also appends a row to
+`handoff_event` each time a Conversation changes hands, in the same
+transaction as the ownership `UPDATE`: both commit or neither does. A Handoff
+of a Conversation already with the team changes no hands and records nothing,
+even when a Member's Handoff clears `resume_on_contact_message`. "How many
+Conversations had a Handoff in this period" is a count of distinct
+`conversation_id` over `occurred_at`.
+
+| Column | Holds |
+| --- | --- |
+| `tenant_id` | The Tenant |
+| `conversation_id` | The Conversation that changed hands |
+| `reason` | The Handoff's reason, from the same enum as `conversation.handoff_reason` |
+| `actor` | `member` for `claimed`, `dashboard_reply` and `app_reply`; `bot` for every other reason |
+| `member_id` | The Member who acted, for **Assumir** and dashboard replies, the two Handoffs made under a `TenantScope`. Null for the Bot and for app replies, whose Member the platform cannot know. |
+| `occurred_at` | The database's time of the transaction that handed off |
+
+Like [Member activity](member-activity.md), the record holds ids and codes
+only, never message text, names or phone numbers. It is kept apart from
+`member_activity` because most Handoffs have no Member actor, and from
+`bot_turn_record` because many Handoffs happen outside a Bot turn.
+
+Events are deleted with their Conversation, by `ON DELETE CASCADE`, so Contact
+deletion and Tenant deletion remove them too. They have no foreign key to the
+Tenant or the Member (see [Locks and leases](locking.md#handoff-events)), so
+`member_id` stays after that Member is removed. Nothing else prunes them, and
+they are left out of the Tenant export, like `bot_turn_record`.
 
 ## Remaining race
 
