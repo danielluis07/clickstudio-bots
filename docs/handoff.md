@@ -125,6 +125,120 @@ now.
 All four ways back to the Bot go through the one `resume` in
 `modules/conversations/handoff.ts`.
 
+## States and transitions
+
+Issue: [#184](https://github.com/danielluis07/clickstudio-bots/issues/184).
+
+Five columns of `conversation` decide who owns a Conversation and what happens
+next: `owner`, `handoff_reason`, `waiting`, `resume_on_contact_message` and
+`returned_by_member_at`. The only functions that write them are `handOff` and
+`resume` in `modules/conversations/handoff.ts`; every transition below calls
+one of the two. Read this section before adding a rule here, such as the
+return at the end of Business hours that
+[ADR 0008](adr/0008-automatic-return-to-the-bot.md) defers, and update it in
+the same change.
+
+### States
+
+| State | `owner` | `handoff_reason` | `waiting` | `resume_on_contact_message` |
+| --- | --- | --- | --- | --- |
+| **Bot** | `bot` | null | false | false |
+| **Bot, waiting**: returned, not yet **Resolvida** | `bot` | any reason | true | false |
+| **Team** | `team` | any reason | true | false |
+| **Team, returns on the Contact's message**: a `bot_unavailable` Handoff no Member has acted on | `team` | `bot_unavailable` | true | true |
+
+`returned_by_member_at` is not part of the state. It holds when a Member last
+returned the Conversation, for the
+[daily cap per Contact](bot-reply-allowance.md#daily-cap-per-contact), and
+may be set in any state.
+
+These combinations must never occur:
+
+- `waiting` true with no `handoff_reason`, or a `handoff_reason` with
+  `waiting` false. They are set together and cleared together.
+- `owner` `team` with `waiting` false.
+- `resume_on_contact_message` true unless `owner` is `team` and the reason is
+  `bot_unavailable`.
+
+No database constraint enforces them. The transition tests in
+`test/modules/conversations/handoff.test.ts` check all three after every
+transition.
+
+### The Bot lease
+
+The Bot lease (`bot_lease_token`, `bot_lease_until`) is written only by
+`claim`, `release` and `clearExpired` in `bot-turns.ts` (see
+[Locks and leases](locking.md#leases)). It never changes the state, but it
+fences the writes a live turn makes. The reply gate's Handoffs pass the
+turn's token, so a turn whose lease expired cannot hand off. Reservation
+renews the lease only while it still holds the token and the Conversation is
+Bot-owned. Every other transition ignores the lease. A turn that is running
+when one of them commits finds out at reservation, which refuses a team-owned
+Conversation or a settled snapshot.
+
+### Handoffs
+
+Each one calls `handOff(reason)`. Applied to a Conversation in **Bot** or
+**Bot, waiting**, it leaves:
+
+| Column | Afterwards |
+| --- | --- |
+| `owner` | `team` |
+| `handoff_reason` | the Handoff's reason, replacing any earlier one |
+| `waiting` | true |
+| `resume_on_contact_message` | true for `bot_unavailable`, false otherwise |
+| `returned_by_member_at` | unchanged |
+
+| Trigger | Reason | Writer |
+| --- | --- | --- |
+| Member command: **Assumir** | `claimed` | `takeOver`, `handoff.ts` |
+| Member command: dashboard reply, stored before Meta is called | `dashboard_reply` | `insertPendingReply`, `repository.ts` |
+| Member's app reply: a new echo that matches no own send | `app_reply` | `recordMessageEcho`, `echoes.ts` |
+| Member's app reply: an echo filed while a Bot reply awaited its wamid, still unmatched once the wamid is stored | `app_reply` | `resolveUnresolvedEchoes` from `recordSentWamid`, `echoes.ts` |
+| Contact message: an audio, or media with no caption | `no_answer` | `recordInboundMessage`, `inbound.ts` |
+| The Bot's turn: the Model hands off, or its unavailability notice | `no_answer`, `contact_request`, `handoff_topic`, `bot_unavailable` | `reserve`, `bot-turns.ts`, in the reservation that stores the notice |
+| The Bot's turn: the reply gate, under the turn's lease | `allowance_exhausted`, `contact_cap_reached`, `bot_unavailable` | `handOff` on `LiveBotTurn` (`handOffAndNotify` with the lease token), `bot-turns.ts` |
+| The Bot's turn: a failed send, or a pending reply left without a wamid by an earlier turn | `bot_unavailable` | `failPending`, `bot-turns.ts` |
+| The sweep: a pending reply stranded by an expired lease | `bot_unavailable` | `failPending` from `recoverStaleBotTurns`, `bot-turns.ts` |
+
+Applied to a Conversation in **Team** or **Team, returns on the Contact's
+message**, a Handoff changes nothing, so the reason stays the one that put it
+with the team. The one exception: a Member's Handoff (`claimed`,
+`dashboard_reply`, `app_reply`) sets `resume_on_contact_message` false, moving
+**Team, returns on the Contact's message** to **Team**.
+
+A Handoff settles no Contact message. Those a live turn answered were settled
+by its reservation. The rest stay unanswered until a return decides.
+
+### Returns to the Bot
+
+Each one calls `resume`. All four set `owner` to `bot` and
+`resume_on_contact_message` to false.
+
+| Trigger | From | Writer | `handoff_reason`, `waiting` | `returned_by_member_at` | Unanswered Contact messages |
+| --- | --- | --- | --- | --- | --- |
+| Member command: **Devolver ao Bot**, one or many | any state | `returnToBot`, `bulkReturnToBot`, `handoff.ts` | unchanged | now | settled for the Bot, if it was with the team |
+| Member command: **Resolvida** | any state | `resolve`, `handoff.ts` | null, false | now | settled for the Bot, if it was with the team |
+| Contact message: the first delivery of a new message | **Team, returns on the Contact's message** only | `resumeOnContactMessage` from `recordInboundMessage`, `inbound.ts` | unchanged | unchanged | left for the Bot, which answers them all |
+| The sweep: no message from either side for 24 hours | **Team** or **Team, returns on the Contact's message** | `returnQuietHandoffs`, `handoff.ts` | unchanged | unchanged | settled for the Bot |
+
+So **Devolver ao Bot** and the two automatic returns lead to **Bot, waiting**,
+and **Resolvida** leads to **Bot**. A Member return of a Conversation already
+with the Bot changes only `returned_by_member_at`, and for **Resolvida** clears
+the waiting item; it settles nothing, because those messages are the Bot's
+current turn.
+
+Settling sets `bot_answered` on every Contact message in
+`unansweredContactMessages`, in the same transaction as the return. The Bot
+then answers only the Contact's next message. Only the Contact-message return
+leaves them unanswered, because no Member acted during that Handoff, so no
+one answered them (see [Resuming](#resuming)).
+
+An audio or a captionless media message that returns a **Team, returns on the
+Contact's message** Conversation then hands it straight off again as
+`no_answer`, in the same transaction: the end state is **Team** with reason
+`no_answer`.
+
 ## Remaining race
 
 The pre-send check runs inside the reservation transaction, immediately before
@@ -142,6 +256,9 @@ echo latency to size this window.
 ```powershell
 bun test test/modules/conversations/handoff.test.ts test/trpc/router.test.ts
 ```
+
+The transition tests at the end of `handoff.test.ts` cover every row of
+[States and transitions](#states-and-transitions).
 
 Entry points: `modules/conversations/handoff.ts` (Member commands and the
 shared Handoff write), `modules/conversations/echoes.ts`,
