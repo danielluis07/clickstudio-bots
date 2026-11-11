@@ -1,4 +1,10 @@
-import { BookOpenIcon, BotIcon, LayoutDashboardIcon, MessagesSquareIcon } from "lucide-react";
+import {
+  BookOpenIcon,
+  BotIcon,
+  LayoutDashboardIcon,
+  MessagesSquareIcon,
+  SettingsIcon,
+} from "lucide-react";
 import { DashboardNavigationItem } from "@/components/dashboard/dashboard-navigation-item";
 import { SidebarGroup, SidebarMenu } from "@/components/ui/sidebar";
 
@@ -18,6 +24,9 @@ export function DashboardNavigation() {
           </DashboardNavigationItem>
           <DashboardNavigationItem href="/painel/bot" label="Bot">
             <BotIcon aria-hidden="true" />
+          </DashboardNavigationItem>
+          <DashboardNavigationItem href="/painel/configuracoes" label="Configurações">
+            <SettingsIcon aria-hidden="true" />
           </DashboardNavigationItem>
         </SidebarMenu>
       </nav>
