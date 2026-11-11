@@ -57,6 +57,19 @@ export const contact = pgTable(
   (t) => [uniqueIndex("contact_tenant_id_phone_unique").on(t.tenantId, t.phone)],
 );
 
+// The single list of Handoff reasons (docs/handoff.md).
+export const handoffReasons = [
+  "no_answer",
+  "contact_request",
+  "handoff_topic",
+  "bot_unavailable",
+  "allowance_exhausted",
+  "contact_cap_reached",
+  "claimed",
+  "dashboard_reply",
+  "app_reply",
+] as const;
+
 export const conversation = pgTable(
   "conversation",
   {
@@ -75,19 +88,7 @@ export const conversation = pgTable(
       .default("bot"),
     // Why the latest Handoff happened. Kept after "Devolver ao Bot" while the
     // Conversation still waits; "Resolvida" clears it.
-    handoffReason: text("handoff_reason", {
-      enum: [
-        "no_answer",
-        "contact_request",
-        "handoff_topic",
-        "bot_unavailable",
-        "allowance_exhausted",
-        "contact_cap_reached",
-        "claimed",
-        "dashboard_reply",
-        "app_reply",
-      ],
-    }),
+    handoffReason: text("handoff_reason", { enum: handoffReasons }),
     // On the waiting list for the team. Every Handoff adds it; only "Resolvida"
     // removes it, independently of who owns the Conversation.
     waiting: boolean("waiting").notNull().default(false),
@@ -123,6 +124,37 @@ export const conversation = pgTable(
     index("conversation_team_last_message_at_idx")
       .on(t.lastMessageAt)
       .where(sql`${t.owner} = 'team'`),
+  ],
+);
+
+// One row each time a Conversation changes hands from the Bot to the team
+// (#194), written by `handOff` with the change. A Handoff of a Conversation
+// already with the team writes none. Ids and codes only, never message text,
+// names or phone numbers. Deleted with its Conversation, so with the Contact
+// and with the Tenant. No foreign key to the Tenant or the Member: the insert
+// must take no lock that can wait (docs/locking.md).
+export const handoffEvent = pgTable(
+  "handoff_event",
+  {
+    id: id(),
+    tenantId: text("tenant_id").notNull(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversation.id, { onDelete: "cascade" }),
+    reason: text("reason", { enum: handoffReasons }).notNull(),
+    // Who caused it: a Member for "claimed", "dashboard_reply" and
+    // "app_reply", the Bot for every other reason.
+    actor: text("actor", { enum: ["bot", "member"] }).notNull(),
+    // The Member, when the platform knows who acted: "Assumir" and dashboard
+    // replies. Null for the Bot and for app replies. Kept after the Member is
+    // removed.
+    memberId: text("member_id"),
+    // The database's time of the transaction that handed off.
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("handoff_event_tenant_id_occurred_at_idx").on(t.tenantId, t.occurredAt),
+    index("handoff_event_conversation_id_idx").on(t.conversationId),
   ],
 );
 

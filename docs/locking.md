@@ -86,6 +86,26 @@ Recording made these actions transactions where they were single statements:
 (one Invitation row), pausing the Bot (the Channel row) and the three settings
 saves (one settings upsert). Each still takes one row lock.
 
+### Handoff events
+
+Every Handoff that changes hands ends with an insert into `handoff_event`
+(`handOff`, `modules/conversations/handoff.ts`; see
+[Handoff events](handoff.md#handoff-events)). Its only foreign key is to the
+Conversation, and the insert runs only after `handOff`'s `UPDATE` changed that
+Conversation row, so this transaction already holds it and its `for key share`
+never waits. It has no reference to the Tenant row or the Member row, for the
+reason given above for Member activity, and no unique key besides a fresh id.
+It adds no rank.
+
+`handOffAndNotify`, used by the reply gate under the Bot lease, was a single
+`UPDATE`. It is now a transaction of that `UPDATE` and the insert, and still
+takes one row lock.
+
+Deleting a Conversation, through Contact deletion or Tenant deletion, cascades
+to its Handoff events. Only a transaction that holds the Conversation row ever
+inserts one, so the cascade waits for nothing the Conversation row did not
+already wait for.
+
 ## Every lock
 
 ### Advisory locks
@@ -168,7 +188,7 @@ Ranks are those of the [ordering rule](#the-ordering-rule).
 | Pending Bot reply failed (`failPending`) | Conversation row `for update` (4) → Message rows (4) → Handoff on that same Conversation |
 | Return to the Bot (`resume`) | Conversation rows `for update`, ascending id (4) → Message rows (4) → those same Conversations |
 | Dashboard reply stored (`insertPendingReply`) | New message row → Conversation row (4). The new row is invisible to others, so the Conversation row is the only lock that can wait. |
-| Contact deletion (`deleteContact`) | Contact address (3) → message changes → Contact row → cascade to Conversation → Message (4) → inbox events. Message changes are only ever written under this Contact's address lock, and inbox events only by single statements outside any transaction, so nothing that holds one of those rows waits for another lock. |
+| Contact deletion (`deleteContact`) | Contact address (3) → message changes → Contact row → cascade to Conversation → Message, Handoff events (4) → inbox events. Message changes are only ever written under this Contact's address lock, and inbox events only by single statements outside any transaction, so nothing that holds one of those rows waits for another lock. |
 | Cancel, disconnect, reactivate (`claim`) | Tenant row `for update` (2) → Channel rows (4) |
 | Member subscription (`claimSubscription`, `finishSubscription`, `finishCanceledSubscription`) | Tenant row `for update` (2) → Channel rows (4) |
 | Invitation (`inviteMember`) | Tenant row `for update` (2) → Invitation rows (4) |

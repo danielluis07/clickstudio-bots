@@ -50,6 +50,10 @@ _Avoid_: Job, run, cycle
 The moment a Conversation passes from the Bot to the Tenant's Members, whether a Member takes over or the Bot steps aside.
 _Avoid_: Escalation, transfer, takeover
 
+**Handoff event**:
+The record of one Handoff: when it happened, which Conversation, its reason, and whether the Bot or a Member caused it. A Handoff of a Conversation already with the team records none.
+_Avoid_: Handoff log, escalation record
+
 **Knowledge base**:
 Everything a Tenant has told its Bot about the business. The Bot answers Contacts only from it.
 _Avoid_: Training data, training, context, documents
