@@ -95,6 +95,10 @@ export const conversation = pgTable(
     // next message returns the Conversation to the Bot. Any Member Handoff
     // clears it.
     resumeOnContactMessage: boolean("resume_on_contact_message").notNull().default(false),
+    // The Bot's latest reply was its unavailability notice, and no Member has
+    // acted since. A turn that would send it again hands off without it, so a
+    // long Model outage tells the Contact once.
+    unavailableNoticeSent: boolean("unavailable_notice_sent").notNull().default(false),
     // When a Member last returned the Conversation to the Bot. The daily reply
     // cap per Contact counts only Bot replies sent after it.
     returnedByMemberAt: timestamp("returned_by_member_at", { withTimezone: true }),

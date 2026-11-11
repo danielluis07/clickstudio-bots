@@ -132,8 +132,9 @@ before. There is still no fallback provider.
   job reads its attempt from `Upstash-Retried`. On attempt `botTurnAttempts`
   (3), or when the count is missing, the turn hands off as **Bot
   indisponível**: a Contact waits about three minutes at most. Each attempt
-  generates the reply again. A Model error that is not retryable, such as a
-  400, hands off at once.
+  generates the reply again, and each retried one writes a `retried`
+  [turn record](#turn-records) with the tokens it used. A Model error that is
+  not retryable, such as a 400, hands off at once.
 - **Meta.** A send Meta refused, which was not sent, is retried. That is a
   429, a 5xx carrying Meta's error code, or a throttling or "try again" code
   (`4`, `80007`, `130429`, `131056`, `1`, `2`, `131000`, `131016`). The worker
@@ -146,7 +147,11 @@ The pending row stays the only send barrier. A Meta retry reuses it, and a
 Model retry happens before any reservation.
 
 The gate asks `BotAllowance.canReply`; reservation calls `BotAllowance.reserve`
-in the same transaction. The monthly accounting is described in
+in the same transaction. When a concurrent turn took the last slot after the
+gate passed, `BotAllowance.reserve` or the
+[daily cap per Contact](bot-reply-allowance.md#daily-cap-per-contact) rejects
+with `ReservationRaceError`. Nothing was reserved, and the job answers 503
+without alerting, so the next delivery's gate hands off. The monthly accounting is described in
 [Bot reply allowance](bot-reply-allowance.md). Sandbox counters remain separate
 from production.
 
@@ -160,8 +165,11 @@ Handoff reason, the Model's input, output, cache-read and cache-write tokens,
 tool round trips and the turn's duration in milliseconds. A Model-requested
 Handoff that also sends a reply is recorded as `handoff`. A skip before the
 Model records zero tokens. The row holds counts and codes only, never message
-text, names or phone numbers. A turn that throws is retried by its job and is
-recorded when it completes. A Handoff the next job makes for a send left
+text, names or phone numbers. An attempt its job retries after a
+[transient Model failure](#transient-provider-failures) writes a `retried` row
+with the tokens it used, so the cost of an outage is counted; its turn ends in
+a later row. Any other turn that throws is retried by its job and is recorded
+when it completes. A Handoff the next job makes for a send left
 pending by a crashed turn is not recorded.
 
 The core returns its tokens on each outcome (`respond()`); `modules/bot/live.ts`

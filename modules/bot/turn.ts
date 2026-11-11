@@ -68,6 +68,18 @@ export const splitTokens = (
 
 const tokenKeys = ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens"] as const;
 
+// A transient Model failure the caller retries, with what the turn's earlier
+// Model requests already cost, so a retried turn's tokens are still recorded.
+// Its `cause` is the adapter's `RetryableError`.
+export class RetryableTurnError extends RetryableError {
+  constructor(
+    readonly tokens: TurnTokens,
+    options: { cause: RetryableError },
+  ) {
+    super("Transient Model failure; retry the Bot turn", options);
+  }
+}
+
 const handoff = (reason: HandoffReason, answered = ""): Decision => ({
   kind: "handoff",
   reason,
@@ -88,8 +100,8 @@ export const createBotCore = ({
   context?: ContextLimits;
 }) => ({
   // It never checks whether a reply may be sent now; live turns ask the reply
-  // gate. With `retryTransient`, a transient Model failure rejects with its
-  // `RetryableError` for the caller to retry the whole turn, instead of
+  // gate. With `retryTransient`, a transient Model failure rejects with a
+  // `RetryableTurnError` for the caller to retry the whole turn, instead of
   // handing off.
   async respond(
     turn: BotTurn,
@@ -186,7 +198,8 @@ export const createBotCore = ({
     // expected, so it is logged with the provider's status but does not alert.
     const decision = await decide().catch((error: unknown) => {
       logError("bot_decision_failed", error, ids);
-      if (retryTransient && error instanceof RetryableError) throw error;
+      if (retryTransient && error instanceof RetryableError)
+        throw new RetryableTurnError({ ...usage }, { cause: error });
       return handoff("bot_unavailable");
     });
     return { ...decision, tokens: usage };

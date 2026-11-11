@@ -130,6 +130,34 @@ test("a rejected Sentry delivery is retryable instead of being acknowledged when
   }
 });
 
+test("Sentry gets a limited number of events per kind per window, and every record is still logged", async () => {
+  let now = 0;
+  const logs: unknown[] = [];
+  const events: string[] = [];
+  const diagnostics = createDiagnostics({
+    dsn: "https://publickey@o123.ingest.us.sentry.io/456",
+    writeLog: (entry) => logs.push(entry),
+    limit: { events: 2, windowMs: 60_000 },
+    now: () => now,
+    transport: () => ({
+      send: async (envelope) => {
+        events.push(JSON.stringify(envelope).includes("bot_job_failed") ? "bot" : "inbox");
+        return { statusCode: 200 };
+      },
+      flush: async () => true,
+    }),
+  });
+  for (let index = 0; index < 4; index++) await diagnostics.alert({ kind: "bot_job_failed" });
+  // Another kind has its own limit.
+  await diagnostics.alert({ kind: "inbox_dead_letter", inboxEventId });
+  expect(events).toEqual(["bot", "bot", "inbox"]);
+  expect(logs).toHaveLength(5);
+
+  now = 60_000;
+  await diagnostics.alert({ kind: "bot_job_failed" });
+  expect(events).toEqual(["bot", "bot", "inbox", "bot"]);
+});
+
 test("condition alerts keep their counts and group in Sentry by kind and Tenant", () => {
   const tenantId = "019a0871-5e00-7000-8000-000000000002";
   const spike = { kind: "bot_handoff_spike", tenantId, handoffs: 4, turns: 9 };

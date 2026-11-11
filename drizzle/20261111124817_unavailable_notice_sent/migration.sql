@@ -1,0 +1,1 @@
+ALTER TABLE "conversation" ADD COLUMN "unavailable_notice_sent" boolean DEFAULT false NOT NULL;

@@ -258,4 +258,32 @@ describe("daily reply cap per Contact", () => {
       new Date("2026-10-23T03:00:00Z"),
     );
   });
+
+  // The day start assumes São Paulo's offset did not change since midnight,
+  // true while Brazil keeps no daylight saving. This fails if the runtime's
+  // time zone data ever disagrees, for any day through 2040.
+  test("every São Paulo day through 2040 starts at local midnight", () => {
+    const local = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Sao_Paulo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    });
+    const parts = (at: Date) =>
+      Object.fromEntries(local.formatToParts(at).map(({ type, value }) => [type, value]));
+    const wrong: string[] = [];
+    // Late evening, when an offset change since midnight would show.
+    for (let at = Date.UTC(2020, 0, 1, 2, 30); at < Date.UTC(2041, 0, 1); at += 86_400_000) {
+      const day = parts(new Date(at));
+      const start = parts(contactCapDayStart(new Date(at)));
+      const sameDay = ["year", "month", "day"].every((key) => start[key] === day[key]);
+      if (!sameDay || `${start.hour}:${start.minute}:${start.second}` !== "00:00:00")
+        wrong.push(new Date(at).toISOString());
+    }
+    expect(wrong).toEqual([]);
+  });
 });

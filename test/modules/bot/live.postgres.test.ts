@@ -296,9 +296,10 @@ suite("live turns on real Postgres", () => {
         await botReplies(db, scope.tenantId, conversationId, 1, clock.now());
       },
     };
-    await expect(
-      createLiveBot({ ...dependencies, allowance: racing }).run(conversationId),
-    ).rejects.toThrow("Contact reply cap reached");
+    // An expected race: the job retries without an alert.
+    expect(await createLiveBot({ ...dependencies, allowance: racing }).run(conversationId)).toBe(
+      "retry",
+    );
     expect(sender.sent).toHaveLength(0);
     expect(await createLiveBot(dependencies).run(conversationId)).toBe("handoff");
     expect(sender.sent).toHaveLength(0);

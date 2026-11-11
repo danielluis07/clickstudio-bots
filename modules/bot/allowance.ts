@@ -2,6 +2,7 @@ import { and, asc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
 import { botReplyUsage } from "@/db/schema";
 import type { BotTurn } from "@/modules/bot/repository";
+import { ReservationRaceError } from "@/modules/bot/reservation-race";
 import { botTimeZone } from "@/modules/bot/schedule";
 import { countPendingBotReplies } from "@/modules/conversations";
 import { findTenantOwnerEmail, type TenantScope } from "@/modules/tenancy";
@@ -166,7 +167,7 @@ export const createBotAllowance = ({
       // under the Tenant counter's short lock, never across a Model/Meta call.
       const pending = await countPendingBotReplies(tx, turn.scope, clock.now());
       if (usage!.used >= monthlyReplyLimit || usage!.used + pending >= monthlyReplyLimit + 2)
-        throw new Error("Reply allowance is busy; retry the Bot turn");
+        throw new ReservationRaceError("Reply allowance is busy; retry the Bot turn");
     },
     async notifyWarning(turn: BotTurn) {
       const usage = await read(turn.scope);

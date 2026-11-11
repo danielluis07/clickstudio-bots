@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, lt, lte, ne, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, lt, lte, sql } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import { botTurnRecord } from "@/db/schema";
 import type { TurnTokens } from "@/modules/bot/turn";
@@ -87,7 +87,8 @@ export const alertBotHandoffSpikes = async ({
   if (!candidates.length) return [];
 
   const inWindow = gt(botTurnRecord.at, windowFrom);
-  const decided = ne(botTurnRecord.outcome, "skipped");
+  // A retried attempt is not a turn: its turn ends in a later row.
+  const decided = inArray(botTurnRecord.outcome, ["sent", "handoff"]);
   const rows = await db
     .select({
       tenantId: botTurnRecord.tenantId,

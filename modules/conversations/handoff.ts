@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, lte, or, type SQL } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
 import { conversation, message } from "@/db/schema";
 import { serviceWindowHours } from "@/modules/conversations/repository";
@@ -51,6 +51,7 @@ export const handOff = async (
   reason: ConversationHandoffReason,
   { leaseToken }: { leaseToken?: string } = {},
 ) => {
+  const byMember = memberHandoffReasons.includes(reason);
   const changed = await db
     .update(conversation)
     .set({
@@ -58,6 +59,8 @@ export const handOff = async (
       handoffReason: reason,
       waiting: true,
       resumeOnContactMessage: reason === "bot_unavailable",
+      // A Member on the Conversation hears of the next outage again.
+      ...(byMember ? { unavailableNoticeSent: false } : {}),
     })
     .where(
       and(
@@ -67,11 +70,19 @@ export const handOff = async (
       ),
     )
     .returning({ id: conversation.id });
-  if (changed.length === 0 && memberHandoffReasons.includes(reason))
+  if (changed.length === 0 && byMember)
     await db
       .update(conversation)
-      .set({ resumeOnContactMessage: false })
-      .where(and(owns(scope, conversationId), eq(conversation.resumeOnContactMessage, true)));
+      .set({ resumeOnContactMessage: false, unavailableNoticeSent: false })
+      .where(
+        and(
+          owns(scope, conversationId),
+          or(
+            eq(conversation.resumeOnContactMessage, true),
+            eq(conversation.unavailableNoticeSent, true),
+          ),
+        ),
+      );
   return changed.length > 0;
 };
 
@@ -147,7 +158,8 @@ const resume = async (
     .set({
       owner: "bot",
       resumeOnContactMessage: false,
-      ...(byMemberAt ? { returnedByMemberAt: byMemberAt } : {}),
+      // The automatic returns keep it: no Member acted, and no turn succeeded.
+      ...(byMemberAt ? { returnedByMemberAt: byMemberAt, unavailableNoticeSent: false } : {}),
       ...(resolved ? { waiting: false, handoffReason: null } : {}),
     })
     .where(and(eq(conversation.tenantId, scope.tenantId), inArray(conversation.id, resumed)));

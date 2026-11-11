@@ -92,6 +92,7 @@ export {
   type ReplyUsage,
 } from "@/modules/bot/allowance";
 export { contactCapDayStart, dailyContactReplyLimit } from "@/modules/bot/contact-cap";
+export { ReservationRaceError } from "@/modules/bot/reservation-race";
 export {
   createBotSandbox,
   sandboxDailyCap,

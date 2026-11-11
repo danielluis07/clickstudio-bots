@@ -300,6 +300,11 @@ const createConversationBotRepository = (db: Database, scope: ChannelRoute) => {
           )
           .returning({ id: message.id });
         if (!failed.length) return false;
+        // A failed notice never reached the Contact; the next one is sent.
+        await tx
+          .update(conversation)
+          .set({ unavailableNoticeSent: false })
+          .where(ownsConversation(conversationId));
         // A Member's earlier Handoff keeps its reason.
         await handOff(tx, scope, conversationId, "bot_unavailable");
         // Now with the team, whatever those echoes were.
@@ -330,7 +335,10 @@ const createConversationBotRepository = (db: Database, scope: ChannelRoute) => {
               serviceWindowOpen(now),
             ),
           )
-          .returning({ tenantId: conversation.tenantId });
+          .returning({
+            tenantId: conversation.tenantId,
+            unavailableNoticeSent: conversation.unavailableNoticeSent,
+          });
         if (!valid.length) return null;
         // Resuming after a Handoff settles the backlog, possibly while this
         // turn generated its reply. A settled snapshot is never answered.
@@ -340,6 +348,14 @@ const createConversationBotRepository = (db: Database, scope: ChannelRoute) => {
           .where(and(unanswered(conversationId), inArray(message.id, ids)))
           .for("update");
         if (stillUnanswered.length !== ids.length) return null;
+        // The Contact already has the unavailability notice, and no turn has
+        // succeeded nor a Member acted since. Hand off again without a second
+        // notice or a spent Bot reply. The snapshot stays unanswered: the
+        // Contact's next message returns it to the Bot with the rest.
+        if (handoffReason === "bot_unavailable" && valid[0].unavailableNoticeSent) {
+          await handOff(tx, scope, conversationId, handoffReason);
+          return { withheld: true } as const;
+        }
         await beforeReserve?.(tx);
         const [pending] = await tx
           .insert(message)
@@ -366,6 +382,8 @@ const createConversationBotRepository = (db: Database, scope: ChannelRoute) => {
           .update(conversation)
           .set({
             lastMessageAt: sql`greatest(${conversation.lastMessageAt}, ${now.toISOString()}::timestamptz)`,
+            // Any other reply means the Model answered again.
+            unavailableNoticeSent: handoffReason === "bot_unavailable",
           })
           .where(ownsConversation(conversationId));
         // Durable before Meta is called, so a crash after sending keeps it.
@@ -463,16 +481,18 @@ export type LiveBotTurn = {
   readonly recipient: Omit<Parameters<WhatsAppSender["sendText"]>[0], "text">;
   // Marks the snapshot answered without a Bot reply.
   consume(): Promise<void>;
-  // Stores the Bot reply as pending, the durable barrier before sending. Null
-  // when the lease, eligibility, service window or snapshot no longer hold.
-  // `beforeReserve` runs in the same transaction, before the insert.
+  // Stores the Bot reply as pending, the durable barrier before sending, and
+  // returns its id. Null when the lease, eligibility, service window or
+  // snapshot no longer hold. `beforeReserve` runs in the same transaction,
+  // before the insert. A repeated unavailability notice is withheld: the
+  // Conversation hands off as `bot_unavailable` and nothing is stored.
   reserve(
     text: string,
     options?: {
       handoffReason?: ConversationHandoffReason;
       beforeReserve?: (tx: Transaction) => Promise<void>;
     },
-  ): Promise<string | null>;
+  ): Promise<string | { withheld: true } | null>;
   // Records the sent Bot reply's wamid. `onAcknowledged` runs in the same
   // transaction, only the first time the wamid is recorded.
   acknowledge(
@@ -524,8 +544,8 @@ export const runBotTurn = async <T>(
         await repository.consume(conversationId, token, ids, clock.now());
         followUp = true;
       },
-      reserve: (text, { handoffReason, beforeReserve } = {}) =>
-        repository.reserve(
+      async reserve(text, { handoffReason, beforeReserve } = {}) {
+        const reserved = await repository.reserve(
           conversationId,
           token,
           ids,
@@ -533,7 +553,10 @@ export const runBotTurn = async <T>(
           clock.now(),
           handoffReason,
           beforeReserve,
-        ),
+        );
+        if (reserved !== null && typeof reserved !== "string") await notify();
+        return reserved;
+      },
       async acknowledge(messageId, wamid, onAcknowledged) {
         await db.transaction(async (tx) => {
           if (await recordSentWamid(tx, scope, messageId, wamid)) await onAcknowledged?.(tx);
