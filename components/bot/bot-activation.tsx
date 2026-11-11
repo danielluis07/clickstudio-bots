@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BotChannelStep } from "@/components/bot/bot-channel-step";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -40,7 +41,9 @@ export function BotActivation({ canActivate }: { canActivate: boolean }) {
               Testar Bot:{" "}
               {status.tested ? "concluído" : "envie um teste após salvar suas alterações"}
             </li>
-            <li>WhatsApp: {status.connected ? "conectado" : "conecte o Canal no painel"}</li>
+            <li>
+              WhatsApp: <BotChannelStep connected={status.connected} />
+            </li>
           </ol>
         ) : (
           <p role="status">

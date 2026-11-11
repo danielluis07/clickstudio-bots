@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import type { Database } from "@/db/database";
 import { botReplyUsage, channel, member, organization, user } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { resolveChannelPhoneNumber } from "@/modules/channels";
+import { createChannelService, resolveChannelPhoneNumber } from "@/modules/channels";
 import {
   createBotActivation,
   createBotAllowance,
@@ -37,7 +37,13 @@ let contactOfB: string;
 const notifier = createTestNotifier();
 const sandboxModel = createTestModel();
 
-const callerFor = (session: TRPCContext["session"], clock = createTestClock()) => {
+const signupConfig = { appId: "app-1", configId: "config-1", graphVersion: "v23.0" };
+
+const callerFor = (
+  session: TRPCContext["session"],
+  clock = createTestClock(),
+  configured: TRPCContext["signupConfig"] = () => signupConfig,
+) => {
   const activation = createBotActivation({ db, clock });
   return appRouter.createCaller({
     db,
@@ -49,6 +55,14 @@ const callerFor = (session: TRPCContext["session"], clock = createTestClock()) =
     deleteContact: createContactDeletion({ db, notifier, clock }),
     conversations: (scope) => createConversationRepository(db, scope),
     tenants: (scope) => createTenantRepository(db, scope),
+    channels: createChannelService({
+      db,
+      clock,
+      getWhatsApp: () => {
+        throw new Error("WhatsApp is not used by these procedures");
+      },
+    }),
+    signupConfig: configured,
     sandbox: createBotSandbox({ activation, db, clock, model: sandboxModel }),
     allowance: createBotAllowance({ db, clock, mailer: createTestMailer() }),
     replies: createReplyService({
@@ -221,6 +235,63 @@ describe("tRPC router", () => {
     ).toBe("FORBIDDEN");
     expect(
       await codeOf(callByPath(callerFor(ownerA), "tenancy.current", { tenantId: "tenant-b" })),
+    ).toBe("BAD_REQUEST");
+  });
+
+  test("the header's Channel status follows the Member's role and gives signup identifiers only to an owner who can connect", async () => {
+    const ownerB = callerFor({ userId: "owner-b", activeTenantId: "tenant-b" });
+    const attendant = callerFor({ userId: "attendant", activeTenantId: "tenant-b" });
+
+    expect(await callerFor(ownerA).channels.status()).toEqual({
+      isOwner: true,
+      canConnect: true,
+      channel: null,
+      signup: signupConfig,
+    });
+    expect(
+      await callerFor(ownerA, createTestClock(), () => null).channels.status(),
+    ).toMatchObject({ canConnect: true, signup: null });
+
+    const connected = {
+      displayPhoneNumber: "+55 11 99999-0001",
+      canReconnect: false,
+      // Events were never confirmed for the seeded Channel.
+      signal: "warning" as const,
+    };
+    expect(await ownerB.channels.status()).toEqual({
+      isOwner: true,
+      canConnect: false,
+      channel: connected,
+      signup: null,
+    });
+    expect(await attendant.channels.status()).toEqual({
+      isOwner: false,
+      canConnect: false,
+      channel: connected,
+      signup: null,
+    });
+
+    await db.update(channel).set({ health: "removed" }).where(eq(channel.id, "channel-b"));
+    try {
+      const waiting = { ...connected, canReconnect: true, signal: "failing" as const };
+      expect(await ownerB.channels.status()).toEqual({
+        isOwner: true,
+        canConnect: true,
+        channel: waiting,
+        signup: signupConfig,
+      });
+      expect(await attendant.channels.status()).toEqual({
+        isOwner: false,
+        canConnect: false,
+        channel: waiting,
+        signup: null,
+      });
+    } finally {
+      await db.update(channel).set({ health: "healthy" }).where(eq(channel.id, "channel-b"));
+    }
+
+    expect(
+      await codeOf(callByPath(callerFor(ownerA), "channels.status", { tenantId: "tenant-b" })),
     ).toBe("BAD_REQUEST");
   });
 

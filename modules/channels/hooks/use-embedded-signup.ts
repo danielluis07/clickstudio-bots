@@ -1,6 +1,8 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useTRPC } from "@/trpc/client";
 import {
   parseSignupSession,
   type EmbeddedSignupConfig,
@@ -28,6 +30,8 @@ export const useEmbeddedSignup = (config: EmbeddedSignupConfig, completeSignup: 
   const [state, setState] = useState<SignupState>({ status: "idle" });
   const [, startTransition] = useTransition();
   const active = useRef<SignupAttempt | null>(null);
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
 
   const fail = useCallback((message: string) => {
     if (active.current) clearTimeout(active.current.timer);
@@ -63,7 +67,13 @@ export const useEmbeddedSignup = (config: EmbeddedSignupConfig, completeSignup: 
       attempt.code = undefined;
       startTransition(async () => {
         try {
-          setState(await completeSignup(input));
+          const result = await completeSignup(input);
+          setState(result);
+          // The header and the Bot checklist read the Channel on the client.
+          if (result.status === "success") {
+            void queryClient.invalidateQueries(trpc.channels.pathFilter());
+            void queryClient.invalidateQueries(trpc.bot.status.pathFilter());
+          }
         } catch {
           setState({
             status: "error",
@@ -76,7 +86,7 @@ export const useEmbeddedSignup = (config: EmbeddedSignupConfig, completeSignup: 
         }
       });
     },
-    [completeSignup, fail],
+    [completeSignup, fail, queryClient, trpc],
   );
 
   useEffect(() => {

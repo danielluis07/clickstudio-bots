@@ -5,6 +5,7 @@ import {
   botActivation,
   botAllowance,
   botSandbox,
+  channelService,
   contactDeletion,
   conversationRepository,
   handoffControls,
@@ -13,6 +14,7 @@ import {
   replyService,
   tenantRepository,
 } from "@/server/services";
+import { getWhatsAppSignupConfig } from "@/server/whatsapp";
 import type { TRPCContext } from "@/trpc/init";
 
 type Session = Awaited<ReturnType<typeof auth.api.getSession>>;
@@ -29,6 +31,8 @@ export const contextForSession = (session: Session): TRPCContext => ({
   deleteContact: contactDeletion,
   conversations: conversationRepository,
   tenants: tenantRepository,
+  channels: channelService,
+  signupConfig: getWhatsAppSignupConfig,
   session: session
     ? { userId: session.user.id, activeTenantId: session.session.activeOrganizationId ?? null }
     : null,

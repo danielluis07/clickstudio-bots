@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:tes
 import type { Database } from "@/db/database";
 import { channel, member, organization, user } from "@/db/schema";
 import {
+  channelSignal,
   createChannelService,
   recordAccountUpdate,
   recordCredentialRejected,
@@ -282,6 +283,25 @@ describe("Channels", () => {
     setFailure(false);
     await Promise.all([service.retrySubscription(owner), service.retrySubscription(owner)]);
     expect(syncRequests).toEqual([syncRequest("smb_app_state_sync"), syncRequest("history")]);
+  });
+});
+
+describe("Channel signal", () => {
+  test("is healthy only for a healthy Channel whose events are confirmed", () => {
+    expect(channelSignal({ health: "healthy", subscriptionStatus: "subscribed" })).toBe("healthy");
+  });
+
+  test("warns while the Channel waits on Meta", () => {
+    for (const subscriptionStatus of ["pending", "failed", "disconnected"])
+      expect(channelSignal({ health: "healthy", subscriptionStatus })).toBe("warning");
+    expect(channelSignal({ health: "restricted", subscriptionStatus: "subscribed" })).toBe(
+      "warning",
+    );
+  });
+
+  test("fails while the account keeps the Bot from replying", () => {
+    for (const health of ["credential_rejected", "removed", "banned"] as const)
+      expect(channelSignal({ health, subscriptionStatus: "subscribed" })).toBe("failing");
   });
 });
 
