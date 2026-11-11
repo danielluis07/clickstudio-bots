@@ -10,6 +10,7 @@ import { realtimeRouter } from "@/trpc/routers/realtime";
 import { tenancyRouter } from "@/trpc/routers/tenancy";
 import { sandboxRouter } from "@/trpc/routers/sandbox";
 import { botRouter } from "@/trpc/routers/bot";
+import { channelsRouter } from "@/trpc/routers/channels";
 
 export const appRouter = createTRPCRouter({
   conversations: conversationsRouter,
@@ -20,6 +21,7 @@ export const appRouter = createTRPCRouter({
   tenancy: tenancyRouter,
   sandbox: sandboxRouter,
   bot: botRouter,
+  channels: channelsRouter,
 });
 
 export type AppRouter = typeof appRouter;

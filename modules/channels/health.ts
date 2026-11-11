@@ -151,3 +151,19 @@ export const sweepChannelHealth = async ({
   }
   return unalerted.length;
 };
+
+// One signal for the Channel's status at a glance: failing while the Bot cannot
+// reply because of the account, warning while it waits on Meta (a restriction or
+// an unconfirmed event subscription), healthy otherwise.
+export type ChannelSignal = "healthy" | "warning" | "failing";
+
+export const channelSignal = ({
+  health,
+  subscriptionStatus,
+}: {
+  health: ChannelHealth;
+  subscriptionStatus: string;
+}): ChannelSignal => {
+  if (health === "healthy") return subscriptionStatus === "subscribed" ? "healthy" : "warning";
+  return health === "restricted" ? "warning" : "failing";
+};

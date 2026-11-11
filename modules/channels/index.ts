@@ -20,5 +20,7 @@ export {
   recordAccountUpdate,
   recordCredentialRejected,
   sweepChannelHealth,
+  channelSignal,
   type AccountUpdate,
+  type ChannelSignal,
 } from "@/modules/channels/health";

@@ -8,6 +8,7 @@ import type {
   createConversationRepository,
 } from "@/modules/conversations";
 import type { BotActivation, BotSandbox, ReplyAllowance } from "@/modules/bot";
+import type { createChannelService } from "@/modules/channels";
 import {
   resolveTenantScope,
   type TenantScope,
@@ -34,6 +35,10 @@ export type TRPCContext = {
   deleteContact: ContactDeletion;
   conversations: (scope: TenantScope) => ReturnType<typeof createConversationRepository>;
   tenants: (scope: TenantScope) => ReturnType<typeof createTenantRepository>;
+  channels: Pick<ReturnType<typeof createChannelService>, "getChannel">;
+  // The public identifiers the browser needs to open Meta's Embedded Signup,
+  // or null while WhatsApp is not configured.
+  signupConfig: () => { appId: string; configId: string; graphVersion: string } | null;
 };
 
 const t = initTRPC.context<TRPCContext>().create({
