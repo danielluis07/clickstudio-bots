@@ -1,7 +1,16 @@
+import { isLocalUrl, qstashJobUrl } from "@/platform/qstash";
+
 export type DoctorEnvironment = Record<string, string | undefined>;
 export type DoctorCheck = {
   name:
-    "environment" | "provider" | "database" | "migrations" | "owner" | "server" | "provider_probe";
+    | "environment"
+    | "provider"
+    | "database"
+    | "migrations"
+    | "owner"
+    | "server"
+    | "sweep_schedule"
+    | "provider_probe";
   status: "pass" | "fail" | "skip";
   message: string;
 };
@@ -11,10 +20,14 @@ export type DatabaseReadiness = {
   ownerAvailable: boolean;
 };
 
+export type SweepSchedule = { destination: string; paused: boolean };
+
 export type DoctorDependencies = {
   migrationNames: string[];
   inspectDatabase(connectionString: string): Promise<DatabaseReadiness>;
   checkServer(origin: string): Promise<boolean>;
+  // The QStash schedule with id `sweep`, read without changing it, or null.
+  readSweepSchedule(environment: DoctorEnvironment): Promise<SweepSchedule | null>;
   probeProvider(environment: DoctorEnvironment, modelId?: string): Promise<void>;
 };
 
@@ -33,6 +46,66 @@ const validUrl = (value: string | undefined, protocols: string[]) => {
   } catch {
     return false;
   }
+};
+
+export const defaultQStashUrl = "https://qstash-us-east-1.upstash.io";
+
+// The sweep's schedule lives in QStash, not in the repository (ADR 0007).
+// Without it nothing recovers stuck work, so its absence fails (#182).
+const checkSweepSchedule = async (
+  environment: DoctorEnvironment,
+  dependencies: DoctorDependencies,
+  appUrlValid: boolean,
+  add: (name: DoctorCheck["name"], status: DoctorCheck["status"], message: string) => void,
+) => {
+  const qstashUrl = environment.QSTASH_URL?.trim() || defaultQStashUrl;
+  if (!appUrlValid || !validUrl(qstashUrl, ["http:", "https:"])) {
+    add(
+      "sweep_schedule",
+      "skip",
+      "Configure APP_URL e QSTASH_URL válidas para verificar o agendamento da varredura.",
+    );
+    return;
+  }
+  if (!configured(environment.QSTASH_TOKEN)) {
+    add(
+      "sweep_schedule",
+      "skip",
+      "Configure QSTASH_TOKEN para verificar o agendamento da varredura.",
+    );
+    return;
+  }
+  if (isLocalUrl(environment.APP_URL!) && !isLocalUrl(qstashUrl)) {
+    add(
+      "sweep_schedule",
+      "skip",
+      "APP_URL é local e o QStash na nuvem não a alcança. Use a APP_URL e o QSTASH_TOKEN do ambiente publicado.",
+    );
+    return;
+  }
+  let schedule: SweepSchedule | null;
+  try {
+    schedule = await dependencies.readSweepSchedule(environment);
+  } catch {
+    add(
+      "sweep_schedule",
+      "fail",
+      "Não foi possível consultar o QStash. Confira QSTASH_TOKEN, QSTASH_URL e a conexão.",
+    );
+    return;
+  }
+  const expected = qstashJobUrl(environment.APP_URL!, "sweep");
+  add(
+    "sweep_schedule",
+    schedule && schedule.destination === expected && !schedule.paused ? "pass" : "fail",
+    !schedule
+      ? "O agendamento da varredura não existe no QStash. Crie-o com bun run sweep:schedule."
+      : schedule.destination !== expected
+        ? "O agendamento da varredura chama outra URL. Atualize-o com bun run sweep:schedule usando esta APP_URL."
+        : schedule.paused
+          ? "O agendamento da varredura está pausado. Retome-o no console do QStash."
+          : "O agendamento da varredura existe e chama esta APP_URL.",
+  );
 };
 
 // This public report contains diagnoses only, never environment values or raw
@@ -140,6 +213,8 @@ export const runDoctor = async ({
   } else {
     add("server", "skip", "Configure uma APP_URL válida para verificar o servidor.");
   }
+
+  await checkSweepSchedule(environment, dependencies, appUrlValid, add);
 
   if (
     probeModelId !== undefined &&

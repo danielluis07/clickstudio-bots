@@ -1,5 +1,5 @@
 import { env } from "@/platform/env";
-import { scheduleSweep } from "@/platform/qstash";
+import { isLocalUrl, scheduleSweep } from "@/platform/qstash";
 
 // Usage: bun run sweep:schedule, with the target environment's APP_URL,
 // QSTASH_TOKEN and QSTASH_URL (see docs/inbox-operations.md#the-sweep).
@@ -11,10 +11,8 @@ if (!env.QSTASH_TOKEN) {
 }
 
 // QStash's cloud refuses a destination it cannot reach, such as the local
-// `.env`'s APP_URL. A local QStash dev server can call it.
-const isLocal = (url: string) =>
-  ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"].includes(new URL(url).hostname);
-if (isLocal(env.APP_URL) && !isLocal(env.QSTASH_URL)) {
+// `.env`'s APP_URL.
+if (isLocalUrl(env.APP_URL) && !isLocalUrl(env.QSTASH_URL)) {
   console.error(
     `APP_URL is ${env.APP_URL}, which QStash cannot reach. Run this with the deployed ` +
       "environment's APP_URL and QSTASH_TOKEN; see docs/inbox-operations.md#the-sweep.",

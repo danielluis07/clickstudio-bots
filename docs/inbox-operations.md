@@ -30,7 +30,7 @@ then answer what the caller expects. Two kinds of failure are told apart:
 | Failure | Where it goes |
 | --- | --- |
 | Unexpected: the WhatsApp webhook cannot store a delivery, a Bot job or the inbox failure callback throws, a sweep or daily task fails, a tRPC procedure fails with an internal error, the dead letter | Structured log **and** Sentry |
-| Condition: the inbox queue is not draining, or a Tenant's **Bot indisponível** Handoffs jump (see [the sweep](#the-sweep)) | Structured log **and** Sentry, grouped into one issue per kind and Tenant |
+| Condition: the inbox queue is not draining, a Tenant's **Bot indisponível** Handoffs jump (see [the sweep](#the-sweep)), or the sweep stopped running (see [the watchdog](#the-watchdog)) | Structured log **and** Sentry, grouped into one issue per kind and Tenant |
 | Expected: a Meta call fails (4xx, 5xx, timeout), the Model fails and the turn hands off, an inbox job attempt fails (retries end in the dead letter), an invitation e-mail or realtime ping fails, the queue refuses an enqueue | Structured log only |
 
 Successful message processing and dashboard requests make no Sentry network
@@ -221,8 +221,8 @@ production deployment. The endpoint rejects missing/incorrect credentials with
 401, compares the bearer token in constant time, and disables caching. It deletes
 raw inbox rows strictly older than 30 days by `receivedAt`, in every status.
 Rows exactly 30 days old remain until the next run. It also deletes
-[Bot turn records](live-bot.md#turn-records) older than 13 months. Duplicate
-calls are safe.
+[Bot turn records](live-bot.md#turn-records) older than 13 months, and alerts
+when [the sweep](#the-watchdog) stopped running. Duplicate calls are safe.
 
 The same endpoint retries canceled Channels' disconnections and hard-deletes
 Tenants at their 30-day recovery deadline. See the
@@ -307,9 +307,49 @@ Remove-Item Env:APP_URL, Env:QSTASH_TOKEN
 ```
 
 Set `QSTASH_URL` the same way if that environment uses another QStash region.
+To confirm the schedule, run `bun run doctor` with the same variables (see
+[the watchdog](#the-watchdog)).
 Schedule it only after the deployment whose migration adds the partial indexes
 the sweep's scans use has been promoted; CI applies that migration
 ([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)).
+
+### The watchdog
+
+Issue: [#182](https://github.com/danielluis07/clickstudio-bots/issues/182).
+
+The sweep's alerts live inside the sweep, so a sweep that stops running would
+report nothing. Two checks sit outside it:
+
+- **Each run records when it finished.** The sweep's last task,
+  `record-sweep-run`, writes the time to the one row of `sweep_run`. It runs
+  even when an earlier task failed, since those alert on their own.
+- **The daily cron alerts `sweep_stale`** when no sweep finished in the last
+  30 minutes (six missed runs), with the time since the last one as
+  `ageSeconds`, or without an age when no run was ever recorded. Vercel calls
+  the daily cron independently of QStash, so it fires when the schedule is
+  missing, paused, deleted, calls an old URL, or is refused after a signing-key
+  rotation. It checks once a day, so a dead sweep is found up to 24 hours late.
+- **`bun run doctor` checks the schedule.** With `QSTASH_TOKEN` set and a
+  public `APP_URL`, it reads the QStash schedule `sweep` and fails when it is
+  missing, paused, or calls another URL than this `APP_URL`'s
+  `/api/jobs/sweep`. It never creates or changes the schedule. Without a token,
+  or with a local `APP_URL` and QStash's cloud, the check is skipped.
+
+When `sweep_stale` alerts:
+
+1. Run `bun run doctor` with the environment's `APP_URL` and `QSTASH_TOKEN`,
+   as for `bun run sweep:schedule` above. If the schedule is missing or calls
+   another URL, run `bun run sweep:schedule`. If it is paused, resume it in the
+   QStash console.
+2. If the schedule is fine, open its logs in the QStash console. A 401 means
+   the signature was refused: check that `QSTASH_CURRENT_SIGNING_KEY` and
+   `QSTASH_NEXT_SIGNING_KEY` in Vercel match QStash's current keys, and that
+   `APP_URL` is the URL QStash calls. A 503 means the signing keys are not set.
+   A timeout or 5xx points at the deployment or the database; look for
+   `sweep_task_failed` and the function logs.
+3. After a fix, the next run comes within five minutes. Confirm a new
+   `finished_at` in `sweep_run`. Work stuck in the meantime is picked up by the
+   normal scans, except messages older than the sweep's one-hour limit.
 
 ## References
 
