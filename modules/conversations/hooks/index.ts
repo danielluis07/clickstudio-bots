@@ -33,3 +33,15 @@ export {
   subscribeToInbox,
 } from "@/modules/conversations/hooks/realtime";
 export { useInboxRealtime } from "@/modules/conversations/hooks/use-inbox-realtime";
+export {
+  botOnlyShare,
+  formatStatsDay,
+  formatStatsDayLong,
+  formatStatsHour,
+  formatTimeAgo,
+  openHourBands,
+  parseStatsPeriod,
+  statsPeriodOptions,
+} from "@/modules/conversations/hooks/stats-display";
+export { placeholderConversationStats } from "@/modules/conversations/hooks/stats-placeholder";
+export { useConversationStats } from "@/modules/conversations/hooks/use-conversation-stats";

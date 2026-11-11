@@ -2,8 +2,9 @@
 
 Issue: [#60](https://github.com/danielluis07/clickstudio-bots/issues/60).
 
-The Tenant owner sees `Respostas do Bot neste mês: N / 5.000` on **Painel**,
-without charts. The authenticated `bot.usage` query takes no Tenant id and
+The Tenant owner sees the **Respostas do Bot** tile on **Painel** (`/painel`):
+`N / 5.000` with a meter for the calendar month, whatever period the page's
+selector shows. The authenticated `bot.usage` query takes no Tenant id and
 refuses other Members. The display refreshes every minute and on focus/reconnect.
 
 The allowance is 5,000 Bot replies per Tenant per calendar month in

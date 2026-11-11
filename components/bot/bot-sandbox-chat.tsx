@@ -21,7 +21,7 @@ import { useBotSandbox } from "@/modules/bot/hooks";
 export function BotSandboxChat() {
   const sandbox = useBotSandbox();
   return (
-    <Card>
+    <Card id="testar-bot" className="scroll-mt-4">
       <CardHeader>
         <CardTitle>Testar Bot</CardTitle>
         <CardDescription>
