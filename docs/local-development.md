@@ -20,6 +20,7 @@ The report checks:
 - Database connectivity and applied migration names against this checkout's migration folders, matching the installed Drizzle migrator. Missing history counts as pending; migrations unknown to this branch also fail readiness.
 - Presence of an owner membership. This does not verify a password or browser session.
 - An HTTP 200 response from `/entrar` at the configured `APP_URL` origin.
+- With `QSTASH_TOKEN` and a public `APP_URL`, that the QStash schedule `sweep` exists, is not paused and calls this `APP_URL`. It only reads the schedule. Locally it is skipped; see [the watchdog](inbox-operations.md#the-watchdog).
 
 Database inspection uses a short `BEGIN READ ONLY` transaction through a dedicated
 `pg` client, compatible with the pooled endpoint. The command never applies

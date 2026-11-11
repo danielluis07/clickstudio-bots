@@ -45,7 +45,7 @@ import type { Notifier } from "@/platform/notifier";
 import { createDiagnostics } from "@/platform/sentry";
 import { createDailyCronRoute } from "@/server/daily-cron";
 import { createBotJobRoute } from "@/server/bot-jobs";
-import { createSweepRoute } from "@/server/sweep";
+import { alertStaleSweep, createSweepRoute, recordSweepRun } from "@/server/sweep";
 
 export const diagnostics = createDiagnostics({ dsn: env.SENTRY_DSN });
 
@@ -190,6 +190,11 @@ export const dailyCronRoute = createDailyCronRoute({
     { name: "retry-reply-warnings", run: () => botAllowance.retryWarnings() },
     { name: "prune-bot-turn-records", run: () => pruneBotTurnRecords(db, systemClock) },
     { name: "prune-early-statuses", run: () => pruneEarlyMessageStatuses(db, systemClock) },
+    // Vercel calls this independently of QStash, so it notices a dead sweep.
+    {
+      name: "alert-stale-sweep",
+      run: () => alertStaleSweep({ db, clock: systemClock, diagnostics }),
+    },
   ],
 });
 
@@ -223,6 +228,8 @@ export const sweepRoute = createSweepRoute({
       name: "check-channel-health",
       run: () => sweepChannelHealth({ db, clock: systemClock, diagnostics }),
     },
+    // Last, so the daily cron's watchdog sees when a run reached its end.
+    { name: "record-sweep-run", run: () => recordSweepRun({ db, clock: systemClock }) },
   ],
 });
 

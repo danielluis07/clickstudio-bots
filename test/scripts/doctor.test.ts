@@ -22,6 +22,9 @@ const ready = (overrides: Partial<DoctorDependencies> = {}): DoctorDependencies 
     ownerAvailable: true,
   }),
   checkServer: async () => true,
+  readSweepSchedule: async () => {
+    throw new Error("Unexpected QStash call");
+  },
   probeProvider: async () => {
     throw new Error("Unexpected live probe");
   },
@@ -275,4 +278,74 @@ test("the command emits a parseable JSON report and a failing exit code without 
   expect(exitCode).toBe(1);
   expect(JSON.parse(output)).toMatchObject({ ok: false, checks: expect.any(Array) });
   expect(output).not.toContain("secret-invalid");
+});
+
+const deployed: DoctorEnvironment = {
+  ...environment,
+  APP_URL: "https://bots.example.com",
+  QSTASH_TOKEN: "secret-qstash",
+};
+const sweepCheck = (report: Awaited<ReturnType<typeof runDoctor>>) =>
+  report.checks.find(({ name }) => name === "sweep_schedule");
+
+test("the sweep schedule passes when it exists, is active and calls this APP_URL", async () => {
+  const report = await runDoctor({
+    environment: deployed,
+    dependencies: ready({
+      readSweepSchedule: async () => ({
+        destination: "https://bots.example.com/api/jobs/sweep",
+        paused: false,
+      }),
+    }),
+  });
+  expect(report.ok).toBe(true);
+  expect(sweepCheck(report)?.status).toBe("pass");
+  expect(JSON.stringify(report)).not.toContain("secret-qstash");
+});
+
+test("a missing, paused or misdirected sweep schedule fails without changing it", async () => {
+  const cases = [
+    [null, "não existe"],
+    [{ destination: "https://old.example.com/api/jobs/sweep", paused: false }, "outra URL"],
+    [{ destination: "https://bots.example.com/api/jobs/sweep", paused: true }, "pausado"],
+  ] as const;
+  for (const [schedule, message] of cases) {
+    // The port only reads; the doctor has no way to create or update it.
+    const report = await runDoctor({
+      environment: deployed,
+      dependencies: ready({ readSweepSchedule: async () => schedule }),
+    });
+    expect(report.ok).toBe(false);
+    expect(sweepCheck(report)).toMatchObject({
+      status: "fail",
+      message: expect.stringContaining(message),
+    });
+    expect(JSON.stringify(report)).not.toContain("old.example.com");
+  }
+});
+
+test("an unreachable QStash fails the sweep check without leaking its error", async () => {
+  const report = await runDoctor({
+    environment: deployed,
+    dependencies: ready({
+      readSweepSchedule: async () => {
+        throw new Error(`Unauthorized ${deployed.QSTASH_TOKEN}`);
+      },
+    }),
+  });
+  expect(sweepCheck(report)?.status).toBe("fail");
+  expect(JSON.stringify(report)).not.toContain("secret-qstash");
+});
+
+test("the sweep check is skipped without a QStash token or for a local APP_URL", async () => {
+  // `environment` has no QSTASH_TOKEN; `ready` throws if QStash is called.
+  expect(sweepCheck(await runDoctor({ environment, dependencies: ready() }))?.status).toBe("skip");
+  const local = await runDoctor({
+    environment: { ...environment, QSTASH_TOKEN: "secret-qstash" },
+    dependencies: ready(),
+  });
+  expect(sweepCheck(local)).toMatchObject({
+    status: "skip",
+    message: expect.stringContaining("local"),
+  });
 });

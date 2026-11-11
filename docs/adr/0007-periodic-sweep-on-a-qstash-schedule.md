@@ -24,6 +24,7 @@ Each scan handles at most 100 rows, and every step stays idempotent (ADR 0002). 
 ## Consequences
 
 - The QStash schedule lives in QStash, not in the repository. `bun run sweep:schedule` creates or updates it under its fixed id. Run it once for each environment, and again whenever `APP_URL` or `QSTASH_URL` changes. Until it runs, nothing recovers expired leases, because the daily cron no longer does.
+- Since nothing in the repository notices a missing schedule, a watchdog does (#182): each run records when it finished, the daily Vercel cron alerts `sweep_stale` after 30 minutes without one, and `bun run doctor` checks that the schedule exists and calls this `APP_URL`.
 - A failed run is not retried (`retries: 0`). The next run is five minutes away and repeats the same idempotent work.
 - The sweep shares QStash's failure domain with the jobs it recovers. If QStash is down, neither runs. Meta's redelivery still stores events, and the sweep catches up once QStash returns.
 - Lease recovery moved from the daily cron to the sweep, so a crashed turn is recovered in minutes, inside the 24-hour service window. Canceled Tenants' leases are left out of the scan, because no ChannelRoute can clear them.

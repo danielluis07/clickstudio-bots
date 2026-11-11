@@ -1,5 +1,45 @@
+import type { Database } from "@/db/database";
+import { sweepRun } from "@/db/schema";
+import type { Clock } from "@/platform/clock";
 import { reportError, type Diagnostics } from "@/platform/diagnostics";
 import { runMaintenanceTasks, type MaintenanceTask } from "@/server/maintenance-tasks";
+
+// Six missed five-minute runs: long enough to ignore one slow or refused run.
+export const staleSweepAfterMs = 30 * 60 * 1000;
+
+// The sweep's last task (#182): records that this run reached its end, even
+// when an earlier task failed, since those alert on their own.
+export const recordSweepRun = async ({ db, clock }: { db: Database; clock: Clock }) => {
+  const finishedAt = clock.now();
+  await db
+    .insert(sweepRun)
+    .values({ finishedAt })
+    .onConflictDoUpdate({ target: sweepRun.id, set: { finishedAt } });
+};
+
+// A daily task, run by Vercel independently of QStash: alerts `sweep_stale`
+// when no sweep finished in the last 30 minutes. With no run ever recorded,
+// it alerts without an age. Returns the age in seconds it alerted with.
+export const alertStaleSweep = async ({
+  db,
+  clock,
+  diagnostics,
+}: {
+  db: Database;
+  clock: Clock;
+  diagnostics?: Diagnostics;
+}) => {
+  const [last] = await db.select({ finishedAt: sweepRun.finishedAt }).from(sweepRun);
+  const ageMs = last ? clock.now().getTime() - last.finishedAt.getTime() : null;
+  if (ageMs !== null && ageMs < staleSweepAfterMs) return null;
+  if (ageMs === null) {
+    await diagnostics?.alert({ kind: "sweep_stale" });
+    return "never" as const;
+  }
+  const ageSeconds = Math.floor(ageMs / 1000);
+  await diagnostics?.alert({ kind: "sweep_stale", ageSeconds });
+  return ageSeconds;
+};
 
 type JobVerifier = {
   verify(request: { signature: string | null; body: string; url: string }): Promise<boolean>;

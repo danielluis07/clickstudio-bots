@@ -15,7 +15,9 @@ const main = async () => {
   });
   if (values.help) {
     console.log("Uso: bun run doctor [--json] [--probe-provider] [--probe-model <criador/modelo>]");
-    console.log("Inspeção somente leitura do ambiente, banco, migrações, responsável e servidor.");
+    console.log(
+      "Inspeção somente leitura do ambiente, banco, migrações, responsável, servidor e agendamento da varredura.",
+    );
     console.log(
       "--probe-provider faz uma chamada sintética ao modelo que pode gerar custo; desabilitado em CI.",
     );

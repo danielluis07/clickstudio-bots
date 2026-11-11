@@ -2,7 +2,12 @@ import { readMigrationFiles } from "drizzle-orm/migrator";
 import { Client } from "pg";
 import { createGateway } from "ai";
 import { createAiSdkModel, createBotModel } from "@/platform/ai-sdk-model";
-import type { DatabaseReadiness, DoctorDependencies } from "@/scripts/doctor/checks";
+import { readSweepSchedule } from "@/platform/qstash";
+import {
+  defaultQStashUrl,
+  type DatabaseReadiness,
+  type DoctorDependencies,
+} from "@/scripts/doctor/checks";
 
 type DatabaseQuery = (statement: string) => Promise<Record<string, unknown>[]>;
 
@@ -63,6 +68,11 @@ export const createDoctorDependencies = (): DoctorDependencies => ({
     await response.body?.cancel();
     return response.status === 200;
   },
+  readSweepSchedule: (environment) =>
+    readSweepSchedule({
+      token: environment.QSTASH_TOKEN!,
+      baseUrl: environment.QSTASH_URL?.trim() || defaultQStashUrl,
+    }),
   async probeProvider(environment, modelId) {
     // An explicit diagnostic override uses Gateway routing, never the direct key.
     // Production keeps its own model and restricted provider selection.

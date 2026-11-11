@@ -82,6 +82,23 @@ export const scheduleSweep = async ({
   });
 };
 
+// QStash's cloud cannot call a local APP_URL; a local QStash dev server can.
+export const isLocalUrl = (url: string) =>
+  ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"].includes(new URL(url).hostname);
+
+// Reads the sweep's schedule without changing it, or null when it does not
+// exist (#182).
+export const readSweepSchedule = async ({ token, baseUrl }: { token: string; baseUrl: string }) => {
+  const client = new Client({ token, baseUrl, devMode: false, enableTelemetry: false });
+  try {
+    const schedule = await client.schedules.get("sweep");
+    return { destination: schedule.destination, paused: schedule.isPaused };
+  } catch (error) {
+    if (error instanceof Error && "status" in error && error.status === 404) return null;
+    throw error;
+  }
+};
+
 export const createQStashJobVerifier = (keys: {
   currentSigningKey: string;
   nextSigningKey: string;

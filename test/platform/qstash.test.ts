@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { createQStashJobQueue } from "@/platform/qstash";
+import { createQStashJobQueue, readSweepSchedule } from "@/platform/qstash";
 
 let server: ReturnType<typeof Bun.serve>;
 let received: { path: string; authorization: string | null; body: unknown }[] = [];
@@ -136,5 +136,60 @@ describe("QStash job queue", () => {
       queue.enqueue([{ type: "process-inbox-event", inboxEventId: "event-1" }]),
     ).rejects.toThrow();
     accept = true;
+  });
+});
+
+describe("reading the sweep schedule", () => {
+  // Stands in for QStash's schedules API with the given answer.
+  const withSchedules = async (answer: Response, check: (baseUrl: string) => Promise<void>) => {
+    const requests: string[] = [];
+    const api = Bun.serve({
+      port: 0,
+      fetch(request) {
+        requests.push(`${request.method} ${new URL(request.url).pathname}`);
+        return answer.clone();
+      },
+    });
+    try {
+      await check(api.url.origin);
+    } finally {
+      api.stop(true);
+    }
+    // One read of the fixed id, never a write.
+    expect(requests).toEqual(["GET /v2/schedules/sweep"]);
+  };
+
+  test("returns its destination and whether it is paused", () =>
+    withSchedules(
+      Response.json({
+        scheduleId: "sweep",
+        cron: "*/5 * * * *",
+        createdAt: 0,
+        destination: "https://bots.example.com/api/jobs/sweep",
+        method: "POST",
+        retries: 0,
+        isPaused: true,
+      }),
+      async (baseUrl) => {
+        expect(await readSweepSchedule({ token: "token", baseUrl })).toEqual({
+          destination: "https://bots.example.com/api/jobs/sweep",
+          paused: true,
+        });
+      },
+    ));
+
+  test("returns null for a missing schedule and throws for other failures", async () => {
+    await withSchedules(
+      Response.json({ error: "schedule not found" }, { status: 404 }),
+      async (baseUrl) => {
+        expect(await readSweepSchedule({ token: "token", baseUrl })).toBeNull();
+      },
+    );
+    await withSchedules(
+      Response.json({ error: "unauthorized" }, { status: 401 }),
+      async (baseUrl) => {
+        await expect(readSweepSchedule({ token: "token", baseUrl })).rejects.toThrow();
+      },
+    );
   });
 });

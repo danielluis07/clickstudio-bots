@@ -61,6 +61,7 @@ export const diagnosticKinds = [
   "bot_turn_record_failed",
   "bot_handoff_spike",
   "inbox_queue_stale",
+  "sweep_stale",
   "channel_unhealthy",
   "channel_health_record_failed",
   "meta_request_failed",
@@ -73,12 +74,13 @@ export const diagnosticKinds = [
 
 export type DiagnosticKind = (typeof diagnosticKinds)[number];
 
-// Kinds that report a condition the sweep observed, not a thrown error. Sentry
-// groups each into one issue (per Tenant where it names one), however many
-// sweeps see it.
+// Kinds that report a condition the sweep or the daily cron observed, not a
+// thrown error. Sentry groups each into one issue (per Tenant where it names
+// one), however many runs see it.
 export const conditionKinds = [
   "bot_handoff_spike",
   "inbox_queue_stale",
+  "sweep_stale",
   "channel_unhealthy",
 ] as const satisfies readonly DiagnosticKind[];
 
@@ -104,8 +106,8 @@ export type Diagnostic = {
   tenantId?: string;
   conversationId?: string;
   jobId?: string;
-  // Counts for a condition: the oldest pending inbox event's age, or a
-  // Tenant's Handoffs out of its Bot turns.
+  // Counts for a condition: the oldest pending inbox event's age, the time
+  // since the last sweep, or a Tenant's Handoffs out of its Bot turns.
   ageSeconds?: number;
   handoffs?: number;
   turns?: number;
