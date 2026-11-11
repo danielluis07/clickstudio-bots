@@ -111,6 +111,8 @@ export const conversation = pgTable(
   },
   (t) => [
     uniqueIndex("conversation_channel_id_contact_id_unique").on(t.channelId, t.contactId),
+    // A Contact's Conversations on every Channel: the home page's new Contacts.
+    index("conversation_contact_id_idx").on(t.contactId),
     index("conversation_tenant_id_last_message_at_idx").on(
       t.tenantId,
       t.lastMessageAt.desc(),
@@ -206,6 +208,8 @@ export const message = pgTable(
       t.answeredMessageId,
     ),
     index("message_conversation_id_sent_at_idx").on(t.conversationId, t.sentAt),
+    // The home page's stats: a Tenant's messages in a period.
+    index("message_tenant_id_sent_at_idx").on(t.tenantId, t.sentAt),
     // The sweep's scans across all Tenants: Bot replies stuck before Meta
     // answered, and Contact messages no Bot reply has covered yet.
     index("message_pending_bot_reply_created_at_idx")

@@ -13,6 +13,7 @@ import { createChannelService, sweepChannelHealth } from "@/modules/channels";
 import {
   createContactDeletion,
   createConversationRepository,
+  createConversationStats,
   createHandoffControls,
   createReplyService,
   pruneEarlyMessageStatuses,
@@ -30,6 +31,7 @@ import {
   createLiveBot,
   alertBotHandoffSpikes,
   pruneBotTurnRecords,
+  readBehaviour,
 } from "@/modules/bot";
 import { createBotModel } from "@/platform/ai-sdk-model";
 import { createWhatsAppGateway } from "@/server/whatsapp";
@@ -90,6 +92,11 @@ export const contactDeletion = createContactDeletion({ db, clock: systemClock, n
 export const conversationRepository = (scope: TenantScope) =>
   createConversationRepository(db, scope);
 export const tenantRepository = (scope: TenantScope) => createTenantRepository(db, scope);
+export const conversationStats = createConversationStats({
+  db,
+  clock: systemClock,
+  readBusinessHours: async (scope) => (await readBehaviour(db, scope)).hours,
+});
 
 export const captureSettingsEditor = createCaptureSettingsEditor({ db, clock: systemClock });
 export const linkSettingsEditor = createLinkSettingsEditor({ db, clock: systemClock });

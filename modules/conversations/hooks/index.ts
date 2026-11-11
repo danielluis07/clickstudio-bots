@@ -39,9 +39,10 @@ export {
   formatStatsDayLong,
   formatStatsHour,
   formatTimeAgo,
+  hasActiveConversations,
+  hasContactMessages,
   openHourBands,
   parseStatsPeriod,
   statsPeriodOptions,
 } from "@/modules/conversations/hooks/stats-display";
-export { placeholderConversationStats } from "@/modules/conversations/hooks/stats-placeholder";
 export { useConversationStats } from "@/modules/conversations/hooks/use-conversation-stats";

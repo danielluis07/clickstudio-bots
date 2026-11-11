@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   contactDetailLimits,
+  statsPeriods,
   updateContactDetails,
   type HandoffControls,
 } from "@/modules/conversations";
@@ -39,6 +40,15 @@ export const conversationsRouter = createTRPCRouter({
     .query(async ({ ctx, input }) =>
       orNotFound(await ctx.conversations(ctx.scope).listMessages(input.conversationId, input)),
     ),
+
+  // The home page's stats for the last 7, 30 or 90 São Paulo days.
+  stats: tenantProcedure
+    .input(
+      z.strictObject({
+        period: z.union(statsPeriods.map((period) => z.literal(period))),
+      }),
+    )
+    .query(({ ctx, input }) => ctx.conversationStats.read(ctx.scope, input.period)),
 });
 
 // Each refusal of the reply service as the browser sees it.

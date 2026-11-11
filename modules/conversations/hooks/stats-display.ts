@@ -22,6 +22,13 @@ export const botOnlyShare = (stats: ConversationStats) =>
     ? null
     : Math.round((stats.botOnlyConversations / stats.activeConversations) * 100);
 
+// Whether the period had any Active Conversation, for the daily chart's empty state.
+export const hasActiveConversations = (stats: ConversationStats) => stats.activeConversations > 0;
+
+// Whether any Contact wrote in the period, for the hour chart's empty state.
+export const hasContactMessages = (stats: ConversationStats) =>
+  stats.contactMessagesByHour.some((hour) => hour.messages > 0);
+
 const minutes = (time: string) => {
   const [hours, mins] = time.split(":").map(Number);
   return hours * 60 + mins;
