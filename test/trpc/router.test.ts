@@ -9,11 +9,13 @@ import {
   createBotAllowance,
   createBotSandbox,
   createBotSettingsEditor,
+  readBehaviour,
 } from "@/modules/bot";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import {
   createContactDeletion,
   createConversationRepository,
+  createConversationStats,
   createHandoffControls,
   createReplyService,
   recordInboundTextMessage,
@@ -53,6 +55,11 @@ const callerFor = (
     activation,
     handoff: createHandoffControls({ db, clock, notifier }),
     deleteContact: createContactDeletion({ db, notifier, clock }),
+    conversationStats: createConversationStats({
+      db,
+      clock,
+      readBusinessHours: async (scope) => (await readBehaviour(db, scope)).hours,
+    }),
     conversations: (scope) => createConversationRepository(db, scope),
     tenants: (scope) => createTenantRepository(db, scope),
     channels: createChannelService({
@@ -318,6 +325,26 @@ describe("tRPC router", () => {
       { capability: { "*": ["publish"] } },
     ]) {
       expect(await codeOf(callByPath(callerFor(ownerA), "realtime.token", input))).toBe(
+        "BAD_REQUEST",
+      );
+    }
+  });
+
+  test("home page stats count only the current Tenant's Conversations, for a member too", async () => {
+    // Tenant B's only Contact wrote on 2026-10-20, within 7 days of this clock.
+    const clock = createTestClock(new Date("2026-10-22T12:00:00Z"));
+    const attendant = callerFor({ userId: "attendant", activeTenantId: "tenant-b" }, clock);
+    expect(await attendant.conversations.stats({ period: 7 })).toMatchObject({
+      period: 7,
+      activeConversations: 1,
+      newContacts: 1,
+    });
+    expect(await callerFor(ownerA, clock).conversations.stats({ period: 7 })).toMatchObject({
+      activeConversations: 0,
+      newContacts: 0,
+    });
+    for (const input of [{ period: 14 }, { period: 7, tenantId: "tenant-b" }]) {
+      expect(await codeOf(callByPath(callerFor(ownerA, clock), "conversations.stats", input))).toBe(
         "BAD_REQUEST",
       );
     }

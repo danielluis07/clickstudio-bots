@@ -3,6 +3,7 @@ import superjson from "superjson";
 import type { Database } from "@/db/database";
 import type {
   ContactDeletion,
+  ConversationStatsReader,
   HandoffControls,
   ReplyService,
   createConversationRepository,
@@ -33,6 +34,7 @@ export type TRPCContext = {
   activation: BotActivation;
   handoff: HandoffControls;
   deleteContact: ContactDeletion;
+  conversationStats: ConversationStatsReader;
   conversations: (scope: TenantScope) => ReturnType<typeof createConversationRepository>;
   tenants: (scope: TenantScope) => ReturnType<typeof createTenantRepository>;
   channels: Pick<ReturnType<typeof createChannelService>, "getChannel">;

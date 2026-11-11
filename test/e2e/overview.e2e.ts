@@ -23,6 +23,9 @@ test("the owner's home page shows the stats overview and its period selector", a
     page.getByRole("heading", { name: "Mensagens dos contatos por horário" }),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Últimos Handoffs" })).toBeVisible();
+  // The seeded Contact wrote live today: one Active Conversation, whether or
+  // not an earlier test handed it off.
+  await expect(page.getByText(/^\d+ de 1 conversas$/)).toBeVisible();
 
   const period = page.getByRole("group", { name: "Período" });
   await expect(period.getByRole("button", { name: "30 dias" })).toHaveAttribute(

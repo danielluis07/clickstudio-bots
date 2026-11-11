@@ -1,0 +1,109 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "c5d399ee-a90a-40b3-bf42-31553a221b2e",
+  "prevIds": [
+    "0c955e3b-fc00-44c4-8e7d-605233562f53"
+  ],
+  "footprints": [
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "conversation",
+        "conversation_contact_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.conversation_contact_id_idx",
+        "n|idx|public.conversation_contact_id_idx",
+        "e|idx|public.conversation_contact_id_idx",
+        "n|rel|public.conversation_contact_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.conversation",
+        "n|sch|public",
+        "n|col|public.conversation.contact_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "message",
+        "message_tenant_id_sent_at_idx"
+      ],
+      "writes": [
+        "s|idx|public.message_tenant_id_sent_at_idx",
+        "n|idx|public.message_tenant_id_sent_at_idx",
+        "e|idx|public.message_tenant_id_sent_at_idx",
+        "n|rel|public.message_tenant_id_sent_at_idx"
+      ],
+      "reads": [
+        "n|tbl|public.message",
+        "n|sch|public",
+        "n|col|public.message.tenant_id",
+        "n|col|public.message.sent_at"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "conversation",
+        "name": "conversation_contact_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "contact_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "message",
+        "name": "message_tenant_id_sent_at_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "tenant_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "sent_at",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    }
+  ]
+}

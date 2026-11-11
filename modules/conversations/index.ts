@@ -61,9 +61,12 @@ export {
 } from "@/modules/conversations/replies";
 export { createConversationRepository } from "@/modules/conversations/repository";
 export {
+  createConversationStats,
   defaultStatsPeriod,
   statsPeriods,
   type ConversationStats,
+  type ConversationStatsDependencies,
+  type ConversationStatsReader,
   type DailyConversations,
   type HourlyContactMessages,
   type RecentHandoff,
