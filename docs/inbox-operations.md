@@ -7,7 +7,7 @@ EU requirement in #48 following the project owner's region decision.
 
 ## Deployment
 
-Run `bun run db:migrate` before deploying. The migration adds nullable failure
+CI applies the migration in production before the new code serves ([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)). The migration adds nullable failure
 metadata and a received-at index; it preserves existing inbox events.
 
 Configure these server-only variables in addition to the existing
@@ -139,7 +139,7 @@ Conversation in the WhatsApp Business app too. The mutation checks the current
 Tenant membership and owner role on the server. Other Members have no delete
 control and cannot invoke the operation directly.
 
-Run `bun run db:migrate` before deploying this feature. Deletion atomically
+CI applies the migration in production before the new code serves ([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)). Deletion atomically
 removes the Contact, all its Conversations/messages, and message edits/revokes,
 including changes whose original message has not arrived. Captured fields are
 columns of the Contact row, so they are erased with it. Voice transcription is
@@ -198,7 +198,7 @@ find a settled event and do nothing. Even an unsettled tombstone would be
 ignored as unsupported. A job that read the payload before the deletion
 committed is still refused by the replay barrier above.
 
-Run `bun run db:migrate` before deploying. The migration adds the generated
+CI applies the migration in production before the new code serves ([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)). The migration adds the generated
 column and its index; Postgres computes the column for existing rows, so
 events stored before the deployment are erased too.
 
@@ -307,8 +307,9 @@ Remove-Item Env:APP_URL, Env:QSTASH_TOKEN
 ```
 
 Set `QSTASH_URL` the same way if that environment uses another QStash region.
-Run `bun run db:migrate` first: the migration adds the partial indexes the
-sweep's scans use.
+Schedule it only after the deployment whose migration adds the partial indexes
+the sweep's scans use has been promoted; CI applies that migration
+([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)).
 
 ## References
 

@@ -48,7 +48,7 @@ destination is visited. These checks use saved changes; unsaved edits do not app
 
 ## Deployment
 
-Run `bun run db:migrate` before deploying. The additive migration creates
+CI applies the migration in production before the new code serves ([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)). The additive migration creates
 `bot_link_settings`, with one row per Tenant, deletion cascading from the Tenant
 and the saving Member reference becoming null if the Member is removed. It
 does not enable sending for existing Tenants.

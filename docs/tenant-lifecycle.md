@@ -1,7 +1,8 @@
 # Tenant cancellation and manual exports
 
-Apply the database migrations with `bun run db:migrate` before using these
-commands. Run them from a trusted administrator environment with the deployment's
+Against a local database, apply the migrations with `bun run db:migrate` before
+using these commands; CI applies production's
+([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)). Run them from a trusted administrator environment with the deployment's
 database and WhatsApp encryption configuration. Each command checks that the
 supplied administrator email belongs to an active platform administrator.
 Tenant ids are the Better Auth organization ids. There is no self-service

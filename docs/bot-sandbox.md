@@ -94,7 +94,7 @@ handles this refusal through the same safe Handoff path as other provider errors
 The manual provider-evaluation runner still uses its explicitly configured direct
 provider or local adapter module; see `docs/evaluation/README.md`.
 
-Run `bun run db:migrate` before deploying; the migration adds only the separate
+CI applies the migration in production before the new code serves ([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)); the migration adds only the separate
 sandbox counter table. Automated tests use migrated PGlite and the deterministic
 Model fake, requiring neither provider credentials nor WhatsApp access. They
 cover current saved data, context replay, capability validation, network and

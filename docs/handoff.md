@@ -3,7 +3,7 @@
 Issue: [#57](https://github.com/danielluis07/clickstudio-bots/issues/57).
 Decision: [Handoff #29](https://github.com/danielluis07/clickstudio-bots/issues/29#issuecomment-6274170033).
 
-Run `bun run db:migrate` before deploying. The migration adds the Conversation's
+CI applies the migration in production before the new code serves ([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)). The migration adds the Conversation's
 `waiting` flag and the message's `echo_unresolved` flag. Conversations already
 with the team are put on the waiting list. The automatic return's migration
 (#139) adds `resume_on_contact_message`, false for existing rows: a
