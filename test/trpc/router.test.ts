@@ -248,9 +248,10 @@ describe("tRPC router", () => {
       channel: null,
       signup: signupConfig,
     });
-    expect(
-      await callerFor(ownerA, createTestClock(), () => null).channels.status(),
-    ).toMatchObject({ canConnect: true, signup: null });
+    expect(await callerFor(ownerA, createTestClock(), () => null).channels.status()).toMatchObject({
+      canConnect: true,
+      signup: null,
+    });
 
     const connected = {
       displayPhoneNumber: "+55 11 99999-0001",

@@ -45,7 +45,10 @@ export function ChannelStatus() {
           </span>
         </Button>
       ) : channel ? (
-        <ChannelStatusPill displayPhoneNumber={channel.displayPhoneNumber} signal={channel.signal} />
+        <ChannelStatusPill
+          displayPhoneNumber={channel.displayPhoneNumber}
+          signal={channel.signal}
+        />
       ) : (
         <span className="inline-flex h-8 items-center gap-2 text-sm whitespace-nowrap text-muted-foreground">
           <MessageCircleIcon className="size-4 shrink-0" aria-hidden="true" />
