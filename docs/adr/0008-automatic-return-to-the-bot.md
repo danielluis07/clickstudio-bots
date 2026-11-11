@@ -11,6 +11,8 @@ Both keep the Conversation on the waiting list with its reason, as **Devolver ao
 
 A Member acting on a `bot_unavailable` Handoff does not change its reason: a Handoff of a Conversation already with the team keeps the reason that put it there. So the reason alone cannot tell whether a Member is on the Conversation. The Conversation's `resume_on_contact_message` flag does. Only a `bot_unavailable` change of hands sets it. **Assumir**, a dashboard reply, an app echo, and every return to the Bot clear it.
 
+[States and transitions](../handoff.md#states-and-transitions) lists every ownership state, every Handoff and return with its trigger and writer, and the combinations of columns that must never occur.
+
 ## Considered Options
 
 - **Never (dashboard-only):** rejected. It leaves both gaps above.

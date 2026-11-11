@@ -8,6 +8,7 @@ import {
   createBotSandbox,
   createBotSettingsEditor,
   createLiveBot,
+  type BotAllowance,
   type BotJob,
 } from "@/modules/bot";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
@@ -19,6 +20,7 @@ import {
   recordInboundMessage,
   recordInboundTextMessage,
   returnQuietHandoffs,
+  type ConversationHandoffReason,
 } from "@/modules/conversations";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
@@ -62,7 +64,8 @@ const addAttendant = async (tenantId: string) => {
 };
 
 // An activated Bot and one Bot-owned Conversation with an unanswered message.
-const setup = async () => {
+// `canReply` stands in for the monthly reply allowance.
+const setup = async ({ canReply }: { canReply?: BotAllowance["canReply"] } = {}) => {
   db = await createTestDatabase();
   const seeded = await seedLiveBot(db);
   const { scope, route, clock } = seeded;
@@ -104,7 +107,7 @@ const setup = async () => {
     queue,
     notifier,
     getSender: () => sender,
-    allowance: createTestBotAllowance(),
+    allowance: createTestBotAllowance(canReply),
   });
   const repository = createConversationRepository(db, scope);
   const jobs = createTestJobQueue();
@@ -709,4 +712,304 @@ test("a message from either side keeps a Handoff with the team for another servi
   clock.advance(1000);
   await sweep();
   expect((await ownership()).owner).toBe("bot");
+});
+
+// States and transitions (docs/handoff.md#states-and-transitions). Each test
+// drives one transition and reads every ownership column afterwards.
+
+// Every column that decides who owns a Conversation, checked against the
+// combinations that must never occur.
+const ownershipColumns = async (conversationId: string) => {
+  const [found] = await db
+    .select({
+      owner: conversation.owner,
+      handoffReason: conversation.handoffReason,
+      waiting: conversation.waiting,
+      resumeOnContactMessage: conversation.resumeOnContactMessage,
+      returnedByMemberAt: conversation.returnedByMemberAt,
+    })
+    .from(conversation)
+    .where(eq(conversation.id, conversationId));
+  const columns = found!;
+  expect(columns.waiting).toBe(columns.handoffReason !== null);
+  if (columns.owner === "team") expect(columns.waiting).toBe(true);
+  if (columns.resumeOnContactMessage)
+    expect([columns.owner, columns.handoffReason]).toEqual(["team", "bot_unavailable"]);
+  return columns;
+};
+
+const appEcho = ({ phoneNumberId, deliver, timestamp }: Fixture) =>
+  deliver(
+    messageEchoChange({
+      phoneNumberId,
+      wamid: "wamid.APP1",
+      to: contactPhone,
+      timestamp: timestamp(),
+    }),
+  );
+
+type HandoffTransition = {
+  trigger: string;
+  reason: ConversationHandoffReason;
+  canReply?: BotAllowance["canReply"];
+  act: (fixture: Fixture) => Promise<unknown>;
+};
+
+const handoffTransitions: HandoffTransition[] = [
+  {
+    trigger: "Assumir",
+    reason: "claimed",
+    act: ({ scope, controls, conversationId }) => controls.takeOver(scope, conversationId),
+  },
+  {
+    trigger: "a dashboard reply",
+    reason: "dashboard_reply",
+    act: ({ scope, replies, conversationId }) =>
+      replies.sendReply(scope, { conversationId, text: "Já vejo para você" }),
+  },
+  { trigger: "an app echo", reason: "app_reply", act: appEcho },
+  {
+    trigger: "an app echo filed while the Bot's reply awaited its wamid",
+    reason: "app_reply",
+    act: (fixture) => {
+      fixture.model.script({ text: "O corte custa R$ 80." });
+      fixture.sender.beforeAnswering(() => appEcho(fixture));
+      return fixture.worker.run(fixture.conversationId);
+    },
+  },
+  {
+    trigger: "an audio from the Contact",
+    reason: "no_answer",
+    act: ({ route, clock }) => {
+      clock.advance(1000);
+      return recordInboundMessage(db, route, {
+        wamid: "wamid.AUDIO1",
+        from: contactPhone,
+        profileName: "Ana",
+        type: "audio",
+        text: null,
+        sentAt: clock.now(),
+      });
+    },
+  },
+  {
+    trigger: "the Model's Handoff, at reservation",
+    reason: "contact_request",
+    act: ({ model, worker, conversationId }) => {
+      model.script({
+        toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "contact_request" } }],
+      });
+      return worker.run(conversationId);
+    },
+  },
+  {
+    trigger: "the Model's unavailability notice, at reservation",
+    reason: "bot_unavailable",
+    act: ({ model, worker, conversationId }) => {
+      model.script(new Error("provider down"));
+      return worker.run(conversationId);
+    },
+  },
+  {
+    trigger: "the reply gate, under the Bot lease",
+    reason: "allowance_exhausted",
+    canReply: async () => false,
+    act: ({ worker, conversationId }) => worker.run(conversationId),
+  },
+  {
+    trigger: "a failed Bot send",
+    reason: "bot_unavailable",
+    act: ({ model, sender, worker, conversationId }) => {
+      model.script({ text: "O corte custa R$ 80." });
+      sender.failNext();
+      return worker.run(conversationId);
+    },
+  },
+  {
+    trigger: "the sweep, failing a Bot reply stranded by a crashed turn",
+    reason: "bot_unavailable",
+    act: async ({ scope, clock, worker, conversationId }) => {
+      await db.insert(message).values({
+        tenantId: scope.tenantId,
+        conversationId,
+        direction: "outbound",
+        origin: "bot",
+        status: "pending",
+        type: "text",
+        text: "O corte custa R$ 80.",
+        sentAt: clock.now(),
+        createdAt: clock.now(),
+      });
+      await db
+        .update(conversation)
+        .set({ botLeaseToken: "crashed", botLeaseUntil: clock.now() })
+        .where(eq(conversation.id, conversationId));
+      clock.advance(3 * 60_000);
+      return worker.sweep();
+    },
+  },
+];
+
+test.each(handoffTransitions.map((transition) => [transition.trigger, transition] as const))(
+  "Handoff by %s moves a Bot-owned Conversation to the team",
+  async (_trigger, { reason, canReply, act }) => {
+    const fixture = await setup({ canReply });
+
+    await act(fixture);
+
+    expect(await ownershipColumns(fixture.conversationId)).toEqual({
+      owner: "team",
+      handoffReason: reason,
+      waiting: true,
+      resumeOnContactMessage: reason === "bot_unavailable",
+      returnedByMemberAt: null,
+    });
+  },
+);
+
+test("a Handoff of a Conversation back with the Bot but still waiting takes the new reason", async () => {
+  const { scope, clock, conversationId, controls, model, worker, receive } = await setup();
+  await controls.takeOver(scope, conversationId);
+  await controls.returnToBot(scope, conversationId);
+  const returnedAt = clock.now();
+  await receive("E a barba?");
+  model.script({
+    toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "handoff_topic" } }],
+  });
+
+  await worker.run(conversationId);
+
+  expect(await ownershipColumns(conversationId)).toEqual({
+    owner: "team",
+    handoffReason: "handoff_topic",
+    waiting: true,
+    resumeOnContactMessage: false,
+    returnedByMemberAt: returnedAt,
+  });
+});
+
+test("a Handoff of a team-owned Conversation keeps its reason, and only a Member's stops the return on the Contact's message", async () => {
+  const fixture = await setup();
+  const { scope, route, notifier, conversationId, controls } = fixture;
+  await failModel(fixture);
+  const awaitingContact = {
+    owner: "team",
+    handoffReason: "bot_unavailable",
+    waiting: true,
+    resumeOnContactMessage: true,
+    returnedByMemberAt: null,
+  } as const;
+
+  expect(await handOffAndNotify(db, notifier, route, conversationId, "allowance_exhausted")).toBe(
+    false,
+  );
+  expect(await ownershipColumns(conversationId)).toEqual(awaitingContact);
+
+  await controls.takeOver(scope, conversationId);
+  expect(await ownershipColumns(conversationId)).toEqual({
+    ...awaitingContact,
+    resumeOnContactMessage: false,
+  });
+});
+
+test.each([
+  [
+    "Devolver ao Bot",
+    ({ scope, controls, conversationId }: Fixture) => controls.returnToBot(scope, conversationId),
+  ],
+  [
+    "a bulk Devolver ao Bot",
+    ({ scope, controls, conversationId }: Fixture) =>
+      controls.bulkReturnToBot(scope, [conversationId]),
+  ],
+] as const)(
+  "%s keeps the reason and the waiting item, and settles the backlog",
+  async (_command, act) => {
+    const fixture = await setup();
+    const { scope, clock, conversationId, controls, receive } = fixture;
+    await controls.takeOver(scope, conversationId);
+    await receive("Alguém aí?");
+    clock.advance(1000);
+
+    await act(fixture);
+
+    expect(await ownershipColumns(conversationId)).toEqual({
+      owner: "bot",
+      handoffReason: "claimed",
+      waiting: true,
+      resumeOnContactMessage: false,
+      returnedByMemberAt: clock.now(),
+    });
+    expect(await unansweredTexts(conversationId)).toEqual([]);
+  },
+);
+
+test("Devolver ao Bot after an unacted Bot indisponível Handoff stops its return on the Contact's message", async () => {
+  const fixture = await setup();
+  const { scope, clock, conversationId, controls } = fixture;
+  await failModel(fixture);
+  clock.advance(1000);
+
+  await controls.returnToBot(scope, conversationId);
+
+  expect(await ownershipColumns(conversationId)).toEqual({
+    owner: "bot",
+    handoffReason: "bot_unavailable",
+    waiting: true,
+    resumeOnContactMessage: false,
+    returnedByMemberAt: clock.now(),
+  });
+});
+
+test("Resolvida clears the reason and the waiting item, and settles the backlog", async () => {
+  const { scope, clock, conversationId, controls, receive } = await setup();
+  await controls.takeOver(scope, conversationId);
+  await receive("Alguém aí?");
+  clock.advance(1000);
+
+  await controls.resolve(scope, conversationId);
+
+  expect(await ownershipColumns(conversationId)).toEqual({
+    owner: "bot",
+    handoffReason: null,
+    waiting: false,
+    resumeOnContactMessage: false,
+    returnedByMemberAt: clock.now(),
+  });
+  expect(await unansweredTexts(conversationId)).toEqual([]);
+});
+
+test("the Contact's message after an unacted Bot indisponível Handoff leaves the backlog to the Bot", async () => {
+  const fixture = await setup();
+  const { conversationId, receive } = fixture;
+  await failModel(fixture);
+
+  await receive("Alô?");
+
+  expect(await ownershipColumns(conversationId)).toEqual({
+    owner: "bot",
+    handoffReason: "bot_unavailable",
+    waiting: true,
+    resumeOnContactMessage: false,
+    returnedByMemberAt: null,
+  });
+  expect(await unansweredTexts(conversationId)).toEqual(["Alô?"]);
+});
+
+test("the sweep's quiet-window return keeps the reason and the waiting item, and settles the backlog", async () => {
+  const { scope, clock, notifier, conversationId, controls, receive } = await setup();
+  await controls.takeOver(scope, conversationId);
+  await receive("Alguém aí?");
+  clock.advance(dayMs);
+
+  await returnQuietHandoffs({ db, clock, notifier });
+
+  expect(await ownershipColumns(conversationId)).toEqual({
+    owner: "bot",
+    handoffReason: "claimed",
+    waiting: true,
+    resumeOnContactMessage: false,
+    returnedByMemberAt: null,
+  });
+  expect(await unansweredTexts(conversationId)).toEqual([]);
 });
