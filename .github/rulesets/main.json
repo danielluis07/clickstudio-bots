@@ -25,7 +25,8 @@
       "parameters": {
         "required_status_checks": [
           { "context": "check", "integration_id": 15368 },
-          { "context": "Browser tests", "integration_id": 15368 }
+          { "context": "Browser tests", "integration_id": 15368 },
+          { "context": "Real Postgres Bot turns", "integration_id": 15368 }
         ],
         "strict_required_status_checks_policy": true
       }

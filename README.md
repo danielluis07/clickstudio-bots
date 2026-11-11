@@ -31,11 +31,7 @@ bun run db:seed
 bun run dev
 ```
 
-Neon recommends the **direct** (unpooled) connection string for migrations. To migrate production, pass its direct string for that one command rather than storing it:
-
-```bash
-DATABASE_URL="<production direct connection string>" bun run db:migrate
-```
+Neon recommends the **direct** (unpooled) connection string for migrations. Never migrate production by hand: CI applies production migrations on merge to `main` (see [Database migrations](#database-migrations)).
 
 See [ADR 0003](docs/adr/0003-node-postgres-global-pool-on-neon.md) for why the app connects this way.
 
@@ -121,6 +117,8 @@ Schema lives in `db/schema`. After changing it, run `bun run db:generate` and co
 
 CI fails if `db/schema` and `drizzle/` disagree. It also fails when a migration makes a column on an existing table `NOT NULL` without first giving existing rows a value (`test/db/migrations.test.ts`). drizzle-kit generates exactly that for a new required column, so edit the generated SQL to add the column as nullable, `UPDATE` it, then `SET NOT NULL`. The PGlite test harness (`test/support/database.ts`) applies the same `drizzle/` migrations, so tests run against the schema that production gets.
 
+On every push to `main`, the `Migrate production` CI job applies pending migrations to production after `check`, `Browser tests` and `Real Postgres Bot turns` pass. Vercel's Deployment Checks hold the new deployment off the production domains until that job succeeds, so a failed migration leaves the previous deployment serving. The direct connection string exists only as the `PRODUCTION_DATABASE_DIRECT_URL` secret of the `production-database` GitHub environment. Every migration must work with the code already in production; removing or renaming a column takes two deployments. See [ADR 0009](docs/adr/0009-production-migrations-gate-the-vercel-promotion.md) for the rules and what to do when a migration fails.
+
 A database created earlier with `drizzle-kit push` already has the auth tables, so the initial migration fails on it. Use a fresh database (e.g. a new Neon branch) and run `bun run db:migrate`.
 
 ## Demo Tenant
@@ -135,10 +133,10 @@ Layout and import rules are in [docs/CONVENTIONS.md](docs/CONVENTIONS.md#layout)
 
 Tests are `*.test.ts` files under `test/`, organised like the code they exercise (`test/modules/tenancy/…`, `test/server/…`), and run by `bun test`. `test/architecture.test.ts` enforces the import rules. Repository tests build their database with `createTestDatabase()` from `@/test/support/database`: an in-memory PGlite with all migrations applied. Code that depends on time takes a `Clock` (`@/platform/clock`); tests pass `createTestClock()` from `@/test/support/clock` and move it with `set` or `advance`.
 
-CI (`.github/workflows/ci.yml`) checks formatting, lint, TypeScript 7 types, migration drift and tests on every push and pull request.
+CI (`.github/workflows/ci.yml`) checks formatting, lint, TypeScript 7 types, migration drift, tests, the production build and a dependency audit (`bun audit --audit-level=high`) on every push and pull request.
 
 The active `main` ruleset requires a pull request and the GitHub Actions `check`
-status against the latest base branch. Its source is
+and `Real Postgres Bot turns` statuses against the latest base branch. Its source is
 [.github/rulesets/main.json](.github/rulesets/main.json); see the
 [protection notes](docs/local-development.md#main-branch-protection).
 
