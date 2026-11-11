@@ -30,6 +30,10 @@ _Avoid_: Integration, account, connection, number
 The thread of messages between one Contact and one Tenant on one Channel.
 _Avoid_: Chat, ticket, thread, session
 
+**Active Conversation**:
+A Conversation that received at least one Contact message within a given period. Conversations never end, so activity over a period is measured in Active Conversations.
+_Avoid_: Open conversation, new conversation, session
+
 **Bot**:
 A Tenant's configured AI responder that answers Contacts automatically.
 _Avoid_: Agent, assistant, chatbot, AI
