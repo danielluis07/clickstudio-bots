@@ -107,7 +107,9 @@ export const botTurnRecord = pgTable(
     // When the turn finished.
     at: timestamp("at", { withTimezone: true }).notNull(),
     // "handoff" whenever the turn handed off, even with a reply sent.
-    outcome: text("outcome", { enum: ["sent", "skipped", "handoff"] }).notNull(),
+    // "retried": an attempt its job retries after a transient Model failure;
+    // the turn ends in a later row.
+    outcome: text("outcome", { enum: ["sent", "skipped", "handoff", "retried"] }).notNull(),
     handoffReason: text("handoff_reason", {
       enum: [
         "no_answer",

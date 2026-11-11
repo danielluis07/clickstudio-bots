@@ -13,6 +13,7 @@ import {
   burstWait,
   botTurnAttempts,
   dailyContactReplyLimit,
+  ReservationRaceError,
   type BotJob,
   type BotAllowance,
   type BurstWait,
@@ -787,6 +788,49 @@ test("a transient Model failure retries the job, then answers with the Bot still
     owner: "bot",
     handoffReason: null,
   });
+});
+
+test("a retried attempt records the tokens it used before the transient failure", async () => {
+  const { scope, model, activation, conversationId, worker } = await setup();
+  await activation.activate(scope);
+  model.script(
+    // Refused, so the core asks again, and that request fails.
+    {
+      toolCalls: [{ id: "x", name: "unknown", input: {} }],
+      usage: { inputTokens: 120, outputTokens: 7 },
+    },
+    overloaded(),
+    { text: "O corte custa R$ 80.", usage: { inputTokens: 90, outputTokens: 12 } },
+  );
+  expect(await worker.run(conversationId, { attempt: 1 })).toBe("retry");
+  expect(await worker.run(conversationId, { attempt: 2 })).toBe("sent");
+  const records = await db
+    .select({
+      outcome: botTurnRecord.outcome,
+      inputTokens: botTurnRecord.inputTokens,
+      outputTokens: botTurnRecord.outputTokens,
+      toolRoundTrips: botTurnRecord.toolRoundTrips,
+    })
+    .from(botTurnRecord)
+    .orderBy(botTurnRecord.at, botTurnRecord.outcome);
+  expect(records).toEqual([
+    { outcome: "retried", inputTokens: 120, outputTokens: 7, toolRoundTrips: 1 },
+    { outcome: "sent", inputTokens: 90, outputTokens: 12, toolRoundTrips: 0 },
+  ]);
+});
+
+test("a reservation that loses the last reply slot to a concurrent turn asks for a retry", async () => {
+  const { scope, model, sender, activation, conversationId, worker, repository } = await setup({
+    ...createTestBotAllowance(),
+    async reserve() {
+      throw new ReservationRaceError("Reply allowance is busy; retry the Bot turn");
+    },
+  });
+  await activation.activate(scope);
+  model.script({ text: "Resposta." });
+  expect(await worker.run(conversationId)).toBe("retry");
+  expect(sender.sent).toHaveLength(0);
+  expect(await repository.getConversation(conversationId)).toMatchObject({ owner: "bot" });
 });
 
 test("a Model that keeps failing hands off as unavailable on the job's last attempt", async () => {

@@ -2,8 +2,9 @@ import type { Database } from "@/db/database";
 import { readBotConfiguration } from "@/modules/bot/configuration";
 import { recordBotReplyUsage } from "@/modules/bot/allowance";
 import { reserveContactReply } from "@/modules/bot/contact-cap";
+import { ReservationRaceError } from "@/modules/bot/reservation-race";
 import { liveTurnContext } from "@/modules/bot/context";
-import { createBotCore, type TurnTokens } from "@/modules/bot/turn";
+import { createBotCore, RetryableTurnError, type TurnTokens } from "@/modules/bot/turn";
 import { createReplyGate, type BotAllowance, type ReplyDecision } from "@/modules/bot/reply-gate";
 import type { Model } from "@/modules/bot/model";
 import { recordBotTurn, type BotTurnRecord } from "@/modules/bot/turn-records";
@@ -197,6 +198,9 @@ export const createLiveBot = ({
       },
     });
     if (!messageId) return { result: "skipped", tokens };
+    // The Contact already has the unavailability notice: handed off, unsent.
+    if (typeof messageId !== "string")
+      return { result: "handoff", handoffReason: "bot_unavailable", tokens };
     // A pending row is the durable send barrier. Never retry a send that may
     // have reached Meta; a later turn fails a pending reply without a wamid.
     const sent = await send(scope, sender, { ...turn.recipient, text: outcome.reply });
@@ -212,26 +216,37 @@ export const createLiveBot = ({
     return { result: "sent", handoffReason, tokens };
   };
 
-  // Records how every completed turn ended (#137). A turn that throws is
-  // retried by its job and recorded when it completes.
+  // Records how every completed turn ended (#137), and each attempt its job
+  // retries after a transient Model failure, with the tokens it used. Any
+  // other turn that throws is retried by its job and recorded when it
+  // completes.
   const respond = async (turn: LiveBotTurn, retryTransient: boolean) => {
     const startedAt = clock.now();
-    const ended = await decide(turn, retryTransient);
-    const at = clock.now();
-    await recordBotTurn(db, turn.scope, {
-      at,
-      // A Model-requested Handoff may also send a reply; it still counts as a Handoff.
-      outcome: ended.handoffReason ? "handoff" : ended.result,
-      handoffReason: ended.handoffReason,
-      tokens: ended.tokens,
-      durationMs: at.getTime() - startedAt.getTime(),
-    }).catch((error: unknown) =>
-      // A lost record must not fail a turn whose reply was already sent.
-      logError("bot_turn_record_failed", error, {
-        tenantId: turn.scope.tenantId,
-        conversationId: turn.conversationId,
-      }),
-    );
+    const record = async (
+      outcome: BotTurnRecord["outcome"],
+      { handoffReason, tokens }: Pick<Ended, "handoffReason" | "tokens">,
+    ) => {
+      const at = clock.now();
+      await recordBotTurn(db, turn.scope, {
+        at,
+        outcome,
+        handoffReason,
+        tokens,
+        durationMs: at.getTime() - startedAt.getTime(),
+      }).catch((error: unknown) =>
+        // A lost record must not fail a turn whose reply was already sent.
+        logError("bot_turn_record_failed", error, {
+          tenantId: turn.scope.tenantId,
+          conversationId: turn.conversationId,
+        }),
+      );
+    };
+    const ended = await decide(turn, retryTransient).catch(async (error: unknown) => {
+      if (error instanceof RetryableTurnError) await record("retried", { tokens: error.tokens });
+      throw error;
+    });
+    // A Model-requested Handoff may also send a reply; it still counts as a Handoff.
+    await record(ended.handoffReason ? "handoff" : ended.result, ended);
     return ended.result;
   };
 
@@ -271,8 +286,10 @@ export const createLiveBot = ({
           },
         );
       } catch (error) {
-        // Expected, and already recorded as the Model failure it was.
-        if (error instanceof RetryableError) return "retry" as const;
+        // Expected: a Model failure already recorded as such, or a concurrent
+        // turn that took the last reply slot. Neither reserved anything.
+        if (error instanceof RetryableError || error instanceof ReservationRaceError)
+          return "retry" as const;
         throw annotateError(error, { tenantId, conversationId });
       }
     },

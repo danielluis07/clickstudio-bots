@@ -8,7 +8,9 @@ CI applies the migration in production before the new code serves ([ADR 0009](ad
 with the team are put on the waiting list. The automatic return's migration
 (#139) adds `resume_on_contact_message`, false for existing rows: a
 `bot_unavailable` Handoff from before it returns only after a quiet service
-window, since there is no telling whether a Member acted on it.
+window, since there is no telling whether a Member acted on it. The
+notice-once migration (#185) adds `unavailable_notice_sent`, false for existing
+rows: their next unavailability sends the notice once more.
 
 The reasons were renamed from Portuguese identifiers to English in
 [#173](https://github.com/danielluis07/clickstudio-bots/issues/173). Its
@@ -49,6 +51,18 @@ Conversation changed hands.
 A Bot-initiated Handoff sends its short notice to the Contact through the
 normal reservation and send gates. System Handoffs (`bot_unavailable`,
 `allowance_exhausted`, `contact_cap_reached`) send nothing.
+
+The unavailability notice ("No momento não consigo responder, vou chamar
+alguém da equipe.") is sent once per outage
+([#185](https://github.com/danielluis07/clickstudio-bots/issues/185)). During a
+long Model outage, each Contact message returns the Conversation to the Bot
+(see [Resuming](#resuming)), and each of those turns fails again. Once the
+Contact has the notice, the reservation withholds the next one: it hands off
+as `bot_unavailable` without storing a reply, so no Bot reply is spent, and
+the turn's Contact messages stay unanswered for the next return. The notice
+is sent again only after a turn reserves any other reply, a Member acts
+(**Assumir**, a dashboard or app reply, **Devolver ao Bot**, **Resolvida**), or
+the notice's own send fails.
 
 ## Taking over
 
@@ -152,6 +166,15 @@ returned the Conversation, for the
 [daily cap per Contact](bot-reply-allowance.md#daily-cap-per-contact), and
 may be set in any state.
 
+`unavailable_notice_sent` is not part of the state either. It is true while
+the Bot's latest reservation was its unavailability notice and no Member has
+acted since, and may be set in any state. Reservation writes it: true for the
+notice, false for any other reply. A failed send (`failPending`), a Member's
+Handoff and a Member's return set it false; the automatic returns leave it.
+While it is true, a turn that would send the notice again hands off as
+`bot_unavailable` instead (see
+[What Members see](#what-members-see)).
+
 These combinations must never occur:
 
 - `waiting` true with no `handoff_reason`, or a `handoff_reason` with
@@ -196,7 +219,7 @@ Each one calls `handOff(reason)`. Applied to a Conversation in **Bot** or
 | Member's app reply: a new echo that matches no own send | `app_reply` | `recordMessageEcho`, `echoes.ts` |
 | Member's app reply: an echo filed while a Bot reply awaited its wamid, still unmatched once the wamid is stored | `app_reply` | `resolveUnresolvedEchoes` from `recordSentWamid`, `echoes.ts` |
 | Contact message: an audio, or media with no caption | `no_answer` | `recordInboundMessage`, `inbound.ts` |
-| The Bot's turn: the Model hands off, or its unavailability notice | `no_answer`, `contact_request`, `handoff_topic`, `bot_unavailable` | `reserve`, `bot-turns.ts`, in the reservation that stores the notice |
+| The Bot's turn: the Model hands off, or its unavailability notice | `no_answer`, `contact_request`, `handoff_topic`, `bot_unavailable` | `reserve`, `bot-turns.ts`, in the reservation that stores the notice, or that withholds a repeated unavailability notice |
 | The Bot's turn: the reply gate, under the turn's lease | `allowance_exhausted`, `contact_cap_reached`, `bot_unavailable` | `handOff` on `LiveBotTurn` (`handOffAndNotify` with the lease token), `bot-turns.ts` |
 | The Bot's turn: a failed send, or a pending reply left without a wamid by an earlier turn | `bot_unavailable` | `failPending`, `bot-turns.ts` |
 | The sweep: a pending reply stranded by an expired lease | `bot_unavailable` | `failPending` from `recoverStaleBotTurns`, `bot-turns.ts` |

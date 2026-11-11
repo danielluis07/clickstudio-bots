@@ -1,5 +1,6 @@
 import type { Database, Transaction } from "@/db/database";
 import type { BotTurn } from "@/modules/bot/repository";
+import { ReservationRaceError } from "@/modules/bot/reservation-race";
 import { botTimeZone } from "@/modules/bot/schedule";
 import { countContactBotReplies } from "@/modules/conversations";
 
@@ -50,5 +51,5 @@ export const contactCapReached = async (db: Database | Transaction, turn: BotTur
 // retry hands off.
 export const reserveContactReply = async (tx: Transaction, turn: BotTurn, now: Date) => {
   if (await contactCapReached(tx, turn, now))
-    throw new Error("Contact reply cap reached; retry the Bot turn");
+    throw new ReservationRaceError("Contact reply cap reached; retry the Bot turn");
 };

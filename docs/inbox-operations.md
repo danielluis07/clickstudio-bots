@@ -40,6 +40,13 @@ application deployment; no production latency benchmark is implied by this
 choice. A Sentry delivery failure never changes a route's answer: the record is
 already in the log, and a `diagnostic_delivery_failed` line follows it.
 
+Each server instance sends at most 10 Sentry events per kind per minute
+(`alertLimit` in `platform/sentry.ts`). A burst of one failure would otherwise
+cost quota and add up to two seconds of delivery to every failing request.
+Past the limit each record is still logged, and the window's first events
+have already opened or reopened the issue. A dead letter past the limit is
+acknowledged with its log line only.
+
 A record (`platform/diagnostics.ts`) may carry: the diagnostic kind, the error
 class and the innermost known cause class, stack frames, Postgres SQLSTATE,
 Meta's HTTP status, `code`, `error_subcode` and `fbtrace_id`, the Model
@@ -244,42 +251,45 @@ Decision: [ADR 0007](adr/0007-periodic-sweep-on-a-qstash-schedule.md).
 
 A QStash schedule calls `POST /api/jobs/sweep` every five minutes. The route
 verifies the QStash signature against its own URL and returns 401 otherwise, or
-503 without the QStash signing keys. Each run:
+503 without the QStash signing keys. Each run has 60 seconds. The alerts run
+first: after a large incident the recovery tasks can use the whole time, and
+the alerts matter most then. Each run:
 
-1. Re-enqueues up to 100 inbox events still `pending` five minutes after they
+1. Alerts `inbox_queue_stale` with its age in seconds while the oldest
+   `pending` inbox event that never failed was received more than 15 minutes
+   ago, past two requeues. Failed events alert on their own, after their last
+   automatic replay.
+2. Alerts `bot_handoff_spike` with counts for each Tenant whose
+   [turn records](live-bot.md#turn-records) in the last hour show at least
+   three **Bot indisponível** Handoffs, at least 20% of its turns that ended in
+   a reply or a Handoff, and at least twice its rate over the six days before.
+   A Tenant with no earlier turns is judged on the first two conditions.
+   Skipped turns and retried attempts are not counted.
+3. Makes `restricted` Channels whose restriction has ended healthy, then
+   alerts `channel_unhealthy` once for each Channel that reached a new
+   [health](whatsapp-setup.md#channel-health), with the Tenant and the state
+   as `operation`. For `credential_rejected` and `removed`, ask the owner to
+   reconnect; for `banned` and `restricted`, the owner appeals to Meta.
+4. Re-enqueues up to 100 inbox events still `pending` five minutes after they
    were received, oldest first. An event whose job already failed waits until
    35 minutes after its last failure or replay, so QStash's own retries come
    first.
-2. Replays up to 100 failed events whose next
+5. Replays up to 100 failed events whose next
    [automatic replay](#automatic-replay) is due.
-3. Fails Bot replies stuck without a wamid behind an expired lease, hands those
+6. Fails Bot replies stuck without a wamid behind an expired lease, hands those
    Conversations off and clears the expired leases. Then it re-enqueues eligible
    unanswered messages from the recovered Conversations.
-4. Re-enqueues up to 100 Bot-owned, eligible Conversations with no live lease
+7. Re-enqueues up to 100 Bot-owned, eligible Conversations with no live lease
    whose newest unanswered Contact message was sent between two minutes and one
    hour ago and passes the [reply gate](live-bot.md#reply-gate). A message
    skipped outside the Schedule is never answered later by the sweep. The
    Schedule and allowance are per Tenant, so a skip leaves that Tenant's other
    Conversations out of the run, which scans up to three pages. Canceled
    Tenants are left out of lease recovery.
-5. Returns to the Bot up to 100 Handoffs, oldest first, with no message from
+8. Returns to the Bot up to 100 Handoffs, oldest first, with no message from
    either side for 24 hours, a whole service window. They stay on the waiting
    list, and their backlog is settled as after **Devolver ao Bot**. See
    [Resuming](handoff.md#resuming).
-6. Alerts `inbox_queue_stale` with its age in seconds while the oldest
-   `pending` inbox event that never failed was received more than 15 minutes
-   ago, past two requeues. Failed events alert on their own, after their last
-   automatic replay.
-7. Alerts `bot_handoff_spike` with counts for each Tenant whose
-   [turn records](live-bot.md#turn-records) in the last hour show at least
-   three **Bot indisponível** Handoffs, at least 20% of its turns that were not
-   skipped, and at least twice its rate over the six days before. A Tenant with
-   no earlier turns is judged on the first two conditions.
-8. Makes `restricted` Channels whose restriction has ended healthy, then
-   alerts `channel_unhealthy` once for each Channel that reached a new
-   [health](whatsapp-setup.md#channel-health), with the Tenant and the state
-   as `operation`. For `credential_rejected` and `removed`, ask the owner to
-   reconnect; for `banned` and `restricted`, the owner appeals to Meta.
 
 The first two alerts repeat on every sweep while the condition holds; Sentry
 groups them into one issue per kind (and Tenant), so its issue alert fires once.

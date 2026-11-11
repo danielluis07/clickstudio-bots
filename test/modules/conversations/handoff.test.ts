@@ -585,6 +585,50 @@ test("after a Bot indisponível Handoff, the Contact's next messages return the 
   expect(await unansweredTexts(conversationId)).toEqual([]);
 });
 
+const unavailableNotice = "No momento não consigo responder, vou chamar alguém da equipe.";
+
+test("a long Model outage sends the unavailability notice once, until a turn succeeds", async () => {
+  const fixture = await setup();
+  const { model, sender, conversationId, receive, worker, ownership, notifier } = fixture;
+  const sentTexts = () => sender.sent.map(({ text }) => text);
+  await failModel(fixture);
+  expect(sentTexts()).toEqual([unavailableNotice]);
+
+  // Each further message returns the Bot, which fails again without a second notice.
+  for (const text of ["Alô?", "Ainda estão aí?"]) {
+    await receive(text);
+    const pings = notifier.pings.length;
+    await failModel(fixture);
+    expect(notifier.pings.length).toBeGreaterThan(pings);
+  }
+  expect(sentTexts()).toEqual([unavailableNotice]);
+  // Nobody answered them: the next return leaves them to the Bot.
+  expect(await unansweredTexts(conversationId)).toEqual(["Alô?", "Ainda estão aí?"]);
+
+  await receive("Oi?");
+  model.script({ text: "Estamos sim!" });
+  await worker.run(conversationId);
+  expect(await unansweredTexts(conversationId)).toEqual([]);
+  expect(await ownership()).toMatchObject({ owner: "bot" });
+
+  // The Model answered, so the next outage tells the Contact again.
+  await receive("E amanhã?");
+  await failModel(fixture);
+  expect(sentTexts()).toEqual([unavailableNotice, "Estamos sim!", unavailableNotice]);
+});
+
+test("after a Member returns the Conversation, the next outage sends the notice again", async () => {
+  const fixture = await setup();
+  const { scope, sender, conversationId, receive, controls } = fixture;
+  await failModel(fixture);
+  await controls.returnToBot(scope, conversationId);
+
+  await receive("Alô?");
+  await failModel(fixture);
+
+  expect(sender.sent.map(({ text }) => text)).toEqual([unavailableNotice, unavailableNotice]);
+});
+
 test.each([
   [
     "Assumir",

@@ -80,16 +80,39 @@ export const scrubSentryEvent = (event: ErrorEvent): ErrorEvent => {
   };
 };
 
+// Sentry events per kind per window, per server instance. A burst of one
+// failure would cost quota and add up to two seconds of delivery to every
+// failing request. Past the limit each record is still logged; the first
+// events already opened the issue.
+export const alertLimit = { events: 10, windowMs: 60_000 };
+
 export const createDiagnostics = ({
   dsn,
   writeLog = (entry) => console.error(JSON.stringify(entry)),
   transport,
+  limit = alertLimit,
+  now = Date.now,
 }: {
   dsn?: string;
   writeLog?: (entry: Diagnostic) => void;
   transport?: NodeOptions["transport"];
+  limit?: typeof alertLimit;
+  now?: () => number;
 } = {}): Diagnostics => {
   if (dsn && !isUsSentryDsn(dsn)) throw new Error("Sentry requires a US project DSN");
+  const windows = new Map<Diagnostic["kind"], { start: number; events: number }>();
+  // Whether this kind may send one more event in its current window.
+  const admit = (kind: Diagnostic["kind"]) => {
+    const at = now();
+    const window = windows.get(kind);
+    if (!window || at - window.start >= limit.windowMs) {
+      windows.set(kind, { start: at, events: 1 });
+      return true;
+    }
+    if (window.events >= limit.events) return false;
+    window.events += 1;
+    return true;
+  };
   const deliveries = new Map<string, Set<() => void>>();
   // An isolated client with no integrations: no automatic request, console,
   // database, session, tracing or unhandled-error capture can ship content.
@@ -149,7 +172,7 @@ export const createDiagnostics = ({
     async alert(entry: Diagnostic) {
       const clean = scrubDiagnostic(entry);
       writeLog(clean);
-      if (!client) return;
+      if (!client || !admit(clean.kind)) return;
       // Concurrent/retried callbacks use one Sentry event identity.
       const eventId = (
         clean.kind === "inbox_dead_letter" && clean.inboxEventId ? clean.inboxEventId : randomUUID()

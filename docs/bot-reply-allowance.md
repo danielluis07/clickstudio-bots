@@ -70,7 +70,8 @@ in `America/Sao_Paulo` (`dailyContactReplyLimit` in
   Tenant are still answered.
 - The send reservation counts again inside its transaction, after the lease
   check has locked the Conversation's row. A reservation that would pass the
-  cap fails and the job retries. The retry's gate then hands off.
+  cap fails with `ReservationRaceError` and the job retries, without an
+  alert. The retry's gate then hands off.
 - **Devolver ao Bot** and **Resolvida** record `returned_by_member_at` on the
   Conversation. Replies sent before that time stop counting, so a Member who
   returns a capped Conversation gives the Contact a fresh 30. Automatic

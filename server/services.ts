@@ -212,13 +212,8 @@ export const sweepRoute = createSweepRoute({
       : null,
   diagnostics,
   tasks: [
-    { name: "requeue-inbox-events", run: async () => webhookInbox?.requeueStalled() },
-    { name: "retry-failed-inbox-events", run: async () => webhookInbox?.retryFailed() },
-    { name: "sweep-bot-turns", run: async () => liveBot?.sweep() },
-    {
-      name: "return-quiet-handoffs",
-      run: () => returnQuietHandoffs({ db, clock: systemClock, notifier }),
-    },
+    // Alerts first: after a large incident the recovery tasks below can use
+    // the whole time limit, and the alerts matter most then.
     { name: "alert-stale-inbox", run: async () => webhookInbox?.alertStaleQueue() },
     {
       name: "alert-bot-handoff-spikes",
@@ -227,6 +222,13 @@ export const sweepRoute = createSweepRoute({
     {
       name: "check-channel-health",
       run: () => sweepChannelHealth({ db, clock: systemClock, diagnostics }),
+    },
+    { name: "requeue-inbox-events", run: async () => webhookInbox?.requeueStalled() },
+    { name: "retry-failed-inbox-events", run: async () => webhookInbox?.retryFailed() },
+    { name: "sweep-bot-turns", run: async () => liveBot?.sweep() },
+    {
+      name: "return-quiet-handoffs",
+      run: () => returnQuietHandoffs({ db, clock: systemClock, notifier }),
     },
     // Last, so the daily cron's watchdog sees when a run reached its end.
     { name: "record-sweep-run", run: () => recordSweepRun({ db, clock: systemClock }) },
