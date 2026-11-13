@@ -28,7 +28,7 @@ export function Inbox({
     <div className="-mx-4 -my-8 flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col gap-3 p-3 lg:mx-0 lg:my-0 lg:h-[calc(100dvh-7.5rem)] lg:gap-6 lg:p-0">
       <h1
         className={cn(
-          "shrink-0 text-3xl font-semibold tracking-tight",
+          "shrink-0 text-lg font-semibold tracking-tight",
           conversationId && "sr-only lg:not-sr-only",
         )}
       >

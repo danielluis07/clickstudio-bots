@@ -10,11 +10,22 @@ See [code conventions](CONVENTIONS.md#layout) for file placement, module boundar
 
 Every `/painel` page wraps its content in `DashboardPage` (`components/dashboard/dashboard-page.tsx`), so all pages start at the same left edge and top with the same spacing. Pages are never centered.
 
-- `title` is the page's `h1`. Pass `titleHidden` to keep it for assistive technology without showing it (Visão geral).
+- `title` is the page's `h1`, set small (`text-lg`): the page's content carries the weight, not its heading.
 - `description` and `actions` (for example a period picker) are optional.
 - `width="full"` (default) is for lists, tables and dashboards. `width="form"` caps the width (`max-w-3xl`) for settings forms and other reading-width content.
+- `rail` (with `railLabel`, its accessible name) adds a right-hand column for what sits beside the work: the Bot's state, the reply allowance, a live preview. The page becomes two full-height panes. Split the rail into `DashboardRailSection`s.
 
 Conversas is the one exception: its two-pane inbox fills the viewport height, so `Inbox` lays out its own `h1` with the same styles.
+
+### Page design: the workspace
+
+Dashboard pages read as a dense workspace, not a stack of cards (chosen over two other designs in the `prototype/dashboard-design` branch):
+
+- Group figures in one bordered ribbon split by hairlines (`StatTile` in a `gap-px bg-border` grid), not one card per number. Highlight one figure at most, in `text-brand`.
+- Show one chart at a time behind `Tabs` rather than stacking chart cards.
+- Status, allowances, checklists and recent activity go in the rail, not above the main content.
+- In forms, separate groups with a rule (`border-t`), put labels left of their fields on wide screens, and pin the save button to the bottom with `FormSaveBar`.
+- Reserve borders for things that hold data (a ribbon, a chart, a table). A section heading and a rule are enough for everything else.
 
 A section with several pages, like Bot, is a sidebar group (`DashboardNavigationGroup`) with one route per page, not one long page.
 

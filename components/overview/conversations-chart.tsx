@@ -23,7 +23,7 @@ const config = {
 // Active Conversations per day, stacked by whether any had a Handoff.
 export function ConversationsChart({ daily }: { daily: DailyConversations[] }) {
   return (
-    <ChartContainer config={config} className="aspect-auto h-64 w-full">
+    <ChartContainer config={config} className="aspect-auto h-72 w-full">
       <BarChart data={daily} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
         <CartesianGrid vertical={false} />
         <XAxis

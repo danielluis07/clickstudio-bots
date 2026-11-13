@@ -1,25 +1,20 @@
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
 
 type DashboardPageHeaderProps = {
   title: string;
-  titleHidden: boolean;
   description?: ReactNode;
   actions?: ReactNode;
 };
 
-export function DashboardPageHeader({
-  title,
-  titleHidden,
-  description,
-  actions,
-}: DashboardPageHeaderProps) {
+export function DashboardPageHeader({ title, description, actions }: DashboardPageHeaderProps) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className={cn("flex min-w-0 flex-col gap-2", titleHidden && "sr-only")}>
-        <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 flex-col gap-1">
+        <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
         {description && (
-          <div className="flex flex-col gap-1 text-muted-foreground">{description}</div>
+          <div className="flex max-w-2xl flex-col gap-1 text-sm text-muted-foreground">
+            {description}
+          </div>
         )}
       </div>
       {actions && <div className="ml-auto shrink-0">{actions}</div>}

@@ -1,12 +1,12 @@
 import { DashboardPage } from "@/components/dashboard/dashboard-page";
-import { FirstSteps } from "@/components/overview/first-steps";
 import { OverviewPeriod } from "@/components/overview/overview-period";
+import { OverviewRail } from "@/components/overview/overview-rail";
 import { OverviewStats } from "@/components/overview/overview-stats";
 import type { TenantScope } from "@/modules/tenancy";
 import { HydrateClient, prefetch, trpc } from "@/trpc/server";
 
 // The home page. Rendered only after the page's guard: the prefetches let
-// "Primeiros passos" and the reply meter render without shifting the page.
+// the rail ("Primeiros passos", the reply meter) render without shifting.
 export async function TenantOverview({ scope }: { scope: TenantScope }) {
   const isOwner = scope.role === "owner";
   await Promise.all([
@@ -18,8 +18,12 @@ export async function TenantOverview({ scope }: { scope: TenantScope }) {
 
   return (
     <HydrateClient>
-      <DashboardPage title="Visão geral" titleHidden actions={<OverviewPeriod />}>
-        <FirstSteps isOwner={isOwner} />
+      <DashboardPage
+        title="Visão geral"
+        actions={<OverviewPeriod />}
+        rail={<OverviewRail isOwner={isOwner} />}
+        railLabel="Bot e equipe"
+      >
         <OverviewStats isOwner={isOwner} />
       </DashboardPage>
     </HydrateClient>
