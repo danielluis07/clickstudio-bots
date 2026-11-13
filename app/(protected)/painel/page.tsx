@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { TenantOverview } from "@/components/dashboard/tenant-overview";
+// PROTOTYPE (throwaway): was TenantOverview; restore it when a variant wins.
+import { OverviewPrototype } from "@/components/overview/prototype/overview-prototype";
 import { requireTenantScope } from "@/server/auth/guards";
 
 export const metadata: Metadata = {
@@ -10,5 +11,5 @@ export const metadata: Metadata = {
 export default async function DashboardPage() {
   const scope = await requireTenantScope();
 
-  return <TenantOverview scope={scope} />;
+  return <OverviewPrototype scope={scope} />;
 }
