@@ -2,17 +2,17 @@ import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/co
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCount } from "@/lib/format";
-import type { BehaviourSettings, BotSettingsLimits } from "@/modules/bot";
+import type { BotSettingsLimits, BusinessProfile } from "@/modules/bot";
 
 type BusinessProfileFieldsProps = {
-  settings: BehaviourSettings;
+  settings: BusinessProfile;
   limits: BotSettingsLimits;
 };
 
 export function BusinessProfileFields({ settings, limits }: BusinessProfileFieldsProps) {
   return (
     <FieldSet>
-      <FieldLegend>Perfil do negócio</FieldLegend>
+      <FieldLegend>Sobre o negócio</FieldLegend>
       <Field>
         <FieldLabel htmlFor="bot-business-name">Nome do negócio</FieldLabel>
         <Input

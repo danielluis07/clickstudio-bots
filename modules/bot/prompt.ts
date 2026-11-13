@@ -1,7 +1,7 @@
 import { capturedFields, type CaptureSettings } from "@/modules/bot/capture";
 import { availableLinks, type LinkSettings } from "@/modules/bot/links";
 import { memberLabel } from "@/modules/bot/context";
-import type { BehaviourSettings, KnowledgeBase } from "@/modules/bot/repository";
+import type { BehaviourSettings, BotSettings, KnowledgeBase } from "@/modules/bot/repository";
 import { weekdays, type BusinessHours } from "@/modules/bot/schedule";
 import { captureToolName, linkToolName } from "@/modules/bot/tools";
 import type { ContactDetailField, ContactDetails } from "@/modules/conversations";
@@ -75,7 +75,7 @@ const renderCapture = (capture: CaptureSettings) => {
 // The schedule is left out: changing it must not invalidate the cache, and
 // whether the Bot replies at all is decided before the model is called.
 export const renderInstructions = (
-  behaviour: BehaviourSettings,
+  behaviour: BotSettings,
   capture: CaptureSettings,
   links: LinkSettings,
 ) =>

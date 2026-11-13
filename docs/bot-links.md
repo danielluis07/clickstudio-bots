@@ -2,7 +2,7 @@
 
 Issue: [#59](https://github.com/danielluis07/clickstudio-bots/issues/59).
 
-At **Painel → Bot → Links do negócio**, the Tenant owner adds, edits or removes
+At **Painel → Bot → Contatos e links** (`/painel/bot/contatos-e-links`), under **Links do negócio**, the Tenant owner adds, edits or removes
 labelled links and enables the capability. Other Members can read the list but
 cannot change it. Removal requires the shared confirmation dialog; changes take
 effect after **Salvar links**. Disabling preserves the saved list.
@@ -34,7 +34,7 @@ requests for unavailable links or booking/payment status.
 ## Verify in Testar Bot
 
 1. Save an enabled link named **Agendamento** and another named **Pagamento**.
-2. In **Testar Bot**, ask “Pode me enviar o link de agendamento?” and check the
+2. In **Bot → Testar**, ask “Pode me enviar o link de agendamento?” and check the
    exact saved URL and the notice that sending it does not confirm anything.
 3. Ask for the payment link and then ask whether payment has been confirmed.
    Sending the link must not assert payment; status requests require the team.

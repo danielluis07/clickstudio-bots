@@ -7,7 +7,7 @@ test("the owner's home page shows the stats overview and its period selector", a
   const { alfa } = fixtures;
   await signIn(page, alfa.ownerEmail, fixtures.password);
   await expect(page).toHaveURL("/painel");
-  await expect(page.getByRole("heading", { level: 1, name: alfa.name })).toBeVisible();
+  await expect(page.getByTitle(alfa.name)).toBeVisible();
 
   // The Bot is not live yet, so the owner sees the checklist above the stats.
   const firstSteps = page.getByRole("region", { name: "Primeiros passos" });

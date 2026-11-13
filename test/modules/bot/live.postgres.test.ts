@@ -23,7 +23,7 @@ import { RetryableError } from "@/platform/retryable";
 import { createPostgresTestDatabase } from "@/test/support/postgres";
 import { seedLiveBot } from "@/test/support/live-bot";
 import { createTestModel } from "@/test/support/model";
-import { testBehaviour } from "@/test/support/bot";
+import { saveTestSettings, testBotSettings } from "@/test/support/bot";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
 import { createTestWhatsAppSender } from "@/test/support/whatsapp-sender";
@@ -49,7 +49,7 @@ suite("live turns on real Postgres", () => {
     const queue = createTestJobQueue<BotJob>();
     const mailer = createTestMailer();
     const allowance = createBotAllowance({ db, clock, mailer });
-    await createBotSettingsEditor({ db, clock }).saveSettings(scope, testBehaviour);
+    await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, testBotSettings);
     await createKnowledgeBaseEditor({ db, clock }).addEntry(scope, {
       kind: "faq",
       title: "Preço?",

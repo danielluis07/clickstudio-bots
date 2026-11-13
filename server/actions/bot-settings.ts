@@ -16,10 +16,20 @@ import { botSettingsEditor, captureSettingsEditor, linkSettingsEditor } from "@/
 // The bot module re-checks that the actor is the Tenant's owner and that
 // every setting is within its bounds.
 
-const saveErrorMessages = {
-  forbidden: "Apenas o responsável pelo negócio pode alterar as configurações do Bot.",
-  invalid: `Confira os campos: o nome do negócio é obrigatório, cada lista aceita até ${botSettingsLimits.topics} temas de até ${botSettingsLimits.topic} caracteres, cada dia aberto precisa abrir antes de fechar e “Somente fora do horário de funcionamento” exige ao menos um dia aberto.`,
+const forbidden = "Apenas o responsável pelo negócio pode alterar as configurações do Bot.";
+
+const profileErrorMessages = {
+  forbidden,
+  invalid:
+    "Confira os campos: o nome do negócio é obrigatório e cada dia aberto precisa abrir antes de fechar. Enquanto o Bot responde “Somente fora do horário de funcionamento”, mantenha ao menos um dia aberto.",
 } as const;
+
+const behaviourErrorMessages = {
+  forbidden,
+  invalid: `Confira os campos: cada lista aceita até ${botSettingsLimits.topics} temas de até ${botSettingsLimits.topic} caracteres, e “Somente fora do horário de funcionamento” exige ao menos um dia aberto no Perfil do negócio.`,
+} as const;
+
+const savedMessage = "Salvo. O Bot já usa estas configurações na próxima resposta.";
 
 // One topic per line.
 const formTopics = (formData: FormData, name: string) => formText(formData, name).split("\n");
@@ -35,16 +45,28 @@ const formHours = (formData: FormData) =>
     ]),
   ) as BusinessHours;
 
-export async function saveBotSettingsAction(
+export async function saveBusinessProfileAction(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
   const scope = await requireTenantScope();
-  const result = await botSettingsEditor.saveSettings(scope, {
+  const result = await botSettingsEditor.saveProfile(scope, {
     businessName: formText(formData, "businessName"),
     offer: formText(formData, "offer"),
     address: formText(formData, "address"),
     hours: formHours(formData),
+  });
+  if (!result.ok) return { status: "error", message: profileErrorMessages[result.error] };
+  refresh();
+  return { status: "success", message: savedMessage };
+}
+
+export async function saveBehaviourSettingsAction(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const scope = await requireTenantScope();
+  const result = await botSettingsEditor.saveBehaviour(scope, {
     // The module refuses any other tone or schedule.
     tone: formText(formData, "tone") as BehaviourSettings["tone"],
     emoji: formData.has("emoji"),
@@ -54,12 +76,9 @@ export async function saveBotSettingsAction(
     handoffTopics: formTopics(formData, "handoffTopics"),
     schedule: formText(formData, "schedule") as BehaviourSettings["schedule"],
   });
-  if (!result.ok) return { status: "error", message: saveErrorMessages[result.error] };
+  if (!result.ok) return { status: "error", message: behaviourErrorMessages[result.error] };
   refresh();
-  return {
-    status: "success",
-    message: "Salvo. O Bot já usa estas configurações na próxima resposta.",
-  };
+  return { status: "success", message: savedMessage };
 }
 
 const captureErrorMessages = {

@@ -9,7 +9,7 @@ import {
   createBotAllowance,
   createBotSandbox,
   createBotSettingsEditor,
-  readBehaviour,
+  readBotSettings,
 } from "@/modules/bot";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import {
@@ -31,7 +31,7 @@ import { createTestModel } from "@/test/support/model";
 import { createTestMailer } from "@/test/support/mailer";
 import { seedLiveBot } from "@/test/support/live-bot";
 import { createTenantRepository } from "@/modules/tenancy";
-import { testBehaviour } from "@/test/support/bot";
+import { saveTestSettings, testBotSettings } from "@/test/support/bot";
 
 let db: Database;
 let conversationOfB: string;
@@ -58,7 +58,7 @@ const callerFor = (
     conversationStats: createConversationStats({
       db,
       clock,
-      readBusinessHours: async (scope) => (await readBehaviour(db, scope)).hours,
+      readBusinessHours: async (scope) => (await readBotSettings(db, scope)).hours,
     }),
     conversations: (scope) => createConversationRepository(db, scope),
     tenants: (scope) => createTenantRepository(db, scope),
@@ -148,7 +148,7 @@ describe("tRPC router", () => {
   test("Bot activation and pause use the service clock from the context", async () => {
     const { scope, clock } = await seedLiveBot(db);
     const caller = callerFor({ userId: scope.userId, activeTenantId: scope.tenantId }, clock);
-    await createBotSettingsEditor({ db, clock }).saveSettings(scope, testBehaviour);
+    await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, testBotSettings);
     await createKnowledgeBaseEditor({ db, clock }).addEntry(scope, {
       kind: "faq",
       title: "Preço?",
@@ -232,10 +232,15 @@ describe("tRPC router", () => {
   });
 
   test("the sidebar reads only the authorized Tenant, including the first-membership fallback", async () => {
-    expect(await callerFor(ownerA).tenancy.current()).toEqual({ id: "tenant-a", name: "Tenant A" });
+    expect(await callerFor(ownerA).tenancy.current()).toEqual({
+      id: "tenant-a",
+      name: "Tenant A",
+      role: "owner",
+    });
     expect(await callerFor({ ...ownerA, activeTenantId: null }).tenancy.current()).toEqual({
       id: "tenant-a",
       name: "Tenant A",
+      role: "owner",
     });
     expect(
       await codeOf(callerFor({ ...ownerA, activeTenantId: "tenant-b" }).tenancy.current()),

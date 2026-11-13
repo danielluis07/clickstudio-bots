@@ -11,7 +11,7 @@ export function BotScheduleField({ schedule }: { schedule: BotSchedule }) {
         id="bot-schedule"
         name="schedule"
         label="Agenda"
-        description="Fora do horário de funcionamento, o Bot responde; durante o horário, só a equipe. Mudar a agenda não passa nenhuma conversa para a equipe."
+        description="Fora do horário de funcionamento, o Bot responde; durante o horário, só a equipe. O horário de funcionamento fica no Perfil do negócio. Mudar a agenda não passa nenhuma conversa para a equipe."
         options={scheduleOptions}
         defaultValue={schedule}
       />

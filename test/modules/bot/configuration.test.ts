@@ -14,7 +14,7 @@ import {
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
-import { testBehaviour } from "@/test/support/bot";
+import { saveTestSettings, testBotSettings } from "@/test/support/bot";
 import { createTestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 
@@ -25,7 +25,7 @@ let ownerB: TenantScope;
 let routeA: ChannelRoute;
 const clock = createTestClock(new Date("2026-10-22T15:00:00Z"));
 const configuration: BotConfiguration = {
-  behaviour: testBehaviour,
+  behaviour: testBotSettings,
   knowledgeBase: {
     faqs: [{ question: "Quanto custa o corte?", answer: "R$ 80." }],
     sections: [{ title: "Pagamento", body: "Aceitamos PIX." }],
@@ -84,7 +84,7 @@ afterEach(() => closeTestDatabase(db));
 
 const saveConfiguration = async (scope: TenantScope) => {
   expect(
-    await createBotSettingsEditor({ db, clock }).saveSettings(scope, configuration.behaviour),
+    await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, configuration.behaviour),
   ).toEqual({ ok: true });
   expect(
     await createCaptureSettingsEditor({ db, clock }).saveCapture(scope, configuration.capture),
@@ -139,7 +139,7 @@ test("Member and Channel proofs read the same saved configuration, isolated from
     links: disabledLinks,
   });
 
-  await createBotSettingsEditor({ db, clock }).saveSettings(ownerA, {
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), ownerA, {
     ...configuration.behaviour,
     tone: "formal",
   });
@@ -174,8 +174,10 @@ test("removing the saving Member retains all settings and timestamps with no edi
   clock.advance(60_000);
   await db.delete(member).where(eq(member.id, ownerA.memberId));
 
+  const botSettings = await createBotSettingsEditor({ db, clock }).getSettings(attendantA);
   const editors = [
-    await createBotSettingsEditor({ db, clock }).getSettings(attendantA),
+    botSettings.profile,
+    botSettings.behaviour,
     await createCaptureSettingsEditor({ db, clock }).getCapture(attendantA),
     await createLinkSettingsEditor({ db, clock }).getLinks(attendantA),
   ];

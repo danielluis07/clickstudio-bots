@@ -1,5 +1,5 @@
 import type {
-  BehaviourSettings,
+  BotSettings,
   ContextMessage,
   HandoffReason,
   KnowledgeBase,
@@ -12,7 +12,7 @@ import type {
 
 export type EvaluationTenant = {
   id: string;
-  behaviour: BehaviourSettings;
+  behaviour: BotSettings;
   knowledgeBase: KnowledgeBase;
   links?: LinkSettings;
 };

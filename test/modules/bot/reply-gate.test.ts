@@ -12,7 +12,7 @@ import {
 } from "@/modules/bot";
 import { createHandoffControls, recordInboundTextMessage } from "@/modules/conversations";
 import { createTestNotifier } from "@/test/support/notifier";
-import { createTestBotAllowance, testBehaviour } from "@/test/support/bot";
+import { createTestBotAllowance, saveTestSettings, testBotSettings } from "@/test/support/bot";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
 
@@ -77,10 +77,10 @@ const setup = async () => {
         .update(conversation)
         .set({ owner: "team", handoffReason: "claimed", waiting: true })
         .where(eq(conversation.id, conversationId)),
-    // Thursday 09:00 in São Paulo is within testBehaviour's Business hours.
+    // Thursday 09:00 in São Paulo is within testBotSettings's Business hours.
     outsideSchedule: () =>
-      createBotSettingsEditor({ db, clock }).saveSettings(scope, {
-        ...testBehaviour,
+      saveTestSettings(createBotSettingsEditor({ db, clock }), scope, {
+        ...testBotSettings,
         schedule: "outside_business_hours",
       }),
   };

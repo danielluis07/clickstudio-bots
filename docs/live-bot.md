@@ -2,15 +2,17 @@
 
 Issue: [#56](https://github.com/danielluis07/clickstudio-bots/issues/56).
 
-The owner opens **Painel → Bot**, saves the business profile, adds at least one
-Knowledge base entry, and sends a successful **Testar Bot** message. **Ativar Bot**
-is enabled only after these steps and a confirmed WhatsApp subscription. The
+The owner saves the Business profile at **Painel → Bot → Perfil do negócio**,
+adds at least one Knowledge base entry, and sends a successful message at
+**Bot → Testar**. **Ativar Bot**, at **Bot → Ativação** (`/painel/bot`), is
+enabled only after these steps and a confirmed WhatsApp subscription. The
 server enforces the same checklist. Provider failures do not complete testing;
-settings and entry edits after testing require another test before activation.
+Business profile, Behaviour settings and entry edits after testing require
+another test before activation.
 Only the test timestamp is stored; sandbox content remains ephemeral.
 
-Once activated, any Member can use **Pausar Bot** or **Retomar Bot** on the Bot
-page. Pause is stored on the Channel, independently of activation and Schedule.
+Once activated, any Member can use **Pausar Bot** or **Retomar Bot** at
+**Bot → Ativação**. Pause is stored on the Channel, independently of activation and Schedule.
 Pause and Schedule ineligibility leave Conversations with the Bot, without a
 Handoff. Resuming still respects the configured Schedule.
 

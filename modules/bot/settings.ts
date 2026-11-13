@@ -1,10 +1,17 @@
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import type { Database } from "@/db/database";
 import { botSettings, member, organization, user } from "@/db/schema";
-import { createOwnerSavedSettings } from "@/modules/bot/owner-saved-settings";
-import type { BehaviourSettings, BotTurn } from "@/modules/bot/repository";
+import { createOwnerSave } from "@/modules/bot/owner-saved-settings";
+import type {
+  BehaviourSettings,
+  BotSettings,
+  BotTurn,
+  BusinessProfile,
+} from "@/modules/bot/repository";
 import { botSchedules, weekdays, type BusinessHours } from "@/modules/bot/schedule";
+import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 
 // The longest each setting may be, in characters. They bound the prompt's
@@ -56,42 +63,39 @@ const hoursSchema = z.strictObject({
   sunday: openingHours,
 }) satisfies z.ZodType<BusinessHours>;
 
-const settingsSchema = z
-  .object({
-    businessName: boundedText(botSettingsLimits.businessName).pipe(z.string().min(1)),
-    offer: boundedText(botSettingsLimits.offer),
-    address: boundedText(botSettingsLimits.address),
-    hours: hoursSchema,
-    tone: z.enum(tones),
-    emoji: z.boolean(),
-    greeting: boundedText(botSettingsLimits.greeting),
-    rules: boundedText(botSettingsLimits.rules),
-    refusedTopics: topicList,
-    handoffTopics: topicList,
-    schedule: z.enum(botSchedules),
-  })
-  // Without hours, "outside business hours" would silently mean always on.
-  .refine(
-    ({ schedule, hours }) => schedule === "always" || weekdays.some((day) => hours[day]),
-  ) satisfies z.ZodType<BehaviourSettings>;
+const profileSchema = z.object({
+  businessName: boundedText(botSettingsLimits.businessName).pipe(z.string().min(1)),
+  offer: boundedText(botSettingsLimits.offer),
+  address: boundedText(botSettingsLimits.address),
+  hours: hoursSchema,
+}) satisfies z.ZodType<BusinessProfile>;
+
+const behaviourSchema = z.object({
+  tone: z.enum(tones),
+  emoji: z.boolean(),
+  greeting: boundedText(botSettingsLimits.greeting),
+  rules: boundedText(botSettingsLimits.rules),
+  refusedTopics: topicList,
+  handoffTopics: topicList,
+  schedule: z.enum(botSchedules),
+}) satisfies z.ZodType<BehaviourSettings>;
 
 type SavedSettings = typeof botSettings.$inferSelect;
 
-// What the Bot uses until the owner first saves. The schedule is always on,
-// but the Bot stays off until the owner activates it on the Channel.
-const defaultSettings = (businessName: string): BehaviourSettings => ({
-  businessName,
-  offer: "",
-  address: "",
-  hours: {
-    monday: null,
-    tuesday: null,
-    wednesday: null,
-    thursday: null,
-    friday: null,
-    saturday: null,
-    sunday: null,
-  },
+// What the Bot uses until the owner first saves each part. The schedule is
+// always on, but the Bot stays off until the owner activates it on the
+// Channel.
+const closedWeek: BusinessHours = {
+  monday: null,
+  tuesday: null,
+  wednesday: null,
+  thursday: null,
+  friday: null,
+  saturday: null,
+  sunday: null,
+};
+
+const defaultBehaviour: BehaviourSettings = {
   tone: "neutral",
   emoji: false,
   greeting: "",
@@ -99,9 +103,17 @@ const defaultSettings = (businessName: string): BehaviourSettings => ({
   refusedTopics: [],
   handoffTopics: [],
   schedule: "always",
+};
+
+const defaultSettings = (businessName: string): BotSettings => ({
+  businessName,
+  offer: "",
+  address: "",
+  hours: closedWeek,
+  ...defaultBehaviour,
 });
 
-const toBehaviour = (saved: SavedSettings): BehaviourSettings => ({
+const toSettings = (saved: SavedSettings): BotSettings => ({
   businessName: saved.businessName,
   offer: saved.offer,
   address: saved.address,
@@ -117,50 +129,122 @@ const toBehaviour = (saved: SavedSettings): BehaviourSettings => ({
   schedule: saved.schedule,
 });
 
-// The Tenant's settings as saved now, or its defaults before the first save.
-// `updatedBy` is null before the first save and once that Member was removed.
+// "Outside business hours only" needs at least one open day: without hours it
+// would silently mean always on. Each part is saved alone, so the check reads
+// the other part as saved now, in the statement that writes.
+const hasOpenDay = sql`exists (select 1 from jsonb_each(${botSettings.hours}) as day where day.value <> 'null'::jsonb)`;
+
+const profileMember = alias(member, "profile_member");
+const profileUser = alias(user, "profile_user");
+const behaviourMember = alias(member, "behaviour_member");
+const behaviourUser = alias(user, "behaviour_user");
+
+// The Tenant's settings as saved now, or their defaults before each part's
+// first save, with when and by whom each part was last saved. A name is null
+// before that part's first save and once that Member was removed.
 const loadSettings = async (db: Database, tenantId: string) => {
   const [found] = await db
-    .select({ tenantName: organization.name, saved: botSettings, updatedBy: user.name })
+    .select({
+      tenantName: organization.name,
+      saved: botSettings,
+      profileBy: profileUser.name,
+      behaviourBy: behaviourUser.name,
+    })
     .from(organization)
     .leftJoin(botSettings, eq(botSettings.tenantId, organization.id))
-    .leftJoin(member, eq(member.id, botSettings.updatedByMemberId))
-    .leftJoin(user, eq(user.id, member.userId))
+    .leftJoin(profileMember, eq(profileMember.id, botSettings.profileUpdatedByMemberId))
+    .leftJoin(profileUser, eq(profileUser.id, profileMember.userId))
+    .leftJoin(behaviourMember, eq(behaviourMember.id, botSettings.behaviourUpdatedByMemberId))
+    .leftJoin(behaviourUser, eq(behaviourUser.id, behaviourMember.userId))
     .where(eq(organization.id, tenantId));
   if (!found) throw new Error("Bot settings of a missing Tenant");
+  const { saved } = found;
   return {
-    settings: found.saved ? toBehaviour(found.saved) : defaultSettings(found.tenantName),
-    updatedAt: found.saved?.updatedAt ?? null,
-    updatedBy: found.updatedBy,
+    settings: saved ? toSettings(saved) : defaultSettings(found.tenantName),
+    profile: { updatedAt: saved?.profileUpdatedAt ?? null, updatedBy: found.profileBy },
+    behaviour: { updatedAt: saved?.behaviourUpdatedAt ?? null, updatedBy: found.behaviourBy },
   };
 };
 
 // The settings as saved now, for a Bot turn's Tenant. Read on every turn with
 // no cache of its own, so a saved edit reaches the next reply and the next
 // schedule check.
-export const readBehaviour = async (
+export const readBotSettings = async (
   db: Database,
   scope: BotTurn["scope"],
-): Promise<BehaviourSettings> => (await loadSettings(db, scope.tenantId)).settings;
+): Promise<BotSettings> => (await loadSettings(db, scope.tenantId)).settings;
 
-export const createBotSettingsEditor = ({ db, clock }: { db: Database; clock: Clock }) => {
-  const settings = createOwnerSavedSettings({
+const savedTenant = { tenantId: botSettings.tenantId };
+
+export const createBotSettingsEditor = ({ db, clock }: { db: Database; clock: Clock }) => ({
+  getSettings: (scope: TenantScope) => loadSettings(db, scope.tenantId),
+
+  // Before the first Behaviour settings save, the row holds their defaults.
+  // Closing every day is refused while the Bot replies only outside them.
+  saveProfile: createOwnerSave({
     db,
     clock,
-    schema: settingsSchema,
-    action: "behaviour_settings.saved",
-    load: (tenantId) => loadSettings(db, tenantId),
-    persist: async (tx, scope, values) => {
-      await tx
+    schema: profileSchema,
+    action: "business_profile.saved",
+    persist: async (tx, scope, { updatedAt, updatedByMemberId, ...profile }) => {
+      const set = {
+        ...profile,
+        updatedAt,
+        updatedByMemberId,
+        profileUpdatedAt: updatedAt,
+        profileUpdatedByMemberId: updatedByMemberId,
+      };
+      const saved = await tx
         .insert(botSettings)
-        .values({ tenantId: scope.tenantId, ...values })
-        .onConflictDoUpdate({ target: botSettings.tenantId, set: values });
+        .values({ tenantId: scope.tenantId, ...defaultBehaviour, ...set })
+        .onConflictDoUpdate({
+          target: botSettings.tenantId,
+          set,
+          setWhere: weekdays.some((day) => profile.hours[day])
+            ? undefined
+            : eq(botSettings.schedule, "always"),
+        })
+        .returning(savedTenant);
+      if (saved.length === 0) return "invalid";
     },
-  });
-  return {
-    getSettings: settings.get,
-    // Saving never touches Conversations: a schedule change only affects
-    // whether the Bot may send its next reply.
-    saveSettings: settings.save,
-  };
-};
+  }),
+
+  // Before the first Business profile save, the row holds its defaults, named
+  // after the Tenant. Saving never touches Conversations: a schedule change
+  // only affects whether the Bot may send its next reply.
+  saveBehaviour: createOwnerSave({
+    db,
+    clock,
+    schema: behaviourSchema,
+    action: "behaviour_settings.saved",
+    persist: async (tx, scope, { updatedAt, updatedByMemberId, ...behaviour }) => {
+      const set = {
+        ...behaviour,
+        updatedAt,
+        updatedByMemberId,
+        behaviourUpdatedAt: updatedAt,
+        behaviourUpdatedByMemberId: updatedByMemberId,
+      };
+      // Without a saved profile there are no hours to be outside of, so only
+      // an existing row with an open day can take that schedule.
+      const saved =
+        behaviour.schedule === "always"
+          ? await tx
+              .insert(botSettings)
+              .values({
+                tenantId: scope.tenantId,
+                ...defaultSettings(""),
+                businessName: sql`(select ${organization.name} from ${organization} where ${organization.id} = ${scope.tenantId})`,
+                ...set,
+              })
+              .onConflictDoUpdate({ target: botSettings.tenantId, set })
+              .returning(savedTenant)
+          : await tx
+              .update(botSettings)
+              .set(set)
+              .where(and(eq(botSettings.tenantId, scope.tenantId), hasOpenDay))
+              .returning(savedTenant);
+      if (saved.length === 0) return "invalid";
+    },
+  }),
+});

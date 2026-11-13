@@ -1,3 +1,4 @@
+import { DashboardPage } from "@/components/dashboard/dashboard-page";
 import { KnowledgeBaseAllowance } from "@/components/knowledge-base/knowledge-base-allowance";
 import { KnowledgeBaseManager } from "@/components/knowledge-base/knowledge-base-manager";
 import { KnowledgeEntrySection } from "@/components/knowledge-base/knowledge-entry-section";
@@ -15,16 +16,15 @@ export async function KnowledgeBaseEditor({ scope }: { scope: TenantScope }) {
   const canEdit = scope.role === "owner";
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-semibold tracking-tight">Base de conhecimento</h1>
-          <p className="text-muted-foreground">
-            O Bot responde aos Contatos somente com o que estiver aqui. As alterações salvas valem a
-            partir da próxima resposta, inclusive nas conversas em andamento.
-          </p>
-        </div>
-      </div>
+    <DashboardPage
+      title="Base de conhecimento"
+      description={
+        <p>
+          O Bot responde aos Contatos somente com o que estiver aqui. As alterações salvas valem a
+          partir da próxima resposta, inclusive nas conversas em andamento.
+        </p>
+      }
+    >
       {canEdit ? (
         <KnowledgeBaseManager
           entries={entries}
@@ -46,6 +46,6 @@ export async function KnowledgeBaseEditor({ scope }: { scope: TenantScope }) {
           />
         </>
       )}
-    </div>
+    </DashboardPage>
   );
 }

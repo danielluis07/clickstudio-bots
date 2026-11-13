@@ -1,0 +1,235 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "f8e436d0-5c67-4495-9447-a203d2d2df00",
+  "prevIds": [
+    "c5d399ee-a90a-40b3-bf42-31553a221b2e"
+  ],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "bot_settings",
+        "profile_updated_at"
+      ],
+      "writes": [
+        "s|col|public.bot_settings.profile_updated_at",
+        "n|col|public.bot_settings.profile_updated_at",
+        "e|col|public.bot_settings.profile_updated_at"
+      ],
+      "reads": [
+        "n|tbl|public.bot_settings",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "bot_settings",
+        "profile_updated_by_member_id"
+      ],
+      "writes": [
+        "s|col|public.bot_settings.profile_updated_by_member_id",
+        "n|col|public.bot_settings.profile_updated_by_member_id",
+        "e|col|public.bot_settings.profile_updated_by_member_id"
+      ],
+      "reads": [
+        "n|tbl|public.bot_settings",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "bot_settings",
+        "behaviour_updated_at"
+      ],
+      "writes": [
+        "s|col|public.bot_settings.behaviour_updated_at",
+        "n|col|public.bot_settings.behaviour_updated_at",
+        "e|col|public.bot_settings.behaviour_updated_at"
+      ],
+      "reads": [
+        "n|tbl|public.bot_settings",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "bot_settings",
+        "behaviour_updated_by_member_id"
+      ],
+      "writes": [
+        "s|col|public.bot_settings.behaviour_updated_by_member_id",
+        "n|col|public.bot_settings.behaviour_updated_by_member_id",
+        "e|col|public.bot_settings.behaviour_updated_by_member_id"
+      ],
+      "reads": [
+        "n|tbl|public.bot_settings",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "bot_settings"
+      ],
+      "writes": [
+        "s|fk|public.bot_settings.bot_settings_profile_updated_by_member_id_member_id_fkey",
+        "n|fk|public.bot_settings.bot_settings_profile_updated_by_member_id_member_id_fkey",
+        "e|fk|public.bot_settings.bot_settings_profile_updated_by_member_id_member_id_fkey",
+        "n|con|public.bot_settings.bot_settings_profile_updated_by_member_id_member_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.bot_settings",
+        "n|sch|public",
+        "n|tbl|public.member",
+        "n|sch|public",
+        "n|col|public.bot_settings.profile_updated_by_member_id",
+        "n|col|public.member.id",
+        "e|uniqueness|public.member.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "bot_settings"
+      ],
+      "writes": [
+        "s|fk|public.bot_settings.bot_settings_behaviour_updated_by_member_id_member_id_fkey",
+        "n|fk|public.bot_settings.bot_settings_behaviour_updated_by_member_id_member_id_fkey",
+        "e|fk|public.bot_settings.bot_settings_behaviour_updated_by_member_id_member_id_fkey",
+        "n|con|public.bot_settings.bot_settings_behaviour_updated_by_member_id_member_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.bot_settings",
+        "n|sch|public",
+        "n|tbl|public.member",
+        "n|sch|public",
+        "n|col|public.bot_settings.behaviour_updated_by_member_id",
+        "n|col|public.member.id",
+        "e|uniqueness|public.member.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "bot_settings",
+        "name": "profile_updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "bot_settings",
+        "name": "profile_updated_by_member_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "bot_settings",
+        "name": "behaviour_updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "bot_settings",
+        "name": "behaviour_updated_by_member_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "bot_settings",
+        "name": "bot_settings_profile_updated_by_member_id_member_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "profile_updated_by_member_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "member",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "SET NULL",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "bot_settings",
+        "name": "bot_settings_behaviour_updated_by_member_id_member_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "behaviour_updated_by_member_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "member",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "SET NULL",
+        "entityType": "fks"
+      }
+    }
+  ]
+}

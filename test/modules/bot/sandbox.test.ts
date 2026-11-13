@@ -12,7 +12,7 @@ import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import { resolveChannelPhoneNumber } from "@/modules/channels";
 import { createConversationRepository, recordInboundTextMessage } from "@/modules/conversations";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
-import { testBehaviour } from "@/test/support/bot";
+import { saveTestSettings, testBotSettings } from "@/test/support/bot";
 import { createTestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestModel } from "@/test/support/model";
@@ -114,7 +114,7 @@ test("Testar Bot reads its Tenant's saved links on each turn, including edits an
 test.each([undefined, "test-direct-key"])(
   "a Gateway key enables sandbox replies through Anthropic (direct key: %s)",
   async (anthropicApiKey) => {
-    await createBotSettingsEditor({ db, clock }).saveSettings(owner, testBehaviour);
+    await saveTestSettings(createBotSettingsEditor({ db, clock }), owner, testBotSettings);
     await createKnowledgeBaseEditor({ db, clock }).addEntry(owner, {
       kind: "faq",
       title: "Quanto custa o corte?",
@@ -226,7 +226,7 @@ test("the direct Anthropic key still enables sandbox replies when no Gateway key
 });
 
 test("the owner tests saved settings and Knowledge base through the Bot's Model contract before connecting a Channel", async () => {
-  await createBotSettingsEditor({ db, clock }).saveSettings(owner, testBehaviour);
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), owner, testBotSettings);
   await createKnowledgeBaseEditor({ db, clock }).addEntry(owner, {
     kind: "faq",
     title: "Quanto custa o corte?",
@@ -275,8 +275,8 @@ test("the next sandbox reply uses edited Knowledge base and settings while prese
     title: "Quanto custa o corte?",
     body: "O corte custa R$ 90.",
   });
-  await createBotSettingsEditor({ db, clock }).saveSettings(owner, {
-    ...testBehaviour,
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), owner, {
+    ...testBotSettings,
     businessName: "Novo nome",
   });
 

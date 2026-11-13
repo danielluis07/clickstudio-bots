@@ -24,7 +24,11 @@ const activateWithSnapshot = async <T>(db: Database, activate: (tx: Transaction)
 // Always called with a transaction, which is one pg client: read sequentially.
 const readChecklist = async (db: Database, scope: TenantScope) => {
   const rows = await db
-    .select({ updatedAt: botSettings.updatedAt, testedAt: botActivation.testedAt })
+    .select({
+      updatedAt: botSettings.updatedAt,
+      profileUpdatedAt: botSettings.profileUpdatedAt,
+      testedAt: botActivation.testedAt,
+    })
     .from(organization)
     .leftJoin(botSettings, eq(botSettings.tenantId, organization.id))
     .leftJoin(botActivation, eq(botActivation.tenantId, organization.id))
@@ -33,7 +37,7 @@ const readChecklist = async (db: Database, scope: TenantScope) => {
   const saved = rows[0];
   const testedAt = saved?.testedAt;
   return {
-    profile: saved?.updatedAt != null,
+    profile: saved?.profileUpdatedAt != null,
     knowledge: knowledge.present,
     tested:
       testedAt != null &&

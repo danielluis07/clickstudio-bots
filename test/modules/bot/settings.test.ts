@@ -6,14 +6,14 @@ import {
   createBotCore,
   createBotSettingsEditor,
   readBotConfiguration,
-  readBehaviour,
+  readBotSettings,
   scheduleAllows,
-  type BehaviourSettings,
+  type BotSettings,
 } from "@/modules/bot";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
 import { createConversationRepository, recordInboundTextMessage } from "@/modules/conversations";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
-import { createTestBotRepository } from "@/test/support/bot";
+import { createTestBotRepository, saveTestSettings } from "@/test/support/bot";
 import { createTestClock, type TestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestModel } from "@/test/support/model";
@@ -24,7 +24,7 @@ let editor: ReturnType<typeof createBotSettingsEditor>;
 let ownerA: TenantScope;
 let routeA: ChannelRoute;
 
-const closedWeek: BehaviourSettings["hours"] = {
+const closedWeek: BotSettings["hours"] = {
   monday: null,
   tuesday: null,
   wednesday: null,
@@ -34,7 +34,7 @@ const closedWeek: BehaviourSettings["hours"] = {
   sunday: null,
 };
 
-const settings: BehaviourSettings = {
+const settings: BotSettings = {
   businessName: "Barbearia A",
   offer: "Cortes de cabelo e barba",
   address: "Rua das Flores, 100",
@@ -58,8 +58,8 @@ const scopeOf = async (userId: string) => {
   return scope;
 };
 
-const saved = async (input: BehaviourSettings, scope = ownerA) => {
-  const result = await editor.saveSettings(scope, input);
+const saved = async (input: BotSettings, scope = ownerA) => {
+  const result = await saveTestSettings(editor, scope, input);
   if (!result.ok) throw new Error(`setup failed: ${result.error}`);
 };
 
@@ -110,18 +110,23 @@ beforeEach(async () => {
   routeA = (await resolveChannelPhoneNumber(db, "301"))!;
 });
 
-describe("saving the Bot's settings", () => {
-  test("the owner saves every setting, which shows when and by whom it was saved", async () => {
-    expect(await editor.saveSettings(ownerA, settings)).toEqual({ ok: true });
+const { businessName, offer, address, hours, ...behaviour } = settings;
+const profile = { businessName, offer, address, hours };
 
+describe("saving the Bot's settings", () => {
+  test("the owner saves every setting, which shows when and by whom each part was saved", async () => {
+    expect(await saveTestSettings(editor, ownerA, settings)).toEqual({ ok: true });
+
+    const savedBy = { updatedAt: new Date("2026-03-10T12:00:00.000Z"), updatedBy: "Dona Ana" };
     expect(await editor.getSettings(ownerA)).toEqual({
       settings,
-      updatedAt: new Date("2026-03-10T12:00:00.000Z"),
-      updatedBy: "Dona Ana",
+      profile: savedBy,
+      behaviour: savedBy,
     });
   });
 
   test("before any save, the Bot uses the Tenant's name, a neutral tone and is always on", async () => {
+    const unsaved = { updatedAt: null, updatedBy: null };
     expect(await editor.getSettings(ownerA)).toEqual({
       settings: {
         businessName: "Barbearia A",
@@ -136,8 +141,51 @@ describe("saving the Bot's settings", () => {
         handoffTopics: [],
         schedule: "always",
       },
-      updatedAt: null,
-      updatedBy: null,
+      profile: unsaved,
+      behaviour: unsaved,
+    });
+  });
+
+  test("each part saves only its own settings and its own time", async () => {
+    await saved(settings);
+    clock.advance(60_000);
+
+    expect(await editor.saveBehaviour(ownerA, { ...behaviour, tone: "casual" })).toEqual({
+      ok: true,
+    });
+    expect(await editor.getSettings(ownerA)).toEqual({
+      settings: { ...settings, tone: "casual" },
+      profile: { updatedAt: new Date("2026-03-10T12:00:00.000Z"), updatedBy: "Dona Ana" },
+      behaviour: { updatedAt: new Date("2026-03-10T12:01:00.000Z"), updatedBy: "Dona Ana" },
+    });
+
+    clock.advance(60_000);
+    expect(await editor.saveProfile(ownerA, { ...profile, offer: "Barba" })).toEqual({ ok: true });
+    expect(await editor.getSettings(ownerA)).toMatchObject({
+      settings: { offer: "Barba", tone: "casual" },
+      profile: { updatedAt: new Date("2026-03-10T12:02:00.000Z") },
+      behaviour: { updatedAt: new Date("2026-03-10T12:01:00.000Z") },
+    });
+  });
+
+  test("the behaviour saved first leaves the profile at its defaults, named after the Tenant", async () => {
+    expect(await editor.saveBehaviour(ownerA, { ...behaviour, schedule: "always" })).toEqual({
+      ok: true,
+    });
+
+    expect(await editor.getSettings(ownerA)).toMatchObject({
+      settings: { businessName: "Barbearia A", offer: "", hours: closedWeek, tone: "formal" },
+      profile: { updatedAt: null, updatedBy: null },
+      behaviour: { updatedBy: "Dona Ana" },
+    });
+  });
+
+  test("the profile saved first leaves the behaviour at its defaults", async () => {
+    expect(await editor.saveProfile(ownerA, profile)).toEqual({ ok: true });
+
+    expect(await editor.getSettings(ownerA)).toMatchObject({
+      settings: { ...profile, tone: "neutral", schedule: "always" },
+      behaviour: { updatedAt: null, updatedBy: null },
     });
   });
 
@@ -149,7 +197,7 @@ describe("saving the Bot's settings", () => {
 
     expect(await editor.getSettings(ownerA)).toMatchObject({
       settings: { tone: "casual", schedule: "always", handoffTopics: [] },
-      updatedAt: new Date("2026-03-10T12:01:00.000Z"),
+      behaviour: { updatedAt: new Date("2026-03-10T12:01:00.000Z") },
     });
   });
 
@@ -186,10 +234,12 @@ describe("bounded settings", () => {
     });
     for (const field of textFields) {
       const atLimit = "é".repeat(botSettingsLimits[field]);
-      expect(await editor.saveSettings(ownerA, { ...settings, [field]: atLimit })).toEqual({
+      expect(await saveTestSettings(editor, ownerA, { ...settings, [field]: atLimit })).toEqual({
         ok: true,
       });
-      expect(await editor.saveSettings(ownerA, { ...settings, [field]: `${atLimit}a` })).toEqual({
+      expect(
+        await saveTestSettings(editor, ownerA, { ...settings, [field]: `${atLimit}a` }),
+      ).toEqual({
         ok: false,
         error: "invalid",
       });
@@ -199,18 +249,18 @@ describe("bounded settings", () => {
   test("topic lists hold up to 20 topics of up to 100 characters each", async () => {
     const topics = Array.from({ length: 20 }, (_, index) => `${index}`.padEnd(100, "x"));
     for (const list of ["refusedTopics", "handoffTopics"] as const) {
-      expect(await editor.saveSettings(ownerA, { ...settings, [list]: topics })).toEqual({
+      expect(await saveTestSettings(editor, ownerA, { ...settings, [list]: topics })).toEqual({
         ok: true,
       });
       expect(
-        await editor.saveSettings(ownerA, { ...settings, [list]: [...topics, "mais um"] }),
+        await saveTestSettings(editor, ownerA, { ...settings, [list]: [...topics, "mais um"] }),
       ).toEqual({ ok: false, error: "invalid" });
-      expect(await editor.saveSettings(ownerA, { ...settings, [list]: ["x".repeat(101)] })).toEqual(
-        {
-          ok: false,
-          error: "invalid",
-        },
-      );
+      expect(
+        await saveTestSettings(editor, ownerA, { ...settings, [list]: ["x".repeat(101)] }),
+      ).toEqual({
+        ok: false,
+        error: "invalid",
+      });
     }
   });
 
@@ -231,7 +281,7 @@ describe("bounded settings", () => {
       tuesday("09:00", "09:00"),
       { ...settings, hours: { ...settings.hours, holiday: null } },
     ]) {
-      expect(await editor.saveSettings(ownerA, input as BehaviourSettings)).toEqual({
+      expect(await saveTestSettings(editor, ownerA, input as BotSettings)).toEqual({
         ok: false,
         error: "invalid",
       });
@@ -239,17 +289,30 @@ describe("bounded settings", () => {
     expect((await editor.getSettings(ownerA)).settings).toEqual(settings);
   });
 
-  test("outside business hours only needs at least one open day", async () => {
+  test("outside business hours only needs at least one open day in the saved profile", async () => {
     expect(
-      await editor.saveSettings(ownerA, {
-        ...settings,
-        hours: closedWeek,
-        schedule: "outside_business_hours",
-      }),
+      await editor.saveBehaviour(ownerA, { ...behaviour, schedule: "outside_business_hours" }),
     ).toEqual({ ok: false, error: "invalid" });
+    expect(await editor.getSettings(ownerA)).toMatchObject({
+      behaviour: { updatedAt: null },
+    });
+
+    await saved(settings);
+    expect(await editor.saveProfile(ownerA, { ...profile, hours: closedWeek })).toEqual({
+      ok: false,
+      error: "invalid",
+    });
+    expect((await editor.getSettings(ownerA)).settings.hours).toEqual(settings.hours);
+
+    expect(await editor.saveBehaviour(ownerA, { ...behaviour, schedule: "always" })).toEqual({
+      ok: true,
+    });
+    expect(await editor.saveProfile(ownerA, { ...profile, hours: closedWeek })).toEqual({
+      ok: true,
+    });
     expect(
-      await editor.saveSettings(ownerA, { ...settings, hours: closedWeek, schedule: "always" }),
-    ).toEqual({ ok: true });
+      await editor.saveBehaviour(ownerA, { ...behaviour, schedule: "outside_business_hours" }),
+    ).toEqual({ ok: false, error: "invalid" });
   });
 });
 
@@ -281,7 +344,7 @@ describe("what the Bot reads", () => {
 
   test("the schedule saved now decides eligibility, in São Paulo time", async () => {
     await saved(settings);
-    const isScheduled = async () => scheduleAllows(await readBehaviour(db, routeA), clock.now());
+    const isScheduled = async () => scheduleAllows(await readBotSettings(db, routeA), clock.now());
 
     // Tuesday 2026-03-10, 09:00 in São Paulo.
     expect(await isScheduled()).toBe(false);
@@ -313,7 +376,7 @@ describe("who may edit", () => {
     await saved(settings);
     const attendant = await scopeOf("attendant-a");
 
-    expect(await editor.saveSettings(attendant, { ...settings, schedule: "always" })).toEqual({
+    expect(await saveTestSettings(editor, attendant, { ...settings, schedule: "always" })).toEqual({
       ok: false,
       error: "forbidden",
     });

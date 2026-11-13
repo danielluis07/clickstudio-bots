@@ -30,7 +30,12 @@ export function BotActivation({ canActivate }: { canActivate: boolean }) {
       <CardContent className="flex flex-col gap-3">
         {status ? (
           <ol className="flex list-inside list-decimal flex-col gap-2 text-sm">
-            <li>Perfil do negócio: {status.profile ? "salvo" : "salve as configurações abaixo"}</li>
+            <li>
+              <Link href="/painel/bot/perfil" className="underline">
+                Perfil do negócio
+              </Link>
+              : {status.profile ? "salvo" : "preencha e salve o perfil"}
+            </li>
             <li>
               <Link href="/painel/base-de-conhecimento" className="underline">
                 Base de conhecimento
@@ -38,8 +43,10 @@ export function BotActivation({ canActivate }: { canActivate: boolean }) {
               : {status.knowledge ? "preenchida" : "adicione ao menos uma informação"}
             </li>
             <li>
-              Testar Bot:{" "}
-              {status.tested ? "concluído" : "envie um teste após salvar suas alterações"}
+              <Link href="/painel/bot/testar" className="underline">
+                Testar Bot
+              </Link>
+              : {status.tested ? "concluído" : "envie um teste após salvar suas alterações"}
             </li>
             <li>
               WhatsApp: <BotChannelStep connected={status.connected} />

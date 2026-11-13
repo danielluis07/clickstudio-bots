@@ -37,7 +37,12 @@ import {
 } from "@/modules/conversations";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
-import { createTestBotAllowance, createTestInboxBot, testBehaviour } from "@/test/support/bot";
+import {
+  createTestBotAllowance,
+  createTestInboxBot,
+  saveTestSettings,
+  testBotSettings,
+} from "@/test/support/bot";
 import { createTestModel } from "@/test/support/model";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
@@ -66,7 +71,7 @@ const setup = async (allowance?: BotAllowance, burst: BurstWait | null = null) =
   const sender = createTestWhatsAppSender();
   const queue = createTestJobQueue<BotJob>();
   const activation = createBotActivation({ db, clock });
-  await createBotSettingsEditor({ db, clock }).saveSettings(scope, testBehaviour);
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, testBotSettings);
   await createKnowledgeBaseEditor({ db, clock }).addEntry(scope, {
     kind: "faq",
     title: "Preço?",
@@ -578,8 +583,8 @@ test("exhaustion hands off a new Contact message even while Schedule pauses repl
   const { scope, clock, model, sender, activation, conversationId, worker, repository } =
     await setup();
   await activation.activate(scope);
-  await createBotSettingsEditor({ db, clock }).saveSettings(scope, {
-    ...testBehaviour,
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, {
+    ...testBotSettings,
     schedule: "outside_business_hours",
   });
   await db
@@ -707,8 +712,8 @@ test("one turn includes every unanswered Contact message in a large burst", asyn
 test("an unavailable Model outside Schedule skips without Handoff", async () => {
   const { scope, clock, activation, conversationId, repository, dependencies } = await setup();
   await activation.activate(scope);
-  await createBotSettingsEditor({ db, clock }).saveSettings(scope, {
-    ...testBehaviour,
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, {
+    ...testBotSettings,
     schedule: "outside_business_hours",
   });
   await createLiveBot({ ...dependencies, model: null }).run(conversationId);
@@ -991,8 +996,8 @@ test("pause and Schedule changes during generation prevent sending without Hando
   });
   await activation.setPaused(scope, false);
   model.generate = async (request) => {
-    await createBotSettingsEditor({ db, clock }).saveSettings(scope, {
-      ...testBehaviour,
+    await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, {
+      ...testBotSettings,
       schedule: "outside_business_hours",
     });
     return generate(request);
@@ -1053,15 +1058,15 @@ test("the sweep leaves a message skipped outside the Schedule, even once the Sch
   const { scope, clock, queue, activation, worker } = await setup();
   await activation.activate(scope);
   // Thursday 09:00 in São Paulo: business hours, so the Bot stays quiet.
-  await createBotSettingsEditor({ db, clock }).saveSettings(scope, {
-    ...testBehaviour,
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, {
+    ...testBotSettings,
     schedule: "outside_business_hours",
   });
   clock.advance(2 * 60_000);
   await worker.sweep();
   expect(queue.take()).toEqual([]);
   // Saved back to always on, the message is now over an hour old.
-  await createBotSettingsEditor({ db, clock }).saveSettings(scope, testBehaviour);
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, testBotSettings);
   clock.advance(58 * 60_000);
   await worker.sweep();
   expect(queue.take()).toEqual([]);
@@ -1103,8 +1108,8 @@ test("a Tenant whose Schedule skips 100 Conversations cannot starve another Tena
   const quiet = await seedLiveBot(db);
   await db.update(channel).set({ botEnabled: true }).where(eq(channel.id, quiet.route.channelId));
   // Thursday 09:00 in São Paulo: business hours, so this Tenant's Bot stays quiet.
-  await createBotSettingsEditor({ db, clock }).saveSettings(quiet.scope, {
-    ...testBehaviour,
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), quiet.scope, {
+    ...testBotSettings,
     schedule: "outside_business_hours",
   });
   for (let index = 0; index < 100; index++)

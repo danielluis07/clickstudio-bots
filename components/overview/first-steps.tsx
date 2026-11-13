@@ -44,7 +44,7 @@ export function FirstSteps({ isOwner }: { isOwner: boolean }) {
           </span>
         </FirstStep>
         <FirstStep label="Perfil do negócio" done={status.profile}>
-          <Link href="/painel/bot" className={stepLink}>
+          <Link href="/painel/bot/perfil" className={stepLink}>
             Preencher
           </Link>
         </FirstStep>
@@ -54,7 +54,7 @@ export function FirstSteps({ isOwner }: { isOwner: boolean }) {
           </Link>
         </FirstStep>
         <FirstStep label="Testar o Bot" done={status.tested}>
-          <Link href="/painel/bot#testar-bot" className={stepLink}>
+          <Link href="/painel/bot/testar" className={stepLink}>
             Testar
           </Link>
         </FirstStep>

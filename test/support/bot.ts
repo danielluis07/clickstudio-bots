@@ -1,7 +1,8 @@
 import {
+  createBotSettingsEditor,
   disabledCapture,
   disabledLinks,
-  type BehaviourSettings,
+  type BotSettings,
   type BotRepository,
   type BotConfiguration,
   type BotTurn,
@@ -11,6 +12,7 @@ import {
   type LiveBot,
 } from "@/modules/bot";
 import type { ChannelRoute } from "@/modules/channels";
+import type { TenantScope } from "@/modules/tenancy";
 import { noContactDetails, type ContactDetails } from "@/modules/conversations";
 
 // The inbox's Bot hand-off, recording each enqueue. `failNext` fails one
@@ -43,7 +45,18 @@ export const createTestBotAllowance = (
   notifyWarning: async () => {},
 });
 
-export const testBehaviour: BehaviourSettings = {
+// Saves both parts of the Bot's settings, as an owner filling in the profile
+// and then the behaviour would; returns the first refusal.
+export const saveTestSettings = async (
+  editor: Pick<ReturnType<typeof createBotSettingsEditor>, "saveProfile" | "saveBehaviour">,
+  scope: TenantScope,
+  { businessName, offer, address, hours, ...behaviour }: BotSettings,
+) => {
+  const profile = await editor.saveProfile(scope, { businessName, offer, address, hours });
+  return profile.ok ? editor.saveBehaviour(scope, behaviour) : profile;
+};
+
+export const testBotSettings: BotSettings = {
   businessName: "Barbearia Navalha",
   offer: "Cortes de cabelo e barba",
   hours: {
@@ -85,7 +98,7 @@ export type TestBotRepository = BotRepository &
 // messages. It applies no caps, so the core must apply them itself.
 export const createTestBotRepository = (): TestBotRepository => {
   const repository: TestBotRepository = {
-    behaviour: testBehaviour,
+    behaviour: testBotSettings,
     knowledgeBase: testKnowledgeBase,
     capture: disabledCapture,
     links: disabledLinks,

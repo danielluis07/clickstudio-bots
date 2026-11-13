@@ -21,9 +21,9 @@ import { useBotSandbox } from "@/modules/bot/hooks";
 export function BotSandboxChat() {
   const sandbox = useBotSandbox();
   return (
-    <Card id="testar-bot" className="scroll-mt-4">
+    <Card>
       <CardHeader>
-        <CardTitle>Testar Bot</CardTitle>
+        <CardTitle>Conversa de teste</CardTitle>
         <CardDescription>
           Teste as configurações e a base de conhecimento salvas antes de ativar o Bot. Salve suas
           alterações antes de enviar uma mensagem. Nenhuma mensagem será enviada ao WhatsApp e os

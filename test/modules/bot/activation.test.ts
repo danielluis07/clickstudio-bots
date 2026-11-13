@@ -4,7 +4,7 @@ import { createBotActivation, createBotSandbox, createBotSettingsEditor } from "
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
-import { testBehaviour } from "@/test/support/bot";
+import { saveTestSettings, testBotSettings } from "@/test/support/bot";
 import { createTestModel } from "@/test/support/model";
 import { botActivation, channel, member, user } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -20,7 +20,7 @@ test("a serialization retry checks readiness again after rolling back the flag w
   const { scope, clock } = await seedLiveBot(db);
   const activation = createBotActivation({ db, clock });
   const settings = createBotSettingsEditor({ db, clock });
-  await settings.saveSettings(scope, testBehaviour);
+  await saveTestSettings(settings, scope, testBotSettings);
   await createKnowledgeBaseEditor({ db, clock }).addEntry(scope, {
     kind: "faq",
     title: "Preço?",
@@ -43,7 +43,7 @@ test("a serialization retry checks readiness again after rolling back the flag w
       }, config);
     } finally {
       clock.advance(1);
-      await settings.saveSettings(scope, { ...testBehaviour, businessName: "Novo nome" });
+      await saveTestSettings(settings, scope, { ...testBotSettings, businessName: "Novo nome" });
     }
   });
   try {
@@ -105,7 +105,7 @@ test("Knowledge base edits require another test and a disconnected Channel canno
   const { scope, clock } = await seedLiveBot(db);
   const activation = createBotActivation({ db, clock });
   const knowledge = createKnowledgeBaseEditor({ db, clock });
-  await createBotSettingsEditor({ db, clock }).saveSettings(scope, testBehaviour);
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, testBotSettings);
   const entry = await knowledge.addEntry(scope, { kind: "faq", title: "Preço?", body: "R$ 80" });
   if (!entry.ok) throw new Error("Expected a saved entry");
   await activation.markTested(scope, clock.now());
@@ -134,7 +134,7 @@ test("an edit during a sandbox turn still requires a test of the saved change", 
   const { scope, clock } = await seedLiveBot(db);
   const activation = createBotActivation({ db, clock });
   const settings = createBotSettingsEditor({ db, clock });
-  await settings.saveSettings(scope, testBehaviour);
+  await saveTestSettings(settings, scope, testBotSettings);
   await createKnowledgeBaseEditor({ db, clock }).addEntry(scope, {
     kind: "faq",
     title: "Preço?",
@@ -145,7 +145,7 @@ test("an edit during a sandbox turn still requires a test of the saved change", 
   const model = {
     generate: async (request: Parameters<typeof scripted.generate>[0]) => {
       clock.advance(1000);
-      await settings.saveSettings(scope, { ...testBehaviour, businessName: "Novo nome" });
+      await saveTestSettings(settings, scope, { ...testBotSettings, businessName: "Novo nome" });
       return scripted.generate(request);
     },
   };
@@ -169,7 +169,7 @@ test("activation requires a saved business profile, Knowledge base and successfu
     tested: false,
     enabled: false,
   });
-  await createBotSettingsEditor({ db, clock }).saveSettings(scope, testBehaviour);
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, testBotSettings);
   clock.advance(1);
   await createKnowledgeBaseEditor({ db, clock }).addEntry(scope, {
     kind: "faq",
@@ -207,7 +207,7 @@ test("Members can pause only their activated Channel and cannot activate the Bot
   const activation = createBotActivation({ db, clock });
   expect(await activation.activate(attendant)).toEqual({ ok: false, error: "forbidden" });
   expect(await activation.setPaused(attendant, true)).toEqual({ ok: false, error: "inactive" });
-  await createBotSettingsEditor({ db, clock }).saveSettings(scope, testBehaviour);
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, testBotSettings);
   await createKnowledgeBaseEditor({ db, clock }).addEntry(scope, {
     kind: "faq",
     title: "Preço?",
@@ -233,7 +233,7 @@ test("provider failures do not complete testing and settings edits require a new
   db = await createTestDatabase();
   const { scope, clock } = await seedLiveBot(db);
   const activation = createBotActivation({ db, clock });
-  await createBotSettingsEditor({ db, clock }).saveSettings(scope, testBehaviour);
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, testBotSettings);
   await createKnowledgeBaseEditor({ db, clock }).addEntry(scope, {
     kind: "faq",
     title: "Preço?",
@@ -251,9 +251,23 @@ test("provider failures do not complete testing and settings edits require a new
   expect(await activation.activate(scope)).toEqual({ ok: false, error: "incomplete" });
   await sandbox.respond(scope, { text: "Preço?", history: [] });
   clock.advance(1);
-  await createBotSettingsEditor({ db, clock }).saveSettings(scope, {
-    ...testBehaviour,
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, {
+    ...testBotSettings,
     businessName: "Novo nome",
   });
   expect(await activation.activate(scope)).toEqual({ ok: false, error: "incomplete" });
+});
+
+test("the profile step is done only once the Business profile itself is saved", async () => {
+  db = await createTestDatabase();
+  const { scope, clock } = await seedLiveBot(db);
+  const activation = createBotActivation({ db, clock });
+  const settings = createBotSettingsEditor({ db, clock });
+  const { businessName, offer, address, hours, ...behaviour } = testBotSettings;
+
+  await settings.saveBehaviour(scope, behaviour);
+  expect(await activation.status(scope)).toMatchObject({ profile: false });
+
+  await settings.saveProfile(scope, { businessName, offer, address, hours });
+  expect(await activation.status(scope)).toMatchObject({ profile: true });
 });
