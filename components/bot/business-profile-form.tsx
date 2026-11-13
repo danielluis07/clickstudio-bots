@@ -1,49 +1,54 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { BusinessHoursFields } from "@/components/bot/business-hours-fields";
 import { BusinessProfileFields } from "@/components/bot/business-profile-fields";
-import { FormMessage } from "@/components/forms/form-message";
+import { BusinessProfilePreview } from "@/components/bot/business-profile-preview";
+import { DashboardPage } from "@/components/dashboard/dashboard-page";
+import { FormSaveBar } from "@/components/forms/form-save-bar";
 import { SubmitButton } from "@/components/forms/submit-button";
 import type { BotSettingsLimits, BusinessProfile } from "@/modules/bot";
-import { useBotSettingsForm } from "@/modules/bot/hooks";
+import { useBotSettingsForm, useBusinessProfileDraft } from "@/modules/bot/hooks";
 import { saveBusinessProfileAction } from "@/server/actions/bot-settings";
 
 type BusinessProfileFormProps = {
   profile: BusinessProfile;
-  // When the profile was last saved. A save remounts the fields so they show
-  // it as saved; their initial values cannot change in place.
-  savedAt: Date | null;
   limits: BotSettingsLimits;
   // Other Members see the profile without being able to change it.
   canEdit: boolean;
+  description: ReactNode;
 };
 
+// The whole Perfil do negócio page: the fields, and beside them a preview
+// that follows the owner's edits before they save.
 export function BusinessProfileForm({
   profile,
-  savedAt,
   limits,
   canEdit,
+  description,
 }: BusinessProfileFormProps) {
   const form = useBotSettingsForm(saveBusinessProfileAction);
+  const { draft, setField, setDay } = useBusinessProfileDraft(profile);
 
   return (
-    <form onSubmit={form.submit}>
-      <fieldset
-        key={savedAt?.toISOString()}
-        disabled={!canEdit || form.pending}
-        className="flex flex-col gap-10"
-      >
-        <BusinessProfileFields settings={profile} limits={limits} />
-        <BusinessHoursFields hours={profile.hours} />
+    <DashboardPage
+      title="Perfil do negócio"
+      width="form"
+      description={description}
+      rail={<BusinessProfilePreview draft={draft} />}
+      railLabel="Prévia"
+    >
+      <form onSubmit={form.submit} className="flex flex-col">
+        <fieldset disabled={!canEdit || form.pending} className="flex flex-col">
+          <BusinessProfileFields draft={draft} limits={limits} onField={setField} />
+          <BusinessHoursFields hours={draft.hours} onDay={setDay} />
+        </fieldset>
         {canEdit && (
-          <div className="flex flex-col gap-3">
-            <FormMessage state={form.state} />
-            <div>
-              <SubmitButton pending={form.pending}>Salvar perfil</SubmitButton>
-            </div>
-          </div>
+          <FormSaveBar state={form.state}>
+            <SubmitButton pending={form.pending}>Salvar perfil</SubmitButton>
+          </FormSaveBar>
         )}
-      </fieldset>
-    </form>
+      </form>
+    </DashboardPage>
   );
 }

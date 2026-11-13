@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { BotChannelStep } from "@/components/bot/bot-channel-step";
+import { DashboardRailSection } from "@/components/dashboard/dashboard-rail-section";
 import { FirstStep } from "@/components/overview/first-step";
 import { Button } from "@/components/ui/button";
 import { useBotActivation } from "@/modules/bot/hooks";
@@ -17,9 +18,11 @@ export function FirstSteps({ isOwner }: { isOwner: boolean }) {
 
   if (!isOwner)
     return (
-      <p role="status" className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
-        O responsável ainda está configurando o Bot.
-      </p>
+      <DashboardRailSection title="Bot">
+        <p role="status" className="text-sm text-muted-foreground">
+          O responsável ainda está configurando o Bot.
+        </p>
+      </DashboardRailSection>
     );
 
   const ready = status.connected && status.profile && status.knowledge && status.tested;
@@ -27,17 +30,8 @@ export function FirstSteps({ isOwner }: { isOwner: boolean }) {
     Boolean,
   ).length;
   return (
-    <section
-      aria-labelledby="primeiros-passos"
-      className="flex flex-col gap-2 rounded-xl border bg-card p-4"
-    >
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 id="primeiros-passos" className="text-sm font-medium">
-          Primeiros passos
-        </h2>
-        <span className="text-xs text-muted-foreground tabular-nums">{`${done} de 5`}</span>
-      </div>
-      <ol className="flex flex-col divide-y">
+    <DashboardRailSection title="Primeiros passos" aside={`${done} de 5`}>
+      <ol className="flex flex-col">
         <FirstStep label="WhatsApp" done={status.connected}>
           <span className="text-sm">
             <BotChannelStep connected={status.connected} />
@@ -69,6 +63,6 @@ export function FirstSteps({ isOwner }: { isOwner: boolean }) {
           {bot.error}
         </p>
       )}
-    </section>
+    </DashboardRailSection>
   );
 }

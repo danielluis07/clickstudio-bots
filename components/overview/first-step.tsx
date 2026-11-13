@@ -13,15 +13,15 @@ export function FirstStep({
   children?: ReactNode;
 }) {
   return (
-    <li className="flex min-h-10 items-center gap-3 py-1.5 text-sm">
+    <li className="flex min-h-9 items-center gap-2.5 py-1 text-sm">
       <span
         aria-hidden="true"
         className={cn(
-          "flex size-5 shrink-0 items-center justify-center rounded-full border",
+          "flex size-4 shrink-0 items-center justify-center rounded-full border",
           done && "border-brand bg-brand text-brand-foreground",
         )}
       >
-        {done && <CheckIcon className="size-3" strokeWidth={3} />}
+        {done && <CheckIcon className="size-2.5" strokeWidth={3} />}
       </span>
       <span className={cn("min-w-0 flex-1", done && "text-muted-foreground line-through")}>
         {label}

@@ -25,7 +25,7 @@ export function ContactHoursChart({
   businessHours: BusinessHours;
 }) {
   return (
-    <ChartContainer config={config} className="aspect-auto h-56 w-full">
+    <ChartContainer config={config} className="aspect-auto h-72 w-full">
       <BarChart data={hours} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
         {openHourBands(businessHours).map((band) => (
           <ReferenceArea

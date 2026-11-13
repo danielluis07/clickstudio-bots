@@ -1,51 +1,54 @@
-import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { BusinessProfileRow } from "@/components/bot/business-profile-row";
+import { BusinessProfileSection } from "@/components/bot/business-profile-section";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCount } from "@/lib/format";
-import type { BotSettingsLimits, BusinessProfile } from "@/modules/bot";
+import type { BotSettingsLimits } from "@/modules/bot";
+import type { BusinessProfileDraft } from "@/modules/bot/hooks";
 
 type BusinessProfileFieldsProps = {
-  settings: BusinessProfile;
+  draft: BusinessProfileDraft;
   limits: BotSettingsLimits;
+  onField: (field: "businessName" | "offer" | "address", value: string) => void;
 };
 
-export function BusinessProfileFields({ settings, limits }: BusinessProfileFieldsProps) {
+export function BusinessProfileFields({ draft, limits, onField }: BusinessProfileFieldsProps) {
   return (
-    <FieldSet>
-      <FieldLegend>Sobre o negócio</FieldLegend>
-      <Field>
-        <FieldLabel htmlFor="bot-business-name">Nome do negócio</FieldLabel>
+    <BusinessProfileSection title="Sobre o negócio">
+      <BusinessProfileRow label="Nome do negócio" htmlFor="bot-business-name">
         <Input
           id="bot-business-name"
           name="businessName"
-          defaultValue={settings.businessName}
+          value={draft.businessName}
+          onChange={(event) => onField("businessName", event.target.value)}
           maxLength={limits.businessName}
           required
         />
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="bot-offer">O que o negócio oferece</FieldLabel>
+      </BusinessProfileRow>
+      <BusinessProfileRow
+        label="O que oferece"
+        htmlFor="bot-offer"
+        description={`Um resumo, como “Cortes de cabelo e barba”. ${formatCount(draft.offer.length)} de ${formatCount(limits.offer)} caracteres; preços e detalhes vão na base de conhecimento.`}
+      >
         <Textarea
           id="bot-offer"
           name="offer"
-          defaultValue={settings.offer}
+          rows={3}
+          value={draft.offer}
+          onChange={(event) => onField("offer", event.target.value)}
           maxLength={limits.offer}
           aria-describedby="bot-offer-description"
         />
-        <FieldDescription id="bot-offer-description">
-          Um resumo, como “Cortes de cabelo e barba”. Até {formatCount(limits.offer)} caracteres;
-          preços e detalhes vão na base de conhecimento.
-        </FieldDescription>
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="bot-address">Endereço</FieldLabel>
+      </BusinessProfileRow>
+      <BusinessProfileRow label="Endereço" htmlFor="bot-address">
         <Input
           id="bot-address"
           name="address"
-          defaultValue={settings.address}
+          value={draft.address}
+          onChange={(event) => onField("address", event.target.value)}
           maxLength={limits.address}
         />
-      </Field>
-    </FieldSet>
+      </BusinessProfileRow>
+    </BusinessProfileSection>
   );
 }
