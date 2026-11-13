@@ -19,10 +19,12 @@ test("the owner's home page shows the stat ribbon, the charts and the rail", asy
   await expect(rail.getByText("Neste mês", { exact: true })).toBeVisible();
   await expect(rail.getByRole("heading", { name: "Últimos Handoffs" })).toBeVisible();
 
-  await expect(page.getByText("Conversas ativas", { exact: true })).toBeVisible();
-  await expect(page.getByText("Atendidas só pelo Bot", { exact: true })).toBeVisible();
-  await expect(page.getByText("Com Handoff", { exact: true })).toBeVisible();
-  await expect(page.getByText("Contatos novos", { exact: true })).toBeVisible();
+  // The stat strip's labels. "Com Handoff" is also the daily chart's legend.
+  const figures = page.locator("dt");
+  await expect(figures.getByText("Conversas ativas", { exact: true })).toBeVisible();
+  await expect(figures.getByText("Atendidas só pelo Bot", { exact: true })).toBeVisible();
+  await expect(figures.getByText("Com Handoff", { exact: true })).toBeVisible();
+  await expect(figures.getByText("Contatos novos", { exact: true })).toBeVisible();
   // The seeded Contact wrote live today: one Active Conversation, whether or
   // not an earlier test handed it off.
   await expect(page.getByText(/^\d+ de 1 conversas$/)).toBeVisible();
