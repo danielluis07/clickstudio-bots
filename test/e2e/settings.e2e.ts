@@ -7,7 +7,7 @@ test("the owner opens Configurações from the sidebar and finds Canal, Equipe a
   const { alfa } = fixtures;
   await signIn(page, alfa.ownerEmail, fixtures.password);
   await expect(page).toHaveURL("/painel");
-  await expect(page.getByRole("heading", { level: 1, name: alfa.name })).toBeVisible();
+  await expect(page.getByTitle(alfa.name)).toBeVisible();
   // The home page no longer holds these sections.
   await expect(page.getByRole("heading", { name: "Equipe" })).toHaveCount(0);
   await expect(page.getByText("Canal do WhatsApp", { exact: true })).toHaveCount(0);

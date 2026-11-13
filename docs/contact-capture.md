@@ -3,8 +3,8 @@
 Issue: [#58](https://github.com/danielluis07/clickstudio-bots/issues/58).
 Decision: [capabilities #28](https://github.com/danielluis07/clickstudio-bots/issues/28#issuecomment-6273991713).
 
-The Tenant owner sets up capture at **Painel → Bot → Captura de dados do
-contato**. Capture is disabled until the first save. Each field is either not
+The Tenant owner sets up capture at **Painel → Bot → Contatos e links**
+(`/painel/bot/contatos-e-links`), under **Captura de dados do contato**. Capture is disabled until the first save. Each field is either not
 captured, optional, or required. "Required" means the Bot asks for the field
 once before calling the team, not that the Handoff waits for it (see
 [Required details before a Handoff](#required-details-before-a-handoff)):

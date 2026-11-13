@@ -31,7 +31,7 @@ import {
   createLiveBot,
   alertBotHandoffSpikes,
   pruneBotTurnRecords,
-  readBehaviour,
+  readBotSettings,
 } from "@/modules/bot";
 import { createBotModel } from "@/platform/ai-sdk-model";
 import { createWhatsAppGateway } from "@/server/whatsapp";
@@ -95,7 +95,7 @@ export const tenantRepository = (scope: TenantScope) => createTenantRepository(d
 export const conversationStats = createConversationStats({
   db,
   clock: systemClock,
-  readBusinessHours: async (scope) => (await readBehaviour(db, scope)).hours,
+  readBusinessHours: async (scope) => (await readBotSettings(db, scope)).hours,
 });
 
 export const captureSettingsEditor = createCaptureSettingsEditor({ db, clock: systemClock });

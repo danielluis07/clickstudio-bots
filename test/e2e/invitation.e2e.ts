@@ -24,7 +24,7 @@ test("an invited owner accepts the Terms, creates an account and lands on the Pa
   await page.getByRole("button", { name: "Aceitar convite" }).click();
 
   await expect(page).toHaveURL("/painel");
-  await expect(page.getByRole("heading", { level: 1, name: invitation.tenantName })).toBeVisible();
+  await expect(page.getByTitle(invitation.tenantName)).toBeVisible();
 
   // The invitation is used up.
   await page.goto(`/convite/${invitation.id}`);

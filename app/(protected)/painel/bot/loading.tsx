@@ -1,5 +1,5 @@
 import { ContentSkeleton } from "@/components/app-shell/content-skeleton";
 
-export default function BotSettingsLoading() {
+export default function BotLoading() {
   return <ContentSkeleton />;
 }

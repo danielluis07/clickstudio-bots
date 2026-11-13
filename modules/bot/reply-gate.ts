@@ -2,7 +2,7 @@ import type { Database, Transaction } from "@/db/database";
 import { contactCapReached } from "@/modules/bot/contact-cap";
 import type { BotTurn } from "@/modules/bot/repository";
 import { scheduleAllows } from "@/modules/bot/schedule";
-import { readBehaviour } from "@/modules/bot/settings";
+import { readBotSettings } from "@/modules/bot/settings";
 import type { ChannelRoute } from "@/modules/channels";
 import { readBotEligibility, type ConversationHandoffReason } from "@/modules/conversations";
 import type { Clock } from "@/platform/clock";
@@ -68,7 +68,7 @@ export const createReplyGate = ({
       return { kind: "handoff", reason: "allowance_exhausted" };
     if (await contactCapReached(db, turn, now))
       return { kind: "handoff", reason: "contact_cap_reached" };
-    if (!scheduleAllows(await readBehaviour(db, turn.scope), now)) return skip;
+    if (!scheduleAllows(await readBotSettings(db, turn.scope), now)) return skip;
     if (!available) return { kind: "handoff", reason: "bot_unavailable" };
     return reply;
   },

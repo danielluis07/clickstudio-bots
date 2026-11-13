@@ -25,7 +25,7 @@ import {
 } from "@/modules/conversations";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
-import { createTestBotAllowance, testBehaviour } from "@/test/support/bot";
+import { createTestBotAllowance, saveTestSettings, testBotSettings } from "@/test/support/bot";
 import { createTestModel, type TestModel } from "@/test/support/model";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { createTestNotifier } from "@/test/support/notifier";
@@ -75,7 +75,7 @@ const setup = async ({ canReply }: { canReply?: BotAllowance["canReply"] } = {})
   const queue = createTestJobQueue<BotJob>();
   const notifier = createTestNotifier();
   const activation = createBotActivation({ db, clock });
-  await createBotSettingsEditor({ db, clock }).saveSettings(scope, testBehaviour);
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, testBotSettings);
   await createKnowledgeBaseEditor({ db, clock }).addEntry(scope, {
     kind: "faq",
     title: "Preço?",

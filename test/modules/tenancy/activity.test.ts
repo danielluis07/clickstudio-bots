@@ -22,7 +22,7 @@ import {
   pruneCanceledTenants,
   resolveTenantScope,
 } from "@/modules/tenancy";
-import { testBehaviour } from "@/test/support/bot";
+import { saveTestSettings, testBotSettings } from "@/test/support/bot";
 import { closeTestDatabase, createTestDatabase, queryTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
 import { createTestMailer } from "@/test/support/mailer";
@@ -271,12 +271,12 @@ describe("the Bot", () => {
     const links = createLinkSettingsEditor({ db, clock });
     const activation = createBotActivation({ db, clock });
 
-    await settings.saveSettings(scope, testBehaviour);
+    await saveTestSettings(settings, scope, testBotSettings);
     await capture.saveCapture(scope, (await capture.getCapture(scope)).settings);
     await links.saveLinks(scope, (await links.getLinks(scope)).settings);
     // Refused: the Bot is not active yet, and a Member cannot save settings.
     await activation.setPaused(scope, true);
-    await settings.saveSettings({ ...scope, role: "member" }, testBehaviour);
+    await saveTestSettings(settings, { ...scope, role: "member" }, testBotSettings);
     await createKnowledgeBaseEditor({ db, clock }).addEntry(scope, {
       kind: "faq",
       title: "Preço?",
@@ -288,6 +288,7 @@ describe("the Bot", () => {
     await activation.setPaused(scope, false);
 
     expect((await entries(scope.tenantId)).map(({ action }) => action)).toEqual([
+      "business_profile.saved",
       "behaviour_settings.saved",
       "capture_settings.saved",
       "link_settings.saved",

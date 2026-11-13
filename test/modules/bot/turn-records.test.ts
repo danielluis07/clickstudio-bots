@@ -15,7 +15,7 @@ import {
 import { recordInboundTextMessage } from "@/modules/conversations";
 import { createKnowledgeBaseEditor } from "@/modules/knowledge-base";
 import type { Diagnostic } from "@/platform/diagnostics";
-import { testBehaviour } from "@/test/support/bot";
+import { saveTestSettings, testBotSettings } from "@/test/support/bot";
 import { closeTestDatabase, createTestDatabase, queryTestDatabase } from "@/test/support/database";
 import { createTestJobQueue } from "@/test/support/job-queue";
 import { seedLiveBot } from "@/test/support/live-bot";
@@ -40,7 +40,7 @@ const setup = async ({ sender = true } = {}) => {
   const { scope, route, clock } = seeded;
   const model = createTestModel();
   const activation = createBotActivation({ db, clock });
-  await createBotSettingsEditor({ db, clock }).saveSettings(scope, testBehaviour);
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, testBotSettings);
   await createKnowledgeBaseEditor({ db, clock }).addEntry(scope, {
     kind: "faq",
     title: "Preço?",

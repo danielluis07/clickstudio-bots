@@ -27,7 +27,7 @@ back.
 | `member.removed` | Owner | Member | Removing a Member |
 | `bot.activated` | Owner | none | Activating the Bot |
 | `bot.paused`, `bot.unpaused` | Member | none | Pausing and resuming the Bot |
-| `behaviour_settings.saved`, `capture_settings.saved`, `link_settings.saved` | Owner | none | Saving settings |
+| `business_profile.saved`, `behaviour_settings.saved`, `capture_settings.saved`, `link_settings.saved` | Owner | none | Saving settings |
 
 The actor is a user id, so it also covers the administrator, who has no
 Member row. Returns to the Bot that no one made (a Contact's message after a

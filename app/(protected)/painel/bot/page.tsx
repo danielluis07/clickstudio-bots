@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
-import { BotSettingsEditor } from "@/components/bot/bot-settings-editor";
+import { BotActivationOverview } from "@/components/bot/bot-activation-overview";
 import { requireTenantScope } from "@/server/auth/guards";
 
 export const metadata: Metadata = {
-  title: "Configurações do Bot",
+  title: "Ativação do Bot",
   robots: { index: false },
 };
 
-export default async function BotSettingsPage() {
+export default async function BotActivationPage() {
   const scope = await requireTenantScope();
 
-  return <BotSettingsEditor scope={scope} />;
+  return <BotActivationOverview scope={scope} />;
 }

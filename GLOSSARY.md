@@ -72,8 +72,12 @@ _Avoid_: Document, article
 
 ## Bot behaviour
 
+**Business profile**:
+What the Bot knows the business is: its name, what it offers, its address and its Business hours. Distinct from the Knowledge base, which holds what the business tells Contacts.
+_Avoid_: Company info, business settings
+
 **Behaviour settings**:
-The bounded choices a Tenant's owner makes about how its Bot presents itself and answers, such as its tone, greeting, rules, Business hours and Schedule. They are settings, not a conversation flow.
+The bounded choices a Tenant's owner makes about how its Bot acts: its tone, emoji use, greeting, rules, Refused topics, Handoff topics and Schedule. They are settings, not a conversation flow, and do not include the Business profile.
 _Avoid_: Bot config, flow, prompt
 
 **Business hours**:

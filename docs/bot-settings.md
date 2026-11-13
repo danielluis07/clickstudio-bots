@@ -2,10 +2,32 @@
 
 Issue: [#54](https://github.com/danielluis07/clickstudio-bots/issues/54).
 
-The Tenant owner sets up the Bot at **Painel → Bot** (`/painel/bot`). These are
-bounded form settings, not a flow builder. Other Members can see them but not
-change them. A saved change applies to the next Bot reply and the next schedule
-check, including in open Conversations. There are no drafts or versions.
+The Tenant owner sets up the Bot in two parts, each saved on its own:
+
+- The **Business profile** at **Painel → Bot → Perfil do negócio**
+  (`/painel/bot/perfil`): business name, offer, address and opening hours.
+- The **Behaviour settings** at **Painel → Bot → Comportamento**
+  (`/painel/bot/comportamento`): tone, emoji, greeting, rules, refused and
+  Handoff topics, and the schedule.
+
+These are bounded form settings, not a flow builder. Other Members can see them
+but not change them. A saved change applies to the next Bot reply and the next
+schedule check, including in open Conversations. There are no drafts or
+versions.
+
+Saving one part leaves the other as it is. Each page shows when and by whom its
+own part was last saved. Before a part's first save, the Bot uses its defaults:
+the Tenant's name and no offer, address or hours for the profile; neutral tone,
+no emoji, and always on for the behaviour. The activation checklist's
+**Perfil do negócio** step is done only once the Business profile itself has
+been saved.
+
+"Outside business hours only" needs at least one open day, and each part is
+checked against the other as saved now: the Behaviour settings refuse that
+schedule while the saved profile has no open day, and the Business profile
+refuses closing every day while that schedule is saved. The check runs in the
+statement that writes, so two owners saving the two parts at once cannot leave
+the Bot "outside business hours" with no hours.
 
 ## Settings and bounds
 
@@ -61,3 +83,10 @@ changes.
 CI applies the migration in production before the new code serves ([ADR 0009](adr/0009-production-migrations-gate-the-vercel-promotion.md)). The migration adds the
 `bot_settings` table (one row per Tenant, created on the first save) and does
 not change existing data.
+
+A later migration adds when and by whom each part was last saved
+(`profile_updated_at`, `profile_updated_by_member_id`, `behaviour_updated_at`,
+`behaviour_updated_by_member_id`). Every earlier save saved both parts, so it
+copies the row's `updated_at` and `updated_by_member_id` into both. The row's
+own `updated_at` stays the last save of either part, which a test must not
+predate.

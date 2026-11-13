@@ -48,6 +48,8 @@ export type {
 export type {
   BehaviourSettings,
   BotRepository,
+  BotSettings,
+  BusinessProfile,
   BotTurn,
   ContextMessage,
   ContextWindow,
@@ -66,7 +68,7 @@ export {
 export {
   botSettingsLimits,
   createBotSettingsEditor,
-  readBehaviour,
+  readBotSettings,
   type BotSettingsLimits,
 } from "@/modules/bot/settings";
 export type { HandoffReason } from "@/modules/bot/tools";

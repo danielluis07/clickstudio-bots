@@ -79,6 +79,7 @@ export const memberActivityActions = [
   "bot.activated",
   "bot.paused",
   "bot.unpaused",
+  "business_profile.saved",
   "behaviour_settings.saved",
   "capture_settings.saved",
   "link_settings.saved",

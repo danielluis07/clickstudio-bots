@@ -16,11 +16,17 @@ export type BotTurn = {
   readonly conversationId: string;
 };
 
-export type BehaviourSettings = {
+// What the Bot knows the business is. Saved on its own, apart from how the
+// Bot acts.
+export type BusinessProfile = {
   businessName: string;
   offer: string;
   hours: BusinessHours;
   address: string;
+};
+
+// How the Bot acts. Saved on its own, apart from the Business profile.
+export type BehaviourSettings = {
   tone: "formal" | "neutral" | "casual";
   emoji: boolean;
   greeting: string;
@@ -33,6 +39,9 @@ export type BehaviourSettings = {
   // Not part of the prompt: it decides only whether the Bot may reply.
   schedule: BotSchedule;
 };
+
+// Everything the owner saved about the Bot, as one turn reads it.
+export type BotSettings = BusinessProfile & BehaviourSettings;
 
 export type KnowledgeBase = {
   faqs: { question: string; answer: string }[];

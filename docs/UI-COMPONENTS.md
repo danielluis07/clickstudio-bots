@@ -6,6 +6,18 @@ Shadcn is the foundation for the design in this project. Tailwind for styling
 
 See [code conventions](CONVENTIONS.md#layout) for file placement, module boundaries, and hook dependencies.
 
+## Dashboard pages
+
+Every `/painel` page wraps its content in `DashboardPage` (`components/dashboard/dashboard-page.tsx`), so all pages start at the same left edge and top with the same spacing. Pages are never centered.
+
+- `title` is the page's `h1`. Pass `titleHidden` to keep it for assistive technology without showing it (Visão geral).
+- `description` and `actions` (for example a period picker) are optional.
+- `width="full"` (default) is for lists, tables and dashboards. `width="form"` caps the width (`max-w-3xl`) for settings forms and other reading-width content.
+
+Conversas is the one exception: its two-pane inbox fills the viewport height, so `Inbox` lays out its own `h1` with the same styles.
+
+A section with several pages, like Bot, is a sidebar group (`DashboardNavigationGroup`) with one route per page, not one long page.
+
 ## Server vs Client Components
 
 Prefer Server Components by default.  

@@ -4,7 +4,7 @@ test("an owner signs in and lands on the Painel", async ({ page, fixtures }) => 
   await signIn(page, fixtures.alfa.ownerEmail, fixtures.password);
 
   await expect(page).toHaveURL("/painel");
-  await expect(page.getByRole("heading", { level: 1, name: fixtures.alfa.name })).toBeVisible();
+  await expect(page.getByTitle(fixtures.alfa.name)).toBeVisible();
 });
 
 test("a wrong password shows the pt-BR error and stays signed out", async ({ page, fixtures }) => {

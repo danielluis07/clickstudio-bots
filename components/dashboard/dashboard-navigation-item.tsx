@@ -8,13 +8,21 @@ import { SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/
 type DashboardNavigationItemProps = {
   href: string;
   label: string;
+  // Overrides the match on the current path, as for a group's first page.
+  active?: boolean;
   children: ReactNode;
 };
 
-export function DashboardNavigationItem({ href, label, children }: DashboardNavigationItemProps) {
+export function DashboardNavigationItem({
+  href,
+  label,
+  active,
+  children,
+}: DashboardNavigationItemProps) {
   const pathname = usePathname();
   const { setOpenMobile } = useSidebar();
-  const isActive = pathname === href || (href !== "/painel" && pathname.startsWith(`${href}/`));
+  const isActive =
+    active ?? (pathname === href || (href !== "/painel" && pathname.startsWith(`${href}/`)));
   const closeMobileSidebar = () => setOpenMobile(false);
 
   return (

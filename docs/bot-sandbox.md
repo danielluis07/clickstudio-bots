@@ -2,9 +2,10 @@
 
 Issue: [#55](https://github.com/danielluis07/clickstudio-bots/issues/55).
 
-The Tenant owner opens **Painel → Bot → Testar Bot** (`/painel/bot`) and writes
-as a sandbox Contact. No connected Channel or activated Bot is required. Other
-Members cannot use the sandbox; the module and tRPC endpoint both enforce this.
+The Tenant owner opens **Painel → Bot → Testar** (`/painel/bot/testar`) and
+writes as a sandbox Contact. No connected Channel or activated Bot is required.
+Other Members are not offered the page and see only a notice if they open it;
+the module and tRPC endpoint both enforce this.
 
 Before trying the UI, run `bun run doctor`; see
 [local readiness](local-development.md) for prerequisites and the optional live

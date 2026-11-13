@@ -1,3 +1,4 @@
+import { DashboardPage } from "@/components/dashboard/dashboard-page";
 import { WhatsAppChannel } from "@/components/channels/whatsapp-channel";
 import { LegalAcceptanceList } from "@/components/dashboard/legal-acceptance-list";
 import { MemberInvitations } from "@/components/dashboard/member-invitations";
@@ -19,8 +20,7 @@ export async function TenantSettings({ scope }: { scope: TenantScope }) {
   ]);
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
-      <h1 className="text-3xl font-semibold tracking-tight">Configurações</h1>
+    <DashboardPage title="Configurações" width="form">
       <SettingsSection id="canal" title="Canal">
         <WhatsAppChannel scope={scope} />
       </SettingsSection>
@@ -35,6 +35,6 @@ export async function TenantSettings({ scope }: { scope: TenantScope }) {
       >
         <LegalAcceptanceList acceptances={acceptances} />
       </SettingsSection>
-    </div>
+    </DashboardPage>
   );
 }

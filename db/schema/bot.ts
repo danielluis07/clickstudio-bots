@@ -31,11 +31,23 @@ export const botSettings = pgTable("bot_settings", {
   refusedTopics: jsonb("refused_topics").$type<string[]>().notNull(),
   handoffTopics: jsonb("handoff_topics").$type<string[]>().notNull(),
   schedule: text("schedule", { enum: ["always", "outside_business_hours"] }).notNull(),
-  // The Member who last saved them. Null once that Member is removed.
+  // The Member who last saved either part. Null once that Member is removed.
   updatedByMemberId: text("updated_by_member_id").references(() => member.id, {
     onDelete: "set null",
   }),
+  // The last save of either part: a test older than it is stale.
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  // The Business profile and the Behaviour settings are saved separately.
+  // Null until that part is first saved; the row's other part then holds its
+  // defaults. A Member id is null once that Member is removed.
+  profileUpdatedAt: timestamp("profile_updated_at", { withTimezone: true }),
+  profileUpdatedByMemberId: text("profile_updated_by_member_id").references(() => member.id, {
+    onDelete: "set null",
+  }),
+  behaviourUpdatedAt: timestamp("behaviour_updated_at", { withTimezone: true }),
+  behaviourUpdatedByMemberId: text("behaviour_updated_by_member_id").references(() => member.id, {
+    onDelete: "set null",
+  }),
 });
 
 // The Contact capture capability, saved by the owner. Absent until the first

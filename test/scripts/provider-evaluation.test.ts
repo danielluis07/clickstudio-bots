@@ -6,12 +6,12 @@ import type {
   EvaluationPricing,
   EvaluationTenant,
 } from "@/scripts/provider-evaluation/types";
-import { testBehaviour, testKnowledgeBase } from "@/test/support/bot";
+import { testBotSettings, testKnowledgeBase } from "@/test/support/bot";
 import { createTestModel } from "@/test/support/model";
 
 const tenant: EvaluationTenant = {
   id: "synthetic-barber",
-  behaviour: testBehaviour,
+  behaviour: testBotSettings,
   knowledgeBase: testKnowledgeBase,
 };
 const answer: EvaluationCase = {
