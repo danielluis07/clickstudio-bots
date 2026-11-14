@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { legalVersion } from "@/modules/legal";
 
@@ -10,6 +11,9 @@ type LegalDocumentProps = {
 export function LegalDocument({ title, description, children }: LegalDocumentProps) {
   return (
     <article className="mx-auto max-w-3xl px-6 py-14 sm:py-20">
+      <Link href="/entrar" className="mb-12 inline-block text-lg font-semibold tracking-tight">
+        ClickStudio <span className="font-normal">Bots</span>
+      </Link>
       <header className="mb-10 flex flex-col gap-5">
         <p className="text-sm text-muted-foreground">Versão de {legalVersion}</p>
         <h1 className="text-3xl font-semibold tracking-tight wrap-break-word sm:text-5xl">

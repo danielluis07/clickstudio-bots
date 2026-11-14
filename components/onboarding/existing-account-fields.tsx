@@ -1,4 +1,3 @@
-import { ForgotPasswordLink } from "@/components/onboarding/forgot-password-link";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
@@ -16,7 +15,6 @@ export function ExistingAccountFields() {
       <FieldDescription>
         Este e-mail já tem uma conta. Confirme a senha atual para aceitar o convite.
       </FieldDescription>
-      <ForgotPasswordLink />
     </Field>
   );
 }

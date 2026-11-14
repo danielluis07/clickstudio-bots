@@ -4,7 +4,7 @@ import { cache } from "react";
 import { db } from "@/db";
 import { resolveTenantScope } from "@/modules/tenancy";
 import { auth } from "@/server/auth/auth";
-import { signInPath } from "@/server/auth/redirects";
+import { safeReturnPath, signInPath } from "@/server/auth/redirects";
 
 // The authoritative checks behind `proxy.ts`, which only looks for a cookie.
 // Call one at the top of every protected page (its segment needs a
@@ -20,6 +20,13 @@ export const requireAuth = async () => {
   const session = await getCurrentSession();
   if (!session) redirect(signInPath);
   return session;
+};
+
+// For pages a signed-in person has no reason to see, like the sign-in form:
+// send them on to where they were going, or to their dashboard.
+export const redirectIfSignedIn = async (returnTo?: string | null) => {
+  const session = await getCurrentSession();
+  if (session) redirect(safeReturnPath(returnTo, session.user.role));
 };
 
 // Non-admins get a 404 so the surface is not advertised.

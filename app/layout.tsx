@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     template: "%s | ClickStudio Bots",
   },
   description:
-    "Um Bot com as informações do seu negócio e uma caixa de entrada para sua equipe. Conheça o plano, os preços e o acesso por convite do ClickStudio Bots.",
+    "Um Bot com as informações do seu negócio e uma caixa de entrada para sua equipe no WhatsApp.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -4,16 +4,12 @@ import { nextCookies } from "better-auth/next-js";
 import { organization } from "better-auth/plugins";
 import type { Database } from "@/db/database";
 import * as schema from "@/db/schema";
-import { passwordResetEmail, passwordResetLifetimeMinutes } from "@/modules/identity";
-import type { Mailer } from "@/platform/mailer";
 
 type AuthOptions = {
   db: Database;
   baseURL: string;
   secret: string;
-  mailer: Mailer;
-  // Lets the response go out before an email is sent, so its timing does not
-  // reveal whether an address has an account.
+  // Lets Better Auth finish its background work after the response goes out.
   runInBackground?: (promise: Promise<unknown>) => void;
 };
 
@@ -25,14 +21,17 @@ const tenantOrganizations = organization({
 // Invite-only onboarding: nobody signs up on their own. Members reach Tenant
 // data only through the Tenant-scoped repository, so the plugin's HTTP routes
 // stay off; Members are invited and removed through the tenancy module.
+// Self-service password reset is not offered yet, so its routes stay off too.
 const disabledAuthPaths = [
   "/sign-up/email",
+  "/request-password-reset",
+  "/reset-password",
   ...Object.values(tenantOrganizations.endpoints).flatMap((endpoint) =>
     endpoint.path ? [endpoint.path] : [],
   ),
 ];
 
-export const createAuth = ({ db, baseURL, secret, mailer, runInBackground }: AuthOptions) =>
+export const createAuth = ({ db, baseURL, secret, runInBackground }: AuthOptions) =>
   betterAuth({
     baseURL,
     secret,
@@ -45,21 +44,6 @@ export const createAuth = ({ db, baseURL, secret, mailer, runInBackground }: Aut
     emailAndPassword: {
       enabled: true,
       disableSignUp: true,
-      resetPasswordTokenExpiresIn: passwordResetLifetimeMinutes * 60,
-      revokeSessionsOnPasswordReset: true,
-      // The link opens our pt-BR page, which posts the token back, rather
-      // than Better Auth's redirecting callback route. Better Auth logs a
-      // failed send instead of failing the request, which would reveal
-      // which addresses have an account.
-      sendResetPassword: ({ user, token }) =>
-        mailer.send(
-          passwordResetEmail({
-            to: user.email,
-            name: user.name,
-            appUrl: baseURL,
-            token,
-          }),
-        ),
     },
     user: {
       additionalFields: {
