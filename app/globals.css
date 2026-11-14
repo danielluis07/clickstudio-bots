@@ -2,8 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* The public site keeps its light palette whatever the app theme is. */
-@custom-variant dark (&:is(.dark *):not(.public-site, .public-site *));
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
@@ -49,9 +48,7 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* `.public-site` re-declares the light tokens so `.dark` on <html> cannot reach it. */
-:root,
-.public-site {
+:root {
   color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -142,47 +139,6 @@
   }
   html {
     @apply font-sans;
-  }
-}
-
-.public-site {
-  --background: #ffffff;
-  --foreground: #14264b;
-  --primary: #1945c5;
-  --primary-foreground: #ffffff;
-  --secondary: #eef5ff;
-  --secondary-foreground: #14264b;
-  --muted-foreground: #536078;
-  --border: #d9e2f1;
-  --ring: #1945c5;
-
-  & a:focus-visible,
-  & summary:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 5px;
-  }
-
-  & [id] {
-    scroll-margin-top: 2rem;
-  }
-
-  & .site-link:hover {
-    text-decoration: underline;
-    text-underline-offset: 4px;
-  }
-
-  & .skip-link {
-    position: absolute;
-    top: 1rem;
-    left: 1rem;
-    z-index: 10;
-    padding: 0.75rem 1rem;
-    background: var(--background);
-    transform: translateY(-200%);
-  }
-
-  & .skip-link:focus {
-    transform: translateY(0);
   }
 }
 

@@ -8,13 +8,12 @@ Revisit provider evaluation, disclosures and deletion coverage before adding it.
 
 | Route | Purpose |
 | --- | --- |
-| `/` | Public offer and invite-only onboarding explanation |
 | `/privacidade` | Privacy draft and retention disclosure |
 | `/termos` | Terms draft; `#dpa` links to the DPA annex |
 | `/exclusao-de-dados` | Public email deletion instructions for Meta App Review |
 | `/subprocessadores` | Provider purposes, categories and locations; Meta listed separately |
 
-All pages are public, server-rendered and available without authentication. The public route group owns its header/footer and scoped theme; dashboard routes can retain their own layout. No advertising or analytics tags, non-essential cookies or cookie banner are introduced.
+All pages are public, server-rendered and available without authentication. There is no public landing page: `/` redirects to the sign-in page (or the dashboard, for a signed-in visitor), and the public pages share the dashboard's shadcn theme without a site header or footer. Each legal page links back to `/entrar` from the product name at the top, and the sign-in and invitation pages list the four legal pages under their card. No advertising or analytics tags, non-essential cookies or cookie banner are introduced.
 
 The owner confirmed **Daniel Assunção** as encarregado and **bombdaniel@hotmail.com** as the public privacy mailbox during implementation. This explicit confirmation supersedes the `privacidade@` mailbox proposal in #36. The shared contact is in `modules/legal/public-site.ts`.
 
@@ -44,4 +43,4 @@ The project decisions determine the commercial and contractual commitments. Offi
 
 ## Acceptance checks
 
-Use `bun run typecheck`, `bun run lint`, `bun run test` and `bun run build`. In a browser, open all five routes without a session; check the four footer links, page titles, pt-BR content, `#dpa`, the deletion mailto subject, keyboard navigation, and desktop/mobile layouts. Confirm no third-party tracking requests or non-essential cookies. No permanent UI snapshots or browser-test dependencies are required for these static drafts.
+Use `bun run typecheck`, `bun run lint`, `bun run test` and `bun run build`. In a browser, open the four legal routes without a session; check the legal links under the `/entrar` and invitation cards, page titles, pt-BR content, `#dpa`, the deletion mailto subject, keyboard navigation, and desktop/mobile layouts. Confirm no third-party tracking requests or non-essential cookies. No permanent UI snapshots or browser-test dependencies are required for these static drafts.
