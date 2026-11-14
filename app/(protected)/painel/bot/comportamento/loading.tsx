@@ -1,7 +1,6 @@
-import { ContentSkeleton } from "@/components/app-shell/content-skeleton";
+import { DashboardFormPageSkeleton } from "@/components/dashboard/dashboard-form-page-skeleton";
 
-// Covers client navigations between Bot sub-pages: bot/loading.tsx sits
-// above the shared bot segment, so it cannot catch this page's session read.
+// The Suspense boundary that lets page.tsx read the session at its top.
 export default function BotSubPageLoading() {
-  return <ContentSkeleton />;
+  return <DashboardFormPageSkeleton />;
 }

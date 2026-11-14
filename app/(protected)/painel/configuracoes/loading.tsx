@@ -1,5 +1,5 @@
-import { ContentSkeleton } from "@/components/app-shell/content-skeleton";
+import { DashboardFormPageSkeleton } from "@/components/dashboard/dashboard-form-page-skeleton";
 
 export default function SettingsLoading() {
-  return <ContentSkeleton />;
+  return <DashboardFormPageSkeleton description={false} />;
 }
