@@ -26,7 +26,7 @@ Dashboard pages read as a dense workspace, not a stack of cards (chosen over two
 - Status, allowances, checklists and recent activity go in the rail, not above the main content.
 - In forms, separate groups with a rule (`FormSection`), put labels left of their fields on wide screens (`FormRow`, `FormCheckboxRow`, `OptionSelect`), and pin the save button to the bottom with `FormSaveBar`. All live in `components/forms/`.
 - When a client hook feeds both the main content and the rail (a form draft, the sandbox, the knowledge base's usage), the client component that owns the hook renders the whole `DashboardPage`, like `BusinessProfileForm`.
-- A page with a rail loads into `DashboardRailPageSkeleton`, so nothing shifts on arrival.
+- A page with a rail loads into `DashboardRailPageSkeleton`, and a `width="form"` page without one into `DashboardFormPageSkeleton`, so nothing shifts on arrival.
 - Reserve borders for things that hold data (a ribbon, a chart, a table). A section heading and a rule are enough for everything else.
 
 A section with several pages, like Bot, is a sidebar group (`DashboardNavigationGroup`) with one route per page, not one long page.
