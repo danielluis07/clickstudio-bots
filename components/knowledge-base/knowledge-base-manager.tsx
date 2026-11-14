@@ -1,7 +1,7 @@
 "use client";
 
 import { unstable_rethrow } from "next/navigation";
-import { KnowledgeBaseAllowance } from "@/components/knowledge-base/knowledge-base-allowance";
+import { KnowledgeBasePage } from "@/components/knowledge-base/knowledge-base-page";
 import { KnowledgeEntryDialog } from "@/components/knowledge-base/knowledge-entry-dialog";
 import { KnowledgeEntrySection } from "@/components/knowledge-base/knowledge-entry-section";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import type { KnowledgeEntrySummary } from "@/modules/knowledge-base";
 import { useKnowledgeBaseEditor, type KnowledgeBaseActions } from "@/modules/knowledge-base/hooks";
 
+// The owner's whole Base de conhecimento page, so the allowance in the rail
+// follows each save.
 export function KnowledgeBaseManager({
   entries,
   cap,
@@ -29,8 +31,7 @@ export function KnowledgeBaseManager({
   const controls = { pending: editor.pending, open: editor.open, remove: editor.deleteEntry };
 
   return (
-    <div className="flex flex-col gap-10">
-      <KnowledgeBaseAllowance used={editor.used} cap={cap} />
+    <KnowledgeBasePage used={editor.used} cap={cap}>
       {editor.failure && !editor.dialog && (
         <Alert variant="destructive">
           <AlertTitle>Não foi possível concluir a alteração</AlertTitle>
@@ -74,6 +75,6 @@ export function KnowledgeBaseManager({
           onDiscard={editor.discard}
         />
       )}
-    </div>
+    </KnowledgeBasePage>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { ConfiguredLink, LinkSettingsLimits } from "@/modules/bot";
 import { useConfirm } from "@/providers/confirm-provider";
@@ -14,13 +13,18 @@ type BotLinkFieldsProps = {
   remove: (id: string) => void;
 };
 
+const fieldLabel = "text-xs text-muted-foreground";
+
+// One row of the link list: its name, its address and the owner's remove button.
 export function BotLinkFields({ link, limits, canEdit, update, remove }: BotLinkFieldsProps) {
   const { confirm } = useConfirm();
   return (
-    <FieldGroup>
+    <li className="grid gap-3 p-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto] sm:items-end">
       <input type="hidden" name="linkId" value={link.id} />
-      <Field>
-        <FieldLabel htmlFor={`link-label-${link.id}`}>Nome do link</FieldLabel>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <label htmlFor={`link-label-${link.id}`} className={fieldLabel}>
+          Nome do link
+        </label>
         <Input
           id={`link-label-${link.id}`}
           name="linkLabel"
@@ -30,9 +34,11 @@ export function BotLinkFields({ link, limits, canEdit, update, remove }: BotLink
           placeholder="Ex.: Agendamento"
           onChange={(event) => update(link.id, "label", event.target.value)}
         />
-      </Field>
-      <Field>
-        <FieldLabel htmlFor={`link-url-${link.id}`}>Endereço do link</FieldLabel>
+      </div>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <label htmlFor={`link-url-${link.id}`} className={fieldLabel}>
+          Endereço do link
+        </label>
         <Input
           id={`link-url-${link.id}`}
           name="linkUrl"
@@ -43,25 +49,24 @@ export function BotLinkFields({ link, limits, canEdit, update, remove }: BotLink
           placeholder="https://exemplo.com/agendar"
           onChange={(event) => update(link.id, "url", event.target.value)}
         />
-      </Field>
-      {canEdit ? (
-        <div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              confirm({
-                title: "Remover link?",
-                message: `O link “${link.label || "sem nome"}” será removido da lista. Salve os links para que o Bot deixe de enviá-lo.`,
-                action: () => remove(link.id),
-              })
-            }
-          >
-            Remover link
-          </Button>
-        </div>
-      ) : null}
-    </FieldGroup>
+      </div>
+      {canEdit && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="justify-self-start"
+          onClick={() =>
+            confirm({
+              title: "Remover link?",
+              message: `O link “${link.label || "sem nome"}” será removido da lista. Salve os links para que o Bot deixe de enviá-lo.`,
+              action: () => remove(link.id),
+            })
+          }
+        >
+          Remover link
+        </Button>
+      )}
+    </li>
   );
 }

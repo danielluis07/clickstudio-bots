@@ -3,7 +3,7 @@
 import { BotRulesFields } from "@/components/bot/bot-rules-fields";
 import { BotScheduleField } from "@/components/bot/bot-schedule-field";
 import { BotStyleFields } from "@/components/bot/bot-style-fields";
-import { FormMessage } from "@/components/forms/form-message";
+import { FormSaveBar } from "@/components/forms/form-save-bar";
 import { SubmitButton } from "@/components/forms/submit-button";
 import type { BehaviourSettings, BotSettingsLimits } from "@/modules/bot";
 import { useBotSettingsForm } from "@/modules/bot/hooks";
@@ -28,24 +28,21 @@ export function BehaviourSettingsForm({
   const form = useBotSettingsForm(saveBehaviourSettingsAction);
 
   return (
-    <form onSubmit={form.submit}>
+    <form onSubmit={form.submit} className="flex flex-col">
       <fieldset
         key={savedAt?.toISOString()}
         disabled={!canEdit || form.pending}
-        className="flex flex-col gap-10"
+        className="flex flex-col"
       >
         <BotStyleFields settings={settings} limits={limits} />
         <BotRulesFields settings={settings} limits={limits} />
         <BotScheduleField schedule={settings.schedule} />
-        {canEdit && (
-          <div className="flex flex-col gap-3">
-            <FormMessage state={form.state} />
-            <div>
-              <SubmitButton pending={form.pending}>Salvar comportamento</SubmitButton>
-            </div>
-          </div>
-        )}
       </fieldset>
+      {canEdit && (
+        <FormSaveBar state={form.state}>
+          <SubmitButton pending={form.pending}>Salvar comportamento</SubmitButton>
+        </FormSaveBar>
+      )}
     </form>
   );
 }

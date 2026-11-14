@@ -1,3 +1,4 @@
+import { PlusIcon } from "lucide-react";
 import { EditableKnowledgeEntry } from "@/components/knowledge-base/editable-knowledge-entry";
 import { KnowledgeEntryView } from "@/components/knowledge-base/knowledge-entry-view";
 import { Button } from "@/components/ui/button";
@@ -20,24 +21,42 @@ export function KnowledgeEntrySection({ kind, entries, controls }: KnowledgeEntr
   const headingId = `base-${kind}`;
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h2 id={headingId} className="text-xl font-semibold">
+    <section
+      aria-labelledby={headingId}
+      className="flex flex-col gap-3 border-t pt-5 first-of-type:border-t-0 first-of-type:pt-0"
+    >
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h2 id={headingId} className="text-sm font-semibold">
             {labels.heading}
+            <span
+              aria-hidden="true"
+              className="ml-2 text-xs font-normal text-muted-foreground tabular-nums"
+            >
+              {entries.length}
+            </span>
           </h2>
-          <p className="text-muted-foreground">{labels.description}</p>
+          <p className="text-sm text-muted-foreground">{labels.description}</p>
         </div>
         {controls && (
-          <Button type="button" onClick={() => controls.open({ kind })} disabled={controls.pending}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => controls.open({ kind })}
+            disabled={controls.pending}
+          >
+            <PlusIcon data-icon="inline-start" />
             {labels.add}
           </Button>
         )}
       </div>
       {entries.length === 0 ? (
-        <Empty>
+        <Empty className="border p-6">
           <EmptyHeader>
-            <EmptyTitle>{labels.empty}</EmptyTitle>
+            <EmptyTitle className="text-sm font-normal text-muted-foreground">
+              {labels.empty}
+            </EmptyTitle>
           </EmptyHeader>
         </Empty>
       ) : (

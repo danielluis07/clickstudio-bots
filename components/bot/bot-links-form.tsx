@@ -1,18 +1,10 @@
 "use client";
 
-import { BotLinkFields } from "@/components/bot/bot-link-fields";
-import { FormMessage } from "@/components/forms/form-message";
+import { BotLinkList } from "@/components/bot/bot-link-list";
+import { FormCheckboxRow } from "@/components/forms/form-checkbox-row";
+import { FormSaveBar } from "@/components/forms/form-save-bar";
+import { FormSection } from "@/components/forms/form-section";
 import { SubmitButton } from "@/components/forms/submit-button";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from "@/components/ui/field";
 import type { LinkSettings, LinkSettingsLimits } from "@/modules/bot";
 import { useBotLinkList, useBotSettingsForm } from "@/modules/bot/hooks";
 import { saveLinkSettingsAction } from "@/server/actions/bot-settings";
@@ -24,49 +16,26 @@ export function BotLinksForm({ settings, limits, canEdit }: BotLinksFormProps) {
   const form = useBotSettingsForm(saveLinkSettingsAction);
   const list = useBotLinkList(settings.links);
   return (
-    <form onSubmit={form.submit}>
-      <FieldSet disabled={!canEdit || form.pending}>
-        <FieldLegend>Links do negócio</FieldLegend>
-        <FieldDescription>
-          Cadastre até {limits.links} links de agendamento, catálogo, pagamento ou redes sociais. O
-          Bot envia o link quando fizer sentido, sem confirmar agendamento ou pagamento. Ao
-          desativar, a lista fica salva. Confira as alterações salvas em Testar Bot.
-        </FieldDescription>
-        <FieldGroup>
-          <Field orientation="horizontal">
-            <Checkbox id="links-enabled" name="linksEnabled" defaultChecked={settings.enabled} />
-            <FieldLabel htmlFor="links-enabled">Permitir que o Bot envie links</FieldLabel>
-          </Field>
-          {list.links.map((link) => (
-            <BotLinkFields
-              key={link.id}
-              link={link}
-              limits={limits}
-              canEdit={canEdit}
-              update={list.update}
-              remove={list.remove}
-            />
-          ))}
-          {canEdit ? (
-            <div className="flex flex-col gap-3">
-              <div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={list.add}
-                  disabled={list.links.length >= limits.links}
-                >
-                  Adicionar link
-                </Button>
-              </div>
-              <FormMessage state={form.state} />
-              <div>
-                <SubmitButton pending={form.pending}>Salvar links</SubmitButton>
-              </div>
-            </div>
-          ) : null}
-        </FieldGroup>
-      </FieldSet>
+    <form onSubmit={form.submit} className="flex flex-col">
+      <fieldset disabled={!canEdit || form.pending}>
+        <FormSection
+          title="Links do negócio"
+          description={`Cadastre até ${limits.links} links de agendamento, catálogo, pagamento ou redes sociais. O Bot envia o link quando fizer sentido, sem confirmar agendamento ou pagamento. Ao desativar, a lista fica salva. Confira as alterações salvas em Testar Bot.`}
+        >
+          <FormCheckboxRow
+            id="links-enabled"
+            name="linksEnabled"
+            label="Permitir que o Bot envie links"
+            defaultChecked={settings.enabled}
+          />
+          <BotLinkList list={list} limits={limits} canEdit={canEdit} />
+        </FormSection>
+      </fieldset>
+      {canEdit && (
+        <FormSaveBar state={form.state}>
+          <SubmitButton pending={form.pending}>Salvar links</SubmitButton>
+        </FormSaveBar>
+      )}
     </form>
   );
 }

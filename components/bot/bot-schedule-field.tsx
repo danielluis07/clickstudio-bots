@@ -1,12 +1,11 @@
+import { FormSection } from "@/components/forms/form-section";
 import { OptionSelect } from "@/components/forms/option-select";
-import { FieldLegend, FieldSet } from "@/components/ui/field";
 import type { BotSchedule } from "@/modules/bot";
 import { scheduleOptions } from "@/modules/bot/hooks";
 
 export function BotScheduleField({ schedule }: { schedule: BotSchedule }) {
   return (
-    <FieldSet>
-      <FieldLegend>Quando o Bot responde</FieldLegend>
+    <FormSection title="Quando o Bot responde">
       <OptionSelect
         id="bot-schedule"
         name="schedule"
@@ -15,6 +14,6 @@ export function BotScheduleField({ schedule }: { schedule: BotSchedule }) {
         options={scheduleOptions}
         defaultValue={schedule}
       />
-    </FieldSet>
+    </FormSection>
   );
 }

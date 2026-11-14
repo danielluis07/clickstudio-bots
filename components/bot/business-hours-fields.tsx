@@ -1,5 +1,5 @@
 import { BusinessHoursDay } from "@/components/bot/business-hours-day";
-import { BusinessProfileSection } from "@/components/bot/business-profile-section";
+import { FormSection } from "@/components/forms/form-section";
 import type { OpeningHours, Weekday } from "@/modules/bot";
 import { weekdayOptions, type BusinessProfileDraft } from "@/modules/bot/hooks";
 
@@ -10,7 +10,7 @@ type BusinessHoursFieldsProps = {
 
 export function BusinessHoursFields({ hours, onDay }: BusinessHoursFieldsProps) {
   return (
-    <BusinessProfileSection
+    <FormSection
       title="Horário de funcionamento"
       description="Horário de Brasília. Cada dia tem um horário, que abre e fecha no mesmo dia. O Bot informa esse horário aos Contatos."
     >
@@ -40,6 +40,6 @@ export function BusinessHoursFields({ hours, onDay }: BusinessHoursFieldsProps) 
           ))}
         </tbody>
       </table>
-    </BusinessProfileSection>
+    </FormSection>
   );
 }

@@ -1,5 +1,5 @@
-import { BusinessProfileRow } from "@/components/bot/business-profile-row";
-import { BusinessProfileSection } from "@/components/bot/business-profile-section";
+import { FormRow } from "@/components/forms/form-row";
+import { FormSection } from "@/components/forms/form-section";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCount } from "@/lib/format";
@@ -14,8 +14,8 @@ type BusinessProfileFieldsProps = {
 
 export function BusinessProfileFields({ draft, limits, onField }: BusinessProfileFieldsProps) {
   return (
-    <BusinessProfileSection title="Sobre o negócio">
-      <BusinessProfileRow label="Nome do negócio" htmlFor="bot-business-name">
+    <FormSection title="Sobre o negócio">
+      <FormRow label="Nome do negócio" htmlFor="bot-business-name">
         <Input
           id="bot-business-name"
           name="businessName"
@@ -24,8 +24,8 @@ export function BusinessProfileFields({ draft, limits, onField }: BusinessProfil
           maxLength={limits.businessName}
           required
         />
-      </BusinessProfileRow>
-      <BusinessProfileRow
+      </FormRow>
+      <FormRow
         label="O que oferece"
         htmlFor="bot-offer"
         description={`Um resumo, como “Cortes de cabelo e barba”. ${formatCount(draft.offer.length)} de ${formatCount(limits.offer)} caracteres; preços e detalhes vão na base de conhecimento.`}
@@ -39,8 +39,8 @@ export function BusinessProfileFields({ draft, limits, onField }: BusinessProfil
           maxLength={limits.offer}
           aria-describedby="bot-offer-description"
         />
-      </BusinessProfileRow>
-      <BusinessProfileRow label="Endereço" htmlFor="bot-address">
+      </FormRow>
+      <FormRow label="Endereço" htmlFor="bot-address">
         <Input
           id="bot-address"
           name="address"
@@ -48,7 +48,7 @@ export function BusinessProfileFields({ draft, limits, onField }: BusinessProfil
           onChange={(event) => onField("address", event.target.value)}
           maxLength={limits.address}
         />
-      </BusinessProfileRow>
-    </BusinessProfileSection>
+      </FormRow>
+    </FormSection>
   );
 }

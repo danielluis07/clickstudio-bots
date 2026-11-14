@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 
-// A field with its label on the left on wide screens and above it on narrow
-// ones. A description gets the id `${htmlFor}-description`.
-export function BusinessProfileRow({
+// A settings field with its label on the left on wide screens and above it on
+// narrow ones. A description gets the id `${htmlFor}-description`.
+export function FormRow({
   label,
   htmlFor,
   description,

@@ -1,4 +1,4 @@
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { FormRow } from "@/components/forms/form-row";
 import {
   Select,
   SelectContent,
@@ -16,6 +16,7 @@ type OptionSelectProps = {
   defaultValue: string;
 };
 
+// A settings select, laid out as a FormRow.
 export function OptionSelect({
   id,
   name,
@@ -25,10 +26,9 @@ export function OptionSelect({
   defaultValue,
 }: OptionSelectProps) {
   return (
-    <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+    <FormRow label={label} htmlFor={id} description={description}>
       <Select name={name} defaultValue={defaultValue} items={options}>
-        <SelectTrigger id={id} aria-describedby={`${id}-description`} className="w-full sm:w-96">
+        <SelectTrigger id={id} aria-describedby={`${id}-description`} className="w-full sm:w-80">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -39,7 +39,6 @@ export function OptionSelect({
           ))}
         </SelectContent>
       </Select>
-      <FieldDescription id={`${id}-description`}>{description}</FieldDescription>
-    </Field>
+    </FormRow>
   );
 }
