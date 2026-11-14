@@ -1,94 +1,76 @@
 "use client";
 
 import Link from "next/link";
+import { BotActivationStep } from "@/components/bot/bot-activation-step";
 import { BotChannelStep } from "@/components/bot/bot-channel-step";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useBotActivation } from "@/modules/bot/hooks";
 
-export function BotActivation({ canActivate }: { canActivate: boolean }) {
+const stepLink = "text-sm font-medium text-primary underline-offset-4 hover:underline";
+
+// The checks the Bot must pass before it can be activated. The Bot's state
+// and the activate and pause controls sit in the rail (BotActivationStatus).
+export function BotActivation() {
   const bot = useBotActivation();
   const status = bot.status.data;
-  const ready = status?.profile && status.knowledge && status.tested && status.connected;
+
+  if (!status)
+    return bot.status.isError ? (
+      <p role="status" className="text-sm text-destructive">
+        Não foi possível carregar as etapas.
+      </p>
+    ) : (
+      <div role="status" aria-label="Carregando etapas…" className="flex flex-col gap-3">
+        <Skeleton className="h-5 w-24" />
+        <Skeleton className="h-56 w-full" />
+      </div>
+    );
+
+  const done = [status.profile, status.knowledge, status.tested, status.connected].filter(
+    Boolean,
+  ).length;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          {status?.enabled ? (status.paused ? "Bot pausado" : "Bot ativo") : "Ativar Bot"}
-        </CardTitle>
-        <CardDescription>
-          Prepare e teste o Bot antes de responder aos contatos no WhatsApp.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {status ? (
-          <ol className="flex list-inside list-decimal flex-col gap-2 text-sm">
-            <li>
-              <Link href="/painel/bot/perfil" className="underline">
-                Perfil do negócio
-              </Link>
-              : {status.profile ? "salvo" : "preencha e salve o perfil"}
-            </li>
-            <li>
-              <Link href="/painel/base-de-conhecimento" className="underline">
-                Base de conhecimento
-              </Link>
-              : {status.knowledge ? "preenchida" : "adicione ao menos uma informação"}
-            </li>
-            <li>
-              <Link href="/painel/bot/testar" className="underline">
-                Testar Bot
-              </Link>
-              : {status.tested ? "concluído" : "envie um teste após salvar suas alterações"}
-            </li>
-            <li>
-              WhatsApp: <BotChannelStep connected={status.connected} />
-            </li>
-          </ol>
-        ) : (
-          <p role="status">
-            {bot.status.isError ? "Não foi possível carregar as etapas." : "Carregando etapas…"}
-          </p>
-        )}
-        {status?.enabled ? (
-          <p className="text-sm text-muted-foreground">
-            A pausa vale para todo o Canal. O horário configurado continua valendo ao retomar.
-          </p>
-        ) : null}
-        {bot.error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {bot.error}
-          </p>
-        ) : null}
-      </CardContent>
-      <CardFooter>
-        {status?.enabled ? (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={bot.pending}
-            onClick={bot.togglePause}
-            aria-pressed={status.paused}
-          >
-            {status.paused ? "Retomar Bot" : "Pausar Bot"}
-          </Button>
-        ) : canActivate ? (
-          <Button type="button" disabled={!ready || bot.pending} onClick={bot.activate}>
-            Ativar Bot
-          </Button>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Apenas o responsável pelo negócio pode ativar o Bot.
-          </p>
-        )}
-      </CardFooter>
-    </Card>
+    <section aria-labelledby="bot-activation-steps" className="flex flex-col">
+      <div className="flex items-baseline justify-between gap-2 border-b pb-3">
+        <h2 id="bot-activation-steps" className="text-sm font-semibold">
+          Etapas
+        </h2>
+        <span className="text-xs text-muted-foreground tabular-nums">{done} de 4</span>
+      </div>
+      <ol className="flex flex-col divide-y border-b">
+        <BotActivationStep
+          label="Perfil do negócio"
+          done={status.profile}
+          status={status.profile ? "Salvo" : "Preencha e salve o perfil."}
+        >
+          <Link href="/painel/bot/perfil" className={stepLink}>
+            Preencher
+          </Link>
+        </BotActivationStep>
+        <BotActivationStep
+          label="Base de conhecimento"
+          done={status.knowledge}
+          status={status.knowledge ? "Preenchida" : "Adicione ao menos uma informação."}
+        >
+          <Link href="/painel/base-de-conhecimento" className={stepLink}>
+            Adicionar
+          </Link>
+        </BotActivationStep>
+        <BotActivationStep
+          label="Testar Bot"
+          done={status.tested}
+          status={status.tested ? "Concluído" : "Envie um teste após salvar suas alterações."}
+        >
+          <Link href="/painel/bot/testar" className={stepLink}>
+            Testar
+          </Link>
+        </BotActivationStep>
+        <BotActivationStep
+          label="WhatsApp"
+          done={status.connected}
+          status={<BotChannelStep connected={status.connected} />}
+        />
+      </ol>
+    </section>
   );
 }

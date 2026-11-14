@@ -11,12 +11,12 @@ export function MemberInvitations({ memberCount, invitations }: MemberInvitation
   const seatsInUse = memberCount + invitations.length;
 
   return (
-    <section aria-labelledby="convidar" className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <h3 id="convidar" className="text-lg font-semibold">
+    <section aria-labelledby="convidar" className="flex flex-col gap-4 pt-2">
+      <div className="flex flex-col gap-0.5">
+        <h3 id="convidar" className="text-sm font-medium">
           Convidar membros
         </h3>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {seatsInUse} de {memberAllowance} vagas em uso. Convites pendentes também ocupam uma vaga
           até serem aceitos, cancelados ou expirarem.
         </p>

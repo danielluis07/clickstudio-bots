@@ -13,7 +13,7 @@ import type { SandboxChatMessage } from "@/modules/bot/hooks";
 export function BotSandboxTranscript({ messages }: { messages: SandboxChatMessage[] }) {
   if (messages.length === 0)
     return (
-      <Empty>
+      <Empty className="h-[28rem] rounded-none">
         <EmptyHeader>
           <EmptyTitle>Converse como um contato</EmptyTitle>
           <EmptyDescription>
@@ -25,14 +25,14 @@ export function BotSandboxTranscript({ messages }: { messages: SandboxChatMessag
 
   return (
     <MessageScrollerProvider autoScroll>
-      <MessageScroller className="h-96">
+      <MessageScroller className="h-[28rem]">
         <MessageScrollerViewport
           role="log"
           aria-label="Conversa de teste"
           aria-live="polite"
           aria-relevant="additions"
         >
-          <MessageScrollerContent className="p-2">
+          <MessageScrollerContent className="p-3">
             {messages.map((message) => (
               <MessageScrollerItem
                 key={message.id}

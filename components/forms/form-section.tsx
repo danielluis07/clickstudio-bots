@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { FieldDescription, FieldLegend, FieldSet } from "@/components/ui/field";
 
-// One group of the Business profile form, split from the next by a rule.
-export function BusinessProfileSection({
+// One group of a settings form, split from the next by a rule.
+export function FormSection({
   title,
   description,
   children,

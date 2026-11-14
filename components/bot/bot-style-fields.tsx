@@ -1,6 +1,7 @@
+import { FormCheckboxRow } from "@/components/forms/form-checkbox-row";
+import { FormRow } from "@/components/forms/form-row";
+import { FormSection } from "@/components/forms/form-section";
 import { OptionSelect } from "@/components/forms/option-select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCount } from "@/lib/format";
 import type { BehaviourSettings, BotSettingsLimits } from "@/modules/bot";
@@ -13,8 +14,7 @@ type BotStyleFieldsProps = {
 
 export function BotStyleFields({ settings, limits }: BotStyleFieldsProps) {
   return (
-    <FieldSet>
-      <FieldLegend>Estilo das respostas</FieldLegend>
+    <FormSection title="Estilo das respostas">
       <OptionSelect
         id="bot-tone"
         name="tone"
@@ -23,14 +23,17 @@ export function BotStyleFields({ settings, limits }: BotStyleFieldsProps) {
         options={toneOptions}
         defaultValue={settings.tone}
       />
-      <Field orientation="horizontal">
-        <Checkbox id="bot-emoji" name="emoji" defaultChecked={settings.emoji} />
-        <FieldLabel htmlFor="bot-emoji" className="font-normal">
-          Usar emojis com moderação
-        </FieldLabel>
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="bot-greeting">Saudação</FieldLabel>
+      <FormCheckboxRow
+        id="bot-emoji"
+        name="emoji"
+        label="Usar emojis com moderação"
+        defaultChecked={settings.emoji}
+      />
+      <FormRow
+        label="Saudação"
+        htmlFor="bot-greeting"
+        description={`Usada quando um Contato escreve pela primeira vez. Até ${formatCount(limits.greeting)} caracteres.`}
+      >
         <Textarea
           id="bot-greeting"
           name="greeting"
@@ -38,11 +41,7 @@ export function BotStyleFields({ settings, limits }: BotStyleFieldsProps) {
           maxLength={limits.greeting}
           aria-describedby="bot-greeting-description"
         />
-        <FieldDescription id="bot-greeting-description">
-          Usada quando um Contato escreve pela primeira vez. Até {formatCount(limits.greeting)}{" "}
-          caracteres.
-        </FieldDescription>
-      </Field>
-    </FieldSet>
+      </FormRow>
+    </FormSection>
   );
 }
