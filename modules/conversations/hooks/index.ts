@@ -11,12 +11,14 @@ export {
 export { useHandoffControls } from "@/modules/conversations/hooks/use-handoff-controls";
 export { useBulkReturnToBot } from "@/modules/conversations/hooks/use-bulk-return-to-bot";
 export {
+  messageAuthorKind,
   messageAuthorLabel,
   messageEditedLabel,
   messageDisplayText,
   messageFailureReason,
   messagePlaceholder,
   messageStatusLabels,
+  type MessageAuthorKind,
 } from "@/modules/conversations/hooks/message-display";
 export { nextPageCursor } from "@/modules/conversations/hooks/paging";
 export {

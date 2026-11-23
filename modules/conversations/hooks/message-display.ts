@@ -12,6 +12,13 @@ export const messageAuthorLabel = (message: MessageAuthor) => {
   return null;
 };
 
+// Which of the thread's three voices wrote a message: each has its own colour.
+// A reply from the WhatsApp Business app is the team's, like one from here.
+export const messageAuthorKind = ({ origin }: Pick<MessageAuthor, "origin">) =>
+  origin === "contact" ? "contact" : origin === "bot" ? "bot" : "team";
+
+export type MessageAuthorKind = ReturnType<typeof messageAuthorKind>;
+
 // What a message shows in place of text it does not have.
 const mediaLabels: Record<Exclude<InboundMessage["type"], "text">, string> = {
   audio: "Áudio",
