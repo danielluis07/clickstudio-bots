@@ -387,6 +387,9 @@ describe("tRPC router", () => {
     expect(await codeOf(caller.conversations.messages({ conversationId: conversationOfB }))).toBe(
       "NOT_FOUND",
     );
+    expect(await codeOf(caller.conversations.handoffs({ conversationId: conversationOfB }))).toBe(
+      "NOT_FOUND",
+    );
     expect(
       await codeOf(caller.contacts.update({ contactId: contactOfB, ...blank, name: "Invasor" })),
     ).toBe("NOT_FOUND");

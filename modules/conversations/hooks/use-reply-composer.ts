@@ -41,6 +41,8 @@ export const useReplyComposer = ({
       onSettled: () =>
         Promise.all([
           queryClient.invalidateQueries(trpc.conversations.messages.pathFilter()),
+          // A reply to a Bot-owned Conversation hands it off.
+          queryClient.invalidateQueries(trpc.conversations.handoffs.pathFilter()),
           queryClient.invalidateQueries(trpc.conversations.get.pathFilter()),
           queryClient.invalidateQueries(trpc.conversations.list.pathFilter()),
         ]),

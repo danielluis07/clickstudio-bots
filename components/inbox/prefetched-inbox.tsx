@@ -27,6 +27,7 @@ export async function PrefetchedInbox({
     ...(conversationId
       ? [
           prefetch(trpc.conversations.get.queryOptions({ conversationId })),
+          prefetch(trpc.conversations.handoffs.queryOptions({ conversationId })),
           prefetchInfinite(
             trpc.conversations.messages.infiniteQueryOptions(
               { conversationId },

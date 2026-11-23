@@ -41,6 +41,13 @@ export const conversationsRouter = createTRPCRouter({
       orNotFound(await ctx.conversations(ctx.scope).listMessages(input.conversationId, input)),
     ),
 
+  // The thread's dividers: when and why the Conversation passed to the team.
+  handoffs: tenantProcedure
+    .input(z.object({ conversationId: z.string() }))
+    .query(async ({ ctx, input }) =>
+      orNotFound(await ctx.conversations(ctx.scope).listHandoffs(input.conversationId)),
+    ),
+
   // The home page's stats for the last 7, 30 or 90 São Paulo days.
   stats: tenantProcedure
     .input(

@@ -55,3 +55,13 @@ export const useConversationMessages = (conversationId: string) => {
     isLoadingOlder: query.isFetchingNextPage,
   };
 };
+
+// When and why the Conversation passed to the team, for the thread's dividers.
+// They only decorate the thread, so a failed load shows the messages without them.
+export const useConversationHandoffs = (conversationId: string) => {
+  const trpc = useTRPC();
+  const query = useQuery(
+    trpc.conversations.handoffs.queryOptions({ conversationId }, { retry: retryUnlessNotFound }),
+  );
+  return query.data ?? [];
+};

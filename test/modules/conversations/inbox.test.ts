@@ -1,6 +1,16 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
-import { channel, contact, conversation, member, message, organization, user } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import {
+  channel,
+  contact,
+  conversation,
+  handoffEvent,
+  member,
+  message,
+  organization,
+  user,
+} from "@/db/schema";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
 import {
   createConversationRepository,
@@ -278,6 +288,65 @@ describe("Conversation view", () => {
 
     expect(await inboxOf(tenantA).getConversation(id)).toBeNull();
     expect(await inboxOf(tenantA).listMessages(id)).toBeNull();
+    expect(await inboxOf(tenantA).listHandoffs(id)).toBeNull();
+  });
+
+  test("lists the Conversation's Handoffs oldest first, naming the Member who caused them", async () => {
+    const conversationId = await receive(channelA, "5511900000001", "Oi", "2026-10-20T09:00:00Z");
+    const [owner] = await db
+      .select({ id: member.id })
+      .from(member)
+      .where(eq(member.userId, "owner-a"));
+    await db.insert(handoffEvent).values([
+      {
+        tenantId: "tenant-a",
+        conversationId: conversationId!,
+        reason: "claimed",
+        actor: "member",
+        memberId: owner.id,
+        occurredAt: new Date("2026-10-20T11:00:00Z"),
+      },
+      {
+        tenantId: "tenant-a",
+        conversationId: conversationId!,
+        reason: "contact_request",
+        actor: "bot",
+        occurredAt: new Date("2026-10-20T09:01:00Z"),
+      },
+      {
+        // A Member since removed: the Handoff stays, without a name.
+        tenantId: "tenant-a",
+        conversationId: conversationId!,
+        reason: "dashboard_reply",
+        actor: "member",
+        memberId: "removed-member",
+        occurredAt: new Date("2026-10-20T10:00:00Z"),
+      },
+    ]);
+
+    expect(await inboxOf(tenantA).listHandoffs(conversationId!)).toEqual([
+      {
+        id: expect.any(String),
+        reason: "contact_request",
+        actor: "bot",
+        memberName: null,
+        occurredAt: new Date("2026-10-20T09:01:00Z"),
+      },
+      {
+        id: expect.any(String),
+        reason: "dashboard_reply",
+        actor: "member",
+        memberName: null,
+        occurredAt: new Date("2026-10-20T10:00:00Z"),
+      },
+      {
+        id: expect.any(String),
+        reason: "claimed",
+        actor: "member",
+        memberName: "Owner A",
+        occurredAt: new Date("2026-10-20T11:00:00Z"),
+      },
+    ]);
   });
 });
 

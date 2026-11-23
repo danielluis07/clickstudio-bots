@@ -68,7 +68,15 @@ export const handoffMutationOptions = (
     ) => {
       context?.previous.forEach(([queryKey, data]) => queryClient.setQueryData(queryKey, data));
     },
+    // "Assumir" records a Handoff, so the thread's dividers refetch too.
     onSettled: (_data: unknown, _error: unknown, input: HandoffInput) =>
-      Promise.all(affected(input).map((filter) => queryClient.invalidateQueries(filter))),
+      Promise.all(
+        [
+          ...affected(input),
+          ...conversationIdsOf(input).map((conversationId) =>
+            trpc.conversations.handoffs.queryFilter({ conversationId }),
+          ),
+        ].map((filter) => queryClient.invalidateQueries(filter)),
+      ),
   };
 };
