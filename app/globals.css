@@ -35,6 +35,8 @@
   --color-primary: var(--primary);
   --color-brand-foreground: var(--brand-foreground);
   --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-tint: var(--brand-tint);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -71,6 +73,10 @@
   /* The app's one accent colour: data marks, meters and highlights. */
   --brand: oklch(0.53 0.19 262);
   --brand-foreground: oklch(0.985 0 0);
+  /* Brand surfaces for text in the foreground colour: soft for the Bot's
+     messages, a stronger tint for the team's. Derived from --brand. */
+  --brand-soft: oklch(from var(--brand) 0.955 calc(c * 0.18) h);
+  --brand-tint: oklch(from var(--brand) 0.885 calc(c * 0.42) h);
   --chart-1: oklch(0.827 0.119 306.383);
   --chart-2: oklch(0.627 0.265 303.9);
   --chart-3: oklch(0.558 0.288 302.321);
@@ -109,6 +115,8 @@
   --ring: oklch(0.556 0 0);
   --brand: oklch(0.7 0.15 258);
   --brand-foreground: oklch(0.205 0 0);
+  --brand-soft: oklch(from var(--brand) 0.3 calc(c * 0.3) h);
+  --brand-tint: oklch(from var(--brand) 0.38 calc(c * 0.5) h);
   --chart-1: oklch(0.827 0.119 306.383);
   --chart-2: oklch(0.627 0.265 303.9);
   --chart-3: oklch(0.558 0.288 302.321);

@@ -1,7 +1,15 @@
 import { and, desc, eq, ilike, inArray, like, or, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Database } from "@/db/database";
-import { contact, conversation, member, message, messageChange, user } from "@/db/schema";
+import {
+  contact,
+  conversation,
+  handoffEvent,
+  member,
+  message,
+  messageChange,
+  user,
+} from "@/db/schema";
 import { recordSentWamid } from "@/modules/conversations/echoes";
 import { handOff } from "@/modules/conversations/handoff";
 import type { TenantScope } from "@/modules/tenancy";
@@ -27,6 +35,9 @@ const matchesSearch = (search: string) => {
 
 export type ConversationCursor = { lastMessageAt: Date; id: string };
 export type MessageCursor = { sentAt: Date; id: string };
+
+// How many of a Conversation's latest Handoffs the thread receives.
+export const handoffHistoryLimit = 100;
 
 const contactFields = {
   id: contact.id,
@@ -219,6 +230,37 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
         id: row.id,
       }));
       return { messages: page.reverse(), nextCursor };
+    },
+
+    // The Conversation's Handoffs, oldest first, for the thread's dividers.
+    // Only the latest are kept: a Conversation rarely changes hands this often,
+    // and the thread shows only those among its loaded messages.
+    async listHandoffs(conversationId: string) {
+      if (!(await getConversation(conversationId))) return null;
+      const rows = await db
+        .select({
+          id: handoffEvent.id,
+          reason: handoffEvent.reason,
+          actor: handoffEvent.actor,
+          // Null for the Bot, for app replies and once the Member is removed.
+          memberName: user.name,
+          occurredAt: handoffEvent.occurredAt,
+        })
+        .from(handoffEvent)
+        .leftJoin(
+          member,
+          and(eq(member.id, handoffEvent.memberId), eq(member.organizationId, scope.tenantId)),
+        )
+        .leftJoin(user, eq(user.id, member.userId))
+        .where(
+          and(
+            eq(handoffEvent.conversationId, conversationId),
+            eq(handoffEvent.tenantId, scope.tenantId),
+          ),
+        )
+        .orderBy(desc(handoffEvent.occurredAt), desc(handoffEvent.id))
+        .limit(handoffHistoryLimit);
+      return rows.reverse();
     },
 
     // Stores the scope's Member's reply before it is sent, so a send that

@@ -8,7 +8,7 @@ export function BotSandboxMessage({ message }: { message: SandboxChatMessage }) 
     <Message align={contact ? "end" : "start"}>
       <MessageContent>
         <MessageHeader>{contact ? "Você (contato de teste)" : "Bot"}</MessageHeader>
-        <Bubble variant={contact ? "default" : "secondary"} align={contact ? "end" : "start"}>
+        <Bubble variant={contact ? "muted" : "brand-soft"} align={contact ? "end" : "start"}>
           <BubbleContent className="whitespace-pre-wrap">{message.text}</BubbleContent>
         </Bubble>
         {message.handoff ? (

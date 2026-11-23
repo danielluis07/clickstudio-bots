@@ -33,6 +33,7 @@ export const useDeleteContact = (onDeleted: () => void) => {
           queryClient.removeQueries(
             trpc.conversations.messages.infiniteQueryFilter({ conversationId }),
           );
+          queryClient.removeQueries(trpc.conversations.handoffs.queryFilter({ conversationId }));
         }
         queryClient.setQueriesData<ConversationList>(
           trpc.conversations.list.pathFilter(),

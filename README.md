@@ -74,6 +74,7 @@ which is pending legal review before go-live.
 | `bun run admin:create` | Create a platform administrator (see below)                    |
 | `bun run sweep:schedule` | Create or update the QStash schedule for the sweep ([guide](docs/inbox-operations.md#the-sweep)) |
 | `bun run db:seed`     | Recreate the demo Tenant on the dev database (see below)        |
+| `bun run db:seed:showcase` | Recreate the showcase Tenant for screenshots and sales demos (see below) |
 
 ## TypeScript and formatting
 
@@ -124,6 +125,12 @@ A database created earlier with `drizzle-kit push` already has the auth tables, 
 ## Demo Tenant
 
 `bun run db:seed` resets a demo Tenant on the dev database, for trying a change in the running app; re-run it to reopen its service window. It refuses to run unless `APP_URL` is local. It recreates the Tenant "Clínica Teste" with an owner, `dono.teste@example.com`, whose password is `SEED_PASSWORD` or `senha-teste-123`. Its Conversations cover an open and a closed service window, dashboard replies in each delivery status, and a reply by a removed Member. Its Channel has a placeholder credential, so dashboard sends from it are refused: nothing reaches Meta.
+
+## Showcase Tenant
+
+`bun run db:seed:showcase` resets "Odonto Alameda", a made-up dental clinic, for screenshots and sales demos. Like the demo Tenant, it refuses to run unless `APP_URL` is local. It builds 120 days of pt-BR WhatsApp history: about 2,100 Contacts and 14,000 messages, with fewer on weekends, the busiest hours in the morning, afternoon and after work, steady growth and a two-day campaign spike. About one exchange in six ends with a Handoff, and the four newest are still waiting for the team. The Channel is connected with the Bot active, and the profile, behaviour, Contact capture, links and Knowledge base are all saved. Sign in as `mariana@odonto-alameda.example.com` with `SEED_PASSWORD` or `senha-teste-123`; `rafael@` and `juliana@` on the same domain are the other Members.
+
+The same seed builds the same Tenant, and every time is relative to now, so re-run it just before taking screenshots. Contact numbers are random numbers in the 9-0 mobile range; they are not checked against real lines. Its Channel has the same placeholder credential as the demo Tenant: dashboard replies are refused. To keep demo data out of your working dev data, create a Neon branch (e.g. `demo`) and point `DATABASE_URL` at it while you seed and present.
 
 ## Code layout
 

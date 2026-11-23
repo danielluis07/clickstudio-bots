@@ -16,10 +16,15 @@ export const invalidateInbox = (
     filters.push(
       trpc.conversations.get.queryFilter({ conversationId: ping.conversationId }),
       trpc.conversations.messages.infiniteQueryFilter({ conversationId: ping.conversationId }),
+      trpc.conversations.handoffs.queryFilter({ conversationId: ping.conversationId }),
     );
   } else {
     filters.push(trpc.conversations.get.pathFilter());
-    if (!ping) filters.push(trpc.conversations.messages.pathFilter());
+    if (!ping)
+      filters.push(
+        trpc.conversations.messages.pathFilter(),
+        trpc.conversations.handoffs.pathFilter(),
+      );
   }
   return Promise.all(filters.map((filter) => queryClient.invalidateQueries(filter)));
 };

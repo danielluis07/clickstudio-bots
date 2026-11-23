@@ -20,6 +20,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "bun scripts/seed-demo-tenant.ts",
+    "db:seed:showcase": "bun scripts/seed-showcase-tenant.ts",
     "admin:create": "bun scripts/create-platform-admin.ts",
     "sweep:schedule": "bun scripts/schedule-sweep.ts",
     "tenant:cancel": "bun scripts/tenant-administration.ts cancel",

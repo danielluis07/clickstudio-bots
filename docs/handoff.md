@@ -301,6 +301,19 @@ Tenant or the Member (see [Locks and leases](locking.md#handoff-events)), so
 `member_id` stays after that Member is removed. Nothing else prunes them, and
 they are left out of the Tenant export, like `bot_turn_record`.
 
+### In the thread
+
+The Conversation view draws each event as a divider ("Passou para a equipe: O
+contato pediu atendimento", "Juliana assumiu a conversa"). The
+`conversations.handoffs` query returns the latest 100 events oldest first,
+naming the Member at read time; the event itself still holds only the id. It
+is separate from the message pages, so the Bot's history reads and the
+thread's paging are unchanged. Each divider follows the latest loaded message
+sent at or before `occurred_at`, with two seconds of slack because the event
+takes the database's time and the reply that caused it the app's. An event
+older than every loaded message appears once **Carregar anteriores** loads
+the message before it.
+
 ## Remaining race
 
 The pre-send check runs inside the reservation transaction, immediately before

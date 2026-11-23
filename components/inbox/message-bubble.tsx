@@ -1,16 +1,26 @@
+import { MessageAuthor } from "@/components/inbox/message-author";
 import { MessageStatus } from "@/components/inbox/message-status";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
-import { Message, MessageContent, MessageFooter, MessageHeader } from "@/components/ui/message";
+import { Message, MessageContent, MessageFooter } from "@/components/ui/message";
 import { formatShortDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
+  messageAuthorKind,
   messageAuthorLabel,
   messageEditedLabel,
   messageDisplayText,
+  type MessageAuthorKind,
 } from "@/modules/conversations/hooks";
 import type { RouterOutput } from "@/trpc/routers/_app";
 
 type ConversationMessage = RouterOutput["conversations"]["messages"]["messages"][number];
+
+// Neutral for the Contact, then the brand, softer for the Bot than the team.
+const bubbleVariants = {
+  contact: "muted",
+  bot: "brand-soft",
+  team: "brand-tint",
+} as const satisfies Record<MessageAuthorKind, string>;
 
 export function MessageBubble({ message }: { message: ConversationMessage }) {
   const outbound = message.direction === "outbound";
@@ -20,8 +30,13 @@ export function MessageBubble({ message }: { message: ConversationMessage }) {
   return (
     <Message align={outbound ? "end" : "start"}>
       <MessageContent>
-        {author && <MessageHeader className="wrap-anywhere">{author}</MessageHeader>}
-        <Bubble variant={outbound ? "tinted" : "muted"} align={outbound ? "end" : "start"}>
+        {author && message.origin !== "contact" && (
+          <MessageAuthor origin={message.origin} label={author} />
+        )}
+        <Bubble
+          variant={bubbleVariants[messageAuthorKind(message)]}
+          align={outbound ? "end" : "start"}
+        >
           <BubbleContent
             className={cn("wrap-anywhere whitespace-pre-wrap", message.text === null && "italic")}
           >
