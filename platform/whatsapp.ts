@@ -17,11 +17,33 @@ export const whatsAppWebhookFields = [
   "smb_app_state_sync",
 ] as const;
 
+const metaGraphApiUrl = "https://graph.facebook.com";
+const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+// Graph API calls carry the app secret, each Tenant's token and every outgoing
+// message, so they go only to Meta or to a fake on this machine. Takes a bare
+// origin: no path, credentials, query or fragment.
+export const isGraphApiOrigin = (value: string) => {
+  try {
+    const url = new URL(value);
+    const bare = url.pathname === "/" && !url.username && !url.password && !url.search && !url.hash;
+    if (!bare) return false;
+    if (url.origin === metaGraphApiUrl) return true;
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") && loopbackHosts.has(url.hostname)
+    );
+  } catch {
+    // An unparseable origin is a configuration answer, not a failure.
+    return false;
+  }
+};
+
 type Options = {
   appId: string;
   appSecret: string;
   graphVersion: string;
-  // Meta's Graph API origin. Only the browser suite replaces it, with a fake.
+  // Meta's Graph API origin. Only the browser suite replaces it, with a fake on
+  // a loopback address; any other origin is refused (isGraphApiOrigin).
   graphApiUrl?: string;
   activeKeyVersion: string;
   encryptionKeys: Record<string, string>;
@@ -95,9 +117,12 @@ const recordFailure = (operation: string, error: unknown, { tenantId }: { tenant
   logError("meta_request_failed", error, { tenantId, operation });
 
 export const createWhatsAppAdapter = (options: Options) => {
+  const graphApiUrl = options.graphApiUrl ?? metaGraphApiUrl;
+  if (!isGraphApiOrigin(graphApiUrl))
+    throw new Error("The Graph API origin must be Meta's or a loopback address");
   const cipher = createWhatsAppTokenCipher(options.activeKeyVersion, options.encryptionKeys);
   const http = options.fetch ?? globalThis.fetch;
-  const baseUrl = `${options.graphApiUrl ?? "https://graph.facebook.com"}/${options.graphVersion}`;
+  const baseUrl = `${graphApiUrl.replace(/\/+$/, "")}/${options.graphVersion}`;
 
   const request = async (path: string, init: RequestInit): Promise<unknown> => {
     let response: Response;

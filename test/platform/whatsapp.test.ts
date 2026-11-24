@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { createWhatsAppAdapter, whatsAppWebhookFields } from "@/platform/whatsapp";
+import {
+  createWhatsAppAdapter,
+  isGraphApiOrigin,
+  whatsAppWebhookFields,
+} from "@/platform/whatsapp";
 import {
   createWhatsAppTokenCipher,
   CredentialRejectedError,
@@ -64,6 +68,48 @@ describe("WhatsApp adapter", () => {
       await adapter.sendText({ ...context, credential, to: "5511988887777", text: "Oi" }),
     ).toEqual({ wamid: "wamid.FAKE" });
     expect(urls).toEqual(["http://127.0.0.1:3101/v26.0/300/messages"]);
+  });
+  test("refuses a Graph API origin that is not Meta's or loopback, and sends nothing", () => {
+    const urls: string[] = [];
+    for (const graphApiUrl of [
+      "https://graph.example.com",
+      "http://graph.facebook.com",
+      "https://localhost.example.com",
+      "https://graph.facebook.com.example.com",
+    ])
+      expect(() =>
+        createWhatsAppAdapter({
+          ...options,
+          graphApiUrl,
+          async fetch(url) {
+            urls.push(String(url));
+            return Response.json({});
+          },
+        }),
+      ).toThrow("The Graph API origin must be Meta's or a loopback address");
+    expect(urls).toEqual([]);
+  });
+  test("accepts only Meta's Graph API origin or a bare loopback origin", () => {
+    for (const origin of [
+      "https://graph.facebook.com",
+      "https://graph.facebook.com/",
+      "http://127.0.0.1:3101",
+      "http://localhost:3101/",
+      "http://[::1]:3101",
+    ])
+      expect(isGraphApiOrigin(origin)).toBe(true);
+    for (const origin of [
+      "https://graph.example.com",
+      "http://graph.facebook.com",
+      "https://graph.facebook.com:8443",
+      "https://evil.example@graph.facebook.com",
+      "https://graph.facebook.com/proxy",
+      "http://127.0.0.1.example.com",
+      "http://10.0.0.5:3101",
+      "ftp://127.0.0.1",
+      "not a url",
+    ])
+      expect(isGraphApiOrigin(origin)).toBe(false);
   });
   test("exchanges a code and discovers a coexistence number without exposing its token", async () => {
     const requests: { url: string; init?: RequestInit }[] = [];
