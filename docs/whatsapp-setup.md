@@ -159,8 +159,8 @@ an own echo. It creates nothing and is not Conversation activity. Any other
 echo is a Member's reply from the WhatsApp Business app (`origin: "app"`),
 shown as "Equipe (app WhatsApp)", since the echo does not say which Member
 sent it. A media echo (#140) keeps only its kind and optional caption, as
-inbound media does; no attachment is downloaded. `recordMessageEcho` returns this classification (`app_reply` or
-`own_echo`) for Handoff. Ownership is never inferred from read receipts, text
+inbound media does; no attachment is downloaded. `recordMessageEcho` returns
+this classification (`app_reply` or `own_echo`) for Handoff. Ownership is never inferred from read receipts, text
 or timing. If an echo is processed before Meta's answer to our send is stored,
 it is first filed as an app reply. Storing the wamid then replaces that row
 with the dashboard reply under a per-wamid lock, keeping its delivery status. Handoff (#57) must treat that
