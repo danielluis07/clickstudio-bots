@@ -140,10 +140,19 @@ const setup = async ({ canReply }: { canReply?: BotAllowance["canReply"] } = {})
     worker,
     repository,
     controls: createHandoffControls({ db, clock, notifier }),
-    replies: createReplyService({ db, clock, notifier, getSender: () => sender }),
+    replies: createReplyService({
+      db,
+      clock,
+      notifier,
+      getSender: () => sender,
+    }),
     ownership: async () => {
       const found = await repository.getConversation(conversationId);
-      return { owner: found?.owner, handoffReason: found?.handoffReason, waiting: found?.waiting };
+      return {
+        owner: found?.owner,
+        handoffReason: found?.handoffReason,
+        waiting: found?.waiting,
+      };
     },
   };
 };
@@ -155,14 +164,23 @@ test("Assumir silences the Bot without sending anything to the Contact", async (
   await worker.run(conversationId);
 
   expect(sender.sent).toEqual([]);
-  expect(await ownership()).toEqual({ owner: "team", handoffReason: "claimed", waiting: true });
+  expect(await ownership()).toEqual({
+    owner: "team",
+    handoffReason: "claimed",
+    waiting: true,
+  });
 });
 
 test("a dashboard reply silences the Bot, even when its send fails", async () => {
   const { scope, sender, conversationId, receive, worker, replies, ownership } = await setup();
   sender.failNext();
 
-  expect(await replies.sendReply(scope, { conversationId, text: "Já vejo para você" })).toEqual({
+  expect(
+    await replies.sendReply(scope, {
+      conversationId,
+      text: "Já vejo para você",
+    }),
+  ).toEqual({
     ok: false,
     error: "send_failed",
   });
@@ -199,6 +217,39 @@ test("a reply from the WhatsApp Business app, seen through its echo, silences th
   });
 });
 
+for (const type of ["image", "audio", "video", "document", "sticker"])
+  test(`a ${type} sent from the WhatsApp Business app silences the Bot, once`, async () => {
+    const { scope, phoneNumberId, sender, conversationId, deliver, timestamp, worker, ownership } =
+      await setup();
+    const echo = messageEchoChange({
+      phoneNumberId,
+      wamid: "wamid.APPMEDIA1",
+      to: contactPhone,
+      type,
+      timestamp: timestamp(),
+    });
+
+    await deliver(echo);
+    // Redelivered, as Meta may.
+    await deliver(echo);
+    await worker.run(conversationId);
+
+    expect(sender.sent).toEqual([]);
+    expect(await ownership()).toEqual({
+      owner: "team",
+      handoffReason: "app_reply",
+      waiting: true,
+    });
+    expect(await handoffEvents(conversationId)).toEqual([
+      {
+        tenantId: scope.tenantId,
+        reason: "app_reply",
+        actor: "member",
+        memberId: null,
+      },
+    ]);
+  });
+
 test("the Bot's own echoes, app edits and imported history cause no Handoff", async () => {
   const fixture = await setup();
   const { phoneNumberId, model, sender, conversationId, receive, deliver, timestamp } = fixture;
@@ -206,7 +257,14 @@ test("the Bot's own echoes, app edits and imported history cause no Handoff", as
   model.script({ text: "O corte custa R$ 80." });
   // The echo of the Bot's reply arrives before Meta answers the send.
   sender.beforeAnswering((wamid) =>
-    deliver(messageEchoChange({ phoneNumberId, wamid, to: contactPhone, timestamp: timestamp() })),
+    deliver(
+      messageEchoChange({
+        phoneNumberId,
+        wamid,
+        to: contactPhone,
+        timestamp: timestamp(),
+      }),
+    ),
   );
   await worker.run(conversationId);
   sender.beforeAnswering(async () => {});
@@ -226,6 +284,16 @@ test("the Bot's own echoes, app edits and imported history cause no Handoff", as
       originalWamid: "wamid.OUT1",
       type: "edit",
       by: "app",
+      phone: contactPhone,
+      timestamp: timestamp(),
+    }),
+    referencingChange({
+      phoneNumberId,
+      wamid: "wamid.REVOKE1",
+      originalWamid: "wamid.OUT1",
+      type: "revoke",
+      by: "app",
+      phone: contactPhone,
       timestamp: timestamp(),
     }),
     historyChange({
@@ -233,12 +301,22 @@ test("the Bot's own echoes, app edits and imported history cause no Handoff", as
       threads: [
         {
           id: contactPhone,
-          messages: [{ wamid: "wamid.OLD1", from: "5511999990000", timestamp: "1792400000" }],
+          messages: [
+            {
+              wamid: "wamid.OLD1",
+              from: "5511999990000",
+              timestamp: "1792400000",
+            },
+          ],
         },
       ],
     }),
   );
-  expect(await ownership()).toEqual({ owner: "bot", handoffReason: null, waiting: false });
+  expect(await ownership()).toEqual({
+    owner: "bot",
+    handoffReason: null,
+    waiting: false,
+  });
 
   await receive("E a barba?");
   model.script({ text: "A barba custa R$ 40." });
@@ -249,33 +327,35 @@ test("the Bot's own echoes, app edits and imported history cause no Handoff", as
   ]);
 });
 
-test("an app reply arriving while the Bot's reply awaits Meta hands off once the send settles", async () => {
-  const fixture = await setup();
-  const { phoneNumberId, model, sender, conversationId, receive, deliver, timestamp } = fixture;
-  const { worker, ownership } = fixture;
-  model.script({ text: "O corte custa R$ 80." });
-  sender.beforeAnswering(() =>
-    deliver(
-      messageEchoChange({
-        phoneNumberId,
-        wamid: "wamid.APP1",
-        to: contactPhone,
-        timestamp: timestamp(),
-      }),
-    ),
-  );
-  await worker.run(conversationId);
+for (const type of ["text", "audio"])
+  test(`an app ${type} reply arriving while the Bot's reply awaits Meta hands off once the send settles`, async () => {
+    const fixture = await setup();
+    const { phoneNumberId, model, sender, conversationId, receive, deliver, timestamp } = fixture;
+    const { worker, ownership } = fixture;
+    model.script({ text: "O corte custa R$ 80." });
+    sender.beforeAnswering(() =>
+      deliver(
+        messageEchoChange({
+          phoneNumberId,
+          wamid: "wamid.APP1",
+          to: contactPhone,
+          type,
+          timestamp: timestamp(),
+        }),
+      ),
+    );
+    await worker.run(conversationId);
 
-  expect(await ownership()).toEqual({
-    owner: "team",
-    handoffReason: "app_reply",
-    waiting: true,
+    expect(await ownership()).toEqual({
+      owner: "team",
+      handoffReason: "app_reply",
+      waiting: true,
+    });
+    await receive("Obrigada!");
+    model.script({ text: "Por nada." });
+    await worker.run(conversationId);
+    expect(sender.sent).toHaveLength(1);
   });
-  await receive("Obrigada!");
-  model.script({ text: "Por nada." });
-  await worker.run(conversationId);
-  expect(sender.sent).toHaveLength(1);
-});
 
 test("any Member can return the Bot, which answers only the next Contact message", async () => {
   const { scope, model, sender, conversationId, receive, worker, controls, ownership } =
@@ -285,9 +365,15 @@ test("any Member can return the Bot, which answers only the next Contact message
   await receive("Alguém aí?");
   await worker.run(conversationId);
 
-  expect(await controls.returnToBot(attendant, conversationId)).toEqual({ ok: true });
+  expect(await controls.returnToBot(attendant, conversationId)).toEqual({
+    ok: true,
+  });
   // "Devolver ao Bot" keeps the Conversation on the waiting list.
-  expect(await ownership()).toEqual({ owner: "bot", handoffReason: "claimed", waiting: true });
+  expect(await ownership()).toEqual({
+    owner: "bot",
+    handoffReason: "claimed",
+    waiting: true,
+  });
   await worker.run(conversationId);
   expect(sender.sent).toEqual([]);
 
@@ -326,7 +412,9 @@ test("a Member bulk returns selected Handoffs without backlog replies, answering
     expect(await worker.run(id)).toBe("skipped");
   }
   expect(sender.sent).toEqual([]);
-  expect(await repository.getConversation(unselectedId)).toMatchObject({ owner: "team" });
+  expect(await repository.getConversation(unselectedId)).toMatchObject({
+    owner: "team",
+  });
   expect(notifier.pings.map(({ ping }) => ping)).toEqual(
     expect.arrayContaining([{ conversationId }, { conversationId: secondId }]),
   );
@@ -363,8 +451,12 @@ test("bulk return refuses a mixed-Tenant or missing selection without changing a
       ok: false,
       error: "not_found",
     });
-    expect(await repository.getConversation(conversationId)).toMatchObject({ owner: "team" });
-    expect(await foreignRepository.getConversation(foreignId)).toMatchObject({ owner: "team" });
+    expect(await repository.getConversation(conversationId)).toMatchObject({
+      owner: "team",
+    });
+    expect(await foreignRepository.getConversation(foreignId)).toMatchObject({
+      owner: "team",
+    });
   }
   expect(notifier.pings).toEqual([]);
 });
@@ -378,7 +470,10 @@ test("bulk return tolerates duplicate and already-returned selections without se
   expect(await controls.bulkReturnToBot(scope, [conversationId, secondId, secondId])).toEqual({
     ok: true,
   });
-  expect(await repository.getConversation(secondId)).toMatchObject({ owner: "bot", waiting: true });
+  expect(await repository.getConversation(secondId)).toMatchObject({
+    owner: "bot",
+    waiting: true,
+  });
   model.script({ text: "O corte custa R$ 80." });
   await worker.run(conversationId);
   await worker.run(secondId);
@@ -392,7 +487,11 @@ test("Resolvida returns the Bot and clears the waiting item", async () => {
   await receive("Alguém aí?");
 
   expect(await controls.resolve(scope, conversationId)).toEqual({ ok: true });
-  expect(await ownership()).toEqual({ owner: "bot", handoffReason: null, waiting: false });
+  expect(await ownership()).toEqual({
+    owner: "bot",
+    handoffReason: null,
+    waiting: false,
+  });
   await worker.run(conversationId);
   expect(sender.sent).toEqual([]);
   await receive("Vocês abrem sábado?");
@@ -405,8 +504,15 @@ test("Handoff controls refuse another Tenant's Conversation", async () => {
   const { conversationId, controls, ownership } = await setup();
   const other = await seedLiveBot(db);
   for (const command of [controls.takeOver, controls.returnToBot, controls.resolve])
-    expect(await command(other.scope, conversationId)).toEqual({ ok: false, error: "not_found" });
-  expect(await ownership()).toEqual({ owner: "bot", handoffReason: null, waiting: false });
+    expect(await command(other.scope, conversationId)).toEqual({
+      ok: false,
+      error: "not_found",
+    });
+  expect(await ownership()).toEqual({
+    owner: "bot",
+    handoffReason: null,
+    waiting: false,
+  });
 });
 
 test("a Handoff arriving between turn start and send prevents the send", async () => {
@@ -447,7 +553,11 @@ test("a Handoff and resume during generation never answer the Handoff backlog", 
   await worker.run(conversationId);
 
   expect(sender.sent).toEqual([]);
-  expect(await ownership()).toEqual({ owner: "bot", handoffReason: null, waiting: false });
+  expect(await ownership()).toEqual({
+    owner: "bot",
+    handoffReason: null,
+    waiting: false,
+  });
 });
 
 test("a Bot-initiated Handoff tells the Contact and joins the waiting list", async () => {
@@ -500,7 +610,11 @@ test("a failed Bot send after Assumir keeps the Member's Handoff reason", async 
 
   await worker.run(conversationId);
 
-  expect(await ownership()).toEqual({ owner: "team", handoffReason: "claimed", waiting: true });
+  expect(await ownership()).toEqual({
+    owner: "team",
+    handoffReason: "claimed",
+    waiting: true,
+  });
 });
 
 test("a live turn's Handoff needs its lease, and only a change of hands notifies the inbox", async () => {
@@ -511,10 +625,16 @@ test("a live turn's Handoff needs its lease, and only a change of hands notifies
     .where(eq(conversation.id, conversationId));
   const pings = notifier.pings.length;
   const handOff = (leaseToken: string, reason: "allowance_exhausted" | "bot_unavailable") =>
-    handOffAndNotify(db, notifier, route, conversationId, reason, { leaseToken });
+    handOffAndNotify(db, notifier, route, conversationId, reason, {
+      leaseToken,
+    });
 
   expect(await handOff("expired-holder", "allowance_exhausted")).toBe(false);
-  expect(await ownership()).toEqual({ owner: "bot", handoffReason: null, waiting: false });
+  expect(await ownership()).toEqual({
+    owner: "bot",
+    handoffReason: null,
+    waiting: false,
+  });
   expect(await handOff("holder", "allowance_exhausted")).toBe(true);
   expect(await handOff("holder", "bot_unavailable")).toBe(false);
 
@@ -719,12 +839,20 @@ test("a Handoff quiet for a whole service window returns to the Bot, which answe
 
   clock.advance(dayMs - 1000);
   await sweep();
-  expect(await ownership()).toEqual({ owner: "team", handoffReason: "claimed", waiting: true });
+  expect(await ownership()).toEqual({
+    owner: "team",
+    handoffReason: "claimed",
+    waiting: true,
+  });
 
   clock.advance(1000);
   const pings = notifier.pings.length;
   await sweep();
-  expect(await ownership()).toEqual({ owner: "bot", handoffReason: "claimed", waiting: true });
+  expect(await ownership()).toEqual({
+    owner: "bot",
+    handoffReason: "claimed",
+    waiting: true,
+  });
   expect(notifier.pings.slice(pings)).toEqual([
     { tenantId: scope.tenantId, ping: { conversationId } },
   ]);
@@ -863,7 +991,13 @@ const handoffTransitions: HandoffTransition[] = [
     reason: "contact_request",
     act: ({ model, worker, conversationId }) => {
       model.script({
-        toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "contact_request" } }],
+        toolCalls: [
+          {
+            id: "handoff",
+            name: "handoff",
+            input: { reason: "contact_request" },
+          },
+        ],
       });
       return worker.run(conversationId);
     },
@@ -1029,13 +1163,26 @@ test("a Handoff event commits or rolls back with the change of hands", async () 
     });
 
   await expect(acknowledge(true)).rejects.toThrow("reply usage write failed");
-  expect(await ownership()).toEqual({ owner: "bot", handoffReason: null, waiting: false });
+  expect(await ownership()).toEqual({
+    owner: "bot",
+    handoffReason: null,
+    waiting: false,
+  });
   expect(await handoffEvents(conversationId)).toEqual([]);
 
   await acknowledge(false);
-  expect(await ownership()).toEqual({ owner: "team", handoffReason: "app_reply", waiting: true });
+  expect(await ownership()).toEqual({
+    owner: "team",
+    handoffReason: "app_reply",
+    waiting: true,
+  });
   expect(await handoffEvents(conversationId)).toEqual([
-    { tenantId: route.tenantId, reason: "app_reply", actor: "member", memberId: null },
+    {
+      tenantId: route.tenantId,
+      reason: "app_reply",
+      actor: "member",
+      memberId: null,
+    },
   ]);
 });
 

@@ -8,13 +8,15 @@ import { handOff } from "@/modules/conversations/handoff";
 import { applyEarlyStatus } from "@/modules/conversations/statuses";
 import { lockWamid } from "@/modules/conversations/wamid-lock";
 
-// A text a Member sent from the WhatsApp Business app or a companion
-// device, which coexistence echoes to the platform.
+// A message a Member sent from the WhatsApp Business app or a companion
+// device, which coexistence echoes to the platform. Media keeps only its kind
+// and optional caption, as inbound media does.
 export type MessageEcho = {
   wamid: string;
   // The Contact's wa_id.
   to: string;
-  text: string;
+  type: (typeof message.$inferSelect)["type"];
+  text: string | null;
   sentAt: Date;
   receivedAt?: Date;
 };
@@ -165,7 +167,7 @@ export const recordMessageEcho = (db: Database, route: ChannelRoute, echo: Messa
             origin: "app",
             // Echoed means sent; later statuses move it forward.
             status: "sent",
-            type: "text",
+            type: echo.type,
             text: echo.text,
             sentAt: echo.sentAt,
             echoUnresolved: Boolean(botSending),

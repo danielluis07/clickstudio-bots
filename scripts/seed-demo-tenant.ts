@@ -133,7 +133,7 @@ await recordMessageStatus(db, route, {
 
 // Coexistence: our own send's echo adds nothing; a reply from the app does.
 const echo = (wamid: string, text: string, sentAt: Date) =>
-  recordMessageEcho(db, route, { wamid, to: "5511988887777", text, sentAt });
+  recordMessageEcho(db, route, { wamid, to: "5511988887777", type: "text", text, sentAt });
 await echo("wamid.SEED.OUT1", "Abrimos sim, das 9h às 13h.", new Date());
 await echo("wamid.SEED.APP1", "Pode vir às 10h, te espero!", new Date());
 await receive(

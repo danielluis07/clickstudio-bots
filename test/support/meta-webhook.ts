@@ -108,6 +108,7 @@ export const referencingChange = ({
   originalWamid = wamid,
   type,
   by = "contact",
+  phone = "5511988887777",
   body = "Olá, editado",
   timestamp = "1792497900",
 }: Metadata & {
@@ -115,6 +116,8 @@ export const referencingChange = ({
   originalWamid?: string;
   type: "edit" | "revoke";
   by?: "contact" | "app";
+  // The Contact's wa_id: who sent it, or whom the app sent it to.
+  phone?: string;
   body?: string;
   timestamp?: string;
 }) => {
@@ -134,7 +137,7 @@ export const referencingChange = ({
         value: {
           messaging_product: "whatsapp",
           metadata,
-          messages: [{ from: "5511988887777", ...event }],
+          messages: [{ from: phone, ...event }],
         },
       }
     : {
@@ -142,7 +145,7 @@ export const referencingChange = ({
         value: {
           messaging_product: "whatsapp",
           metadata,
-          message_echoes: [{ from: "5511999990000", to: "5511988887777", ...event }],
+          message_echoes: [{ from: "5511999990000", to: phone, ...event }],
         },
       };
 };
@@ -180,17 +183,22 @@ export const reactionChange = ({
 });
 
 // A message the business sent from the WhatsApp Business app or a companion
-// device, echoed to the platform through coexistence.
+// device, echoed to the platform through coexistence. A media echo carries
+// Meta's media id and, when the Member wrote one, a caption.
 export const messageEchoChange = ({
   phoneNumberId,
   wamid,
   to = "5511988887777",
+  type = "text",
   body = "Abrimos sim, das 9h às 13h.",
+  caption,
   timestamp = "1792497800",
 }: Metadata & {
   wamid: string;
   to?: string;
+  type?: string;
   body?: string;
+  caption?: string;
   timestamp?: string;
 }) => ({
   field: "smb_message_echoes",
@@ -198,7 +206,17 @@ export const messageEchoChange = ({
     messaging_product: "whatsapp",
     metadata: { display_phone_number: "5511999990000", phone_number_id: phoneNumberId },
     message_echoes: [
-      { from: "5511999990000", to, id: wamid, timestamp, type: "text", text: { body } },
+      {
+        from: "5511999990000",
+        to,
+        id: wamid,
+        timestamp,
+        type,
+        [type]:
+          type === "text"
+            ? { body }
+            : { id: `media-${wamid}`, mime_type: "application/octet-stream", caption },
+      },
     ],
   },
 });
