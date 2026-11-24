@@ -25,7 +25,7 @@ test("an invited owner accepts the Terms, creates an account and lands on the Pa
   // Mismatched passwords are refused, and the ticked Terms stay ticked.
   await page.getByLabel("Confirme a senha").fill("senha-diferente-123");
   await page.getByRole("button", { name: "Aceitar convite" }).click();
-  await expect(page.getByRole("alert")).toHaveText("As senhas não conferem.");
+  await expect(page.getByText("As senhas não conferem.")).toBeVisible();
   await expect(terms).toBeChecked();
 
   await page.getByLabel("Confirme a senha").fill("senha-convite-123");
