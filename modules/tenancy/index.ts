@@ -13,6 +13,7 @@ export {
   type InvitationAcceptance,
   type NewTenant,
 } from "@/modules/tenancy/onboarding";
+export { passwordConfirmationError } from "@/modules/tenancy/password-confirmation";
 export { createTenantRepository, findTenantOwnerEmail } from "@/modules/tenancy/repository";
 export { resolveTenantScope, type MemberRole, type TenantScope } from "@/modules/tenancy/scope";
 export { createTenantLifecycle } from "@/modules/tenancy/lifecycle";

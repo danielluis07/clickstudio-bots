@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { FormMessage } from "@/components/forms/form-message";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { FieldGroup } from "@/components/ui/field";
-import { idleFormState } from "@/server/actions/form-state";
+import { useInvitationAcceptanceForm } from "@/modules/tenancy/hooks";
 import { acceptInvitationAction } from "@/server/actions/invitation";
 
 type InvitationAcceptanceFormProps = {
@@ -17,17 +17,14 @@ export function InvitationAcceptanceForm({
   invitationId,
   children,
 }: InvitationAcceptanceFormProps) {
-  const [state, formAction, pending] = useActionState(
-    acceptInvitationAction.bind(null, invitationId),
-    idleFormState,
-  );
+  const form = useInvitationAcceptanceForm(acceptInvitationAction.bind(null, invitationId));
 
   return (
-    <form action={formAction}>
+    <form onSubmit={form.submit}>
       <FieldGroup>
         {children}
-        <FormMessage state={state} />
-        <SubmitButton pending={pending}>Aceitar convite</SubmitButton>
+        <FormMessage state={form.state} />
+        <SubmitButton pending={form.pending}>Aceitar convite</SubmitButton>
       </FieldGroup>
     </form>
   );

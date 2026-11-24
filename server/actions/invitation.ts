@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { formText, type FormState } from "@/server/actions/form-state";
+import { passwordConfirmationError } from "@/modules/tenancy";
 import { auth } from "@/server/auth/auth";
 import { tenantOnboarding } from "@/server/services";
 
@@ -18,13 +19,11 @@ export async function acceptInvitationAction(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  // The form checks this before submitting; checked again here because the
+  // browser is not trusted.
+  const confirmationError = passwordConfirmationError(formData);
+  if (confirmationError) return { status: "error", message: confirmationError };
   const password = formText(formData, "password");
-  if (
-    formData.has("passwordConfirmation") &&
-    formText(formData, "passwordConfirmation") !== password
-  ) {
-    return { status: "error", message: "As senhas não conferem." };
-  }
 
   const result = await tenantOnboarding.acceptInvitation({
     invitationId,
