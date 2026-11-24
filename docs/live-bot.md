@@ -45,7 +45,9 @@ body and destination and rejects extra fields. Jobs carry only a Conversation
 id. The handler loads the Channel and resolves its `ChannelRoute` from the saved
 phone-number-id. A Tenant id supplied by a caller never grants access.
 
-Flow control uses `bot:<conversationId>` with parallelism one. Correctness comes
+Flow control uses `bot-<conversationId>` with parallelism one. QStash keys
+allow only letters, digits, `-`, `_` and `.`; any other character fails the
+whole batch with a 400. Correctness comes
 from an atomic conditional lease update, a unique lease token and a two-minute
 expiry. A competing job gets HTTP 503 so QStash retries after a crashed holder.
 A short repeatable-read transaction snapshots unanswered message ids and context;

@@ -37,9 +37,10 @@ describe("QStash job queue", () => {
       { type: "run-bot-turn", conversationId: "conversation-b" },
     ]);
     const jobs = received[0].body as { headers: Record<string, string>; body: string }[];
-    expect(jobs.map(({ headers }) => new Headers(headers).get("upstash-flow-control-key"))).toEqual(
-      ["bot:conversation-a", "bot:conversation-b"],
-    );
+    const keys = jobs.map(({ headers }) => new Headers(headers).get("upstash-flow-control-key"));
+    expect(keys).toEqual(["bot-conversation-a", "bot-conversation-b"]);
+    // QStash refuses the whole batch with a 400 for any other character.
+    for (const key of keys) expect(key).toMatch(/^[A-Za-z0-9_.-]+$/);
     expect(
       jobs.map(({ headers }) => new Headers(headers).get("upstash-flow-control-value")),
     ).toEqual(["parallelism=1", "parallelism=1"]);
