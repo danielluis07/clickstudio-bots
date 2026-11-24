@@ -3,8 +3,10 @@ export {
   alertChannelLabels,
   alertCountLabel,
   alertKindLabel,
+  alertPreferenceOptions,
   alertPreviewText,
 } from "@/modules/conversations/hooks/alert-display";
+export { useAlertPreferences } from "@/modules/conversations/hooks/use-alert-preferences";
 export {
   useAlerts,
   useAlertsRealtime,

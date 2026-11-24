@@ -21,6 +21,7 @@ import {
   createContactDeletion,
   createConversationRepository,
   createHandoffControls,
+  createMemberAlertPreferences,
   createMemberAlerts,
   pruneAlerts,
   createReplyService,
@@ -105,6 +106,8 @@ const setup = async ({
     allowance,
   });
   const alertsOf = (memberScope: TenantScope) => createMemberAlerts({ db, clock }, memberScope);
+  const preferencesOf = (memberScope: TenantScope) =>
+    createMemberAlertPreferences({ db, clock }, memberScope);
   const jobs = createTestJobQueue();
   const inbox = createWebhookInbox({
     db,
@@ -131,6 +134,7 @@ const setup = async ({
     receive,
     worker,
     alertsOf,
+    preferencesOf,
     deliver,
     timestamp,
     repository: createConversationRepository(db, scope),
@@ -373,4 +377,86 @@ test("a Bot Handoff whose reservation rolls back raises and announces no Alert",
 
   expect(await alertsOf(scope).list()).toEqual({ unread: 0, alerts: [] });
   expect(notifier.alerts).toEqual([]);
+});
+
+test("a Member starts with Handoff and Team message Alerts on and the rest off", async () => {
+  const { attendant, preferencesOf } = await setup();
+
+  expect(await preferencesOf(attendant).get()).toEqual({
+    handoff: true,
+    teamMessage: true,
+    anyMessage: false,
+    sound: false,
+    browserNotification: false,
+  });
+});
+
+test("a Member who turns Handoff off gets no new Handoff Alerts, keeps the old ones, and changes no one else's", async () => {
+  const context = await setup();
+  const { scope, attendant, alertsOf, preferencesOf, receive, controls, model, worker } = context;
+  await handOffByModel(context);
+  const [earlier] = (await alertsOf(attendant).list()).alerts;
+
+  expect(await preferencesOf(attendant).update({ handoff: false })).toMatchObject({
+    handoff: false,
+    teamMessage: true,
+  });
+  expect((await preferencesOf(scope).get()).handoff).toBe(true);
+
+  await controls.returnToBot(scope, context.conversationId);
+  await receive("Pode me ajudar?");
+  model.script({
+    toolCalls: [{ id: "handoff-2", name: "handoff", input: { reason: "contact_request" } }],
+  });
+  await worker.run(context.conversationId);
+
+  expect((await alertsOf(attendant).list()).alerts).toEqual([earlier]);
+  expect((await alertsOf(scope).list()).alerts).toMatchObject([{ kind: "handoff", count: 2 }]);
+});
+
+test("turning Any message on raises Alerts for new Contact messages in a Bot-owned Conversation, none for past ones", async () => {
+  const { scope, attendant, conversationId, alertsOf, preferencesOf, receive } = await setup();
+
+  await preferencesOf(attendant).update({ anyMessage: true });
+  expect(await alertsOf(attendant).list()).toEqual({ unread: 0, alerts: [] });
+
+  await receive("Vocês abrem sábado?");
+
+  expect((await alertsOf(attendant).list()).alerts).toMatchObject([
+    {
+      kind: "any_message",
+      count: 1,
+      conversationId,
+      preview: { type: "text", text: "Vocês abrem sábado?" },
+    },
+  ]);
+  expect(await alertsOf(scope).list()).toEqual({ unread: 0, alerts: [] });
+});
+
+test("in a team-owned Conversation a message raises one Alert per Member: Team message if on, else Any message", async () => {
+  const { scope, attendant, conversationId, alertsOf, preferencesOf, receive, controls } =
+    await setup();
+  await controls.takeOver(scope, conversationId);
+  await preferencesOf(scope).update({ anyMessage: true });
+  await preferencesOf(attendant).update({ teamMessage: false, anyMessage: true });
+
+  await receive("Ainda está aí?");
+
+  expect((await alertsOf(scope).list()).alerts).toMatchObject([{ kind: "team_message" }]);
+  expect((await alertsOf(attendant).list()).alerts).toMatchObject([{ kind: "any_message" }]);
+});
+
+test("a Member who turns Team message off stops getting them and keeps the existing one", async () => {
+  const { scope, attendant, conversationId, alertsOf, preferencesOf, receive, controls } =
+    await setup();
+  await controls.takeOver(scope, conversationId);
+  await receive("Ainda está aí?");
+
+  await preferencesOf(attendant).update({ teamMessage: false });
+  await receive("Oi?");
+
+  expect((await alertsOf(attendant).list()).alerts).toMatchObject([
+    { kind: "team_message", count: 1, preview: { text: "Ainda está aí?" } },
+  ]);
+  expect((await alertsOf(scope).list()).alerts).toMatchObject([{ kind: "team_message", count: 2 }]);
 });

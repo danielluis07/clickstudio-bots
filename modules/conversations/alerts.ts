@@ -1,6 +1,15 @@
 import { and, count, desc, eq, isNull, lt, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
-import { alert, alertKinds, contact, conversation, member, message } from "@/db/schema";
+import {
+  alert,
+  alertKinds,
+  alertPreference,
+  contact,
+  conversation,
+  member,
+  message,
+} from "@/db/schema";
+import { defaultAlertPreferences } from "@/modules/conversations/alert-preferences";
 import { currentText, revokedAt } from "@/modules/conversations/message-text";
 import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
@@ -21,35 +30,50 @@ const latestContactMessage = (tenantId: string, conversationId: string) =>
       and ${message.origin} = 'contact' and not ${message.imported}
     order by ${message.sentAt} desc, ${message.id} desc limit 1)`;
 
-// Raises an Alert of `kind` about the Conversation for every Member of the
-// Tenant, in the caller's transaction, which must already hold the
-// Conversation row (docs/locking.md#alerts). Until Alert preferences exist,
-// every Member has every kind on. A Member's unread Alert of the same kind for
-// the Conversation absorbs the event and counts it, unless it already merged
-// this `eventKey`, so a retried job or Bot turn raises nothing twice. Returns
-// what the caller announces after commit.
-export const raiseAlerts = async (
-  tx: Transaction,
-  scope: { tenantId: string },
-  conversationId: string,
-  kind: AlertKind,
-  eventKey: string,
-): Promise<AlertPing[]> => {
-  const members = await tx
-    .select({ id: member.id })
+// The Tenant's Members with their Alert preferences, defaults where they
+// never saved any. A plain read: preferences apply as they are now.
+const membersWithPreferences = async (tx: Transaction, tenantId: string) => {
+  const rows = await tx
+    .select({
+      id: member.id,
+      handoff: alertPreference.handoff,
+      teamMessage: alertPreference.teamMessage,
+      anyMessage: alertPreference.anyMessage,
+    })
     .from(member)
-    .where(eq(member.organizationId, scope.tenantId));
-  if (members.length === 0) return [];
+    .leftJoin(alertPreference, eq(alertPreference.memberId, member.id))
+    .where(eq(member.organizationId, tenantId));
+  return rows.map((row) => ({
+    id: row.id,
+    handoff: row.handoff ?? defaultAlertPreferences.handoff,
+    teamMessage: row.teamMessage ?? defaultAlertPreferences.teamMessage,
+    anyMessage: row.anyMessage ?? defaultAlertPreferences.anyMessage,
+  }));
+};
+
+// Writes one Alert per recipient in the caller's transaction, which must
+// already hold the Conversation row (docs/locking.md#alerts). A Member's
+// unread Alert of the same kind for the Conversation absorbs the event and
+// counts it, unless it already merged this `eventKey`, so a retried job or Bot
+// turn raises nothing twice. Returns what the caller announces after commit.
+const insertAlerts = async (
+  tx: Transaction,
+  tenantId: string,
+  conversationId: string,
+  eventKey: string,
+  recipients: { memberId: string; kind: AlertKind }[],
+): Promise<AlertPing[]> => {
+  if (recipients.length === 0) return [];
   return tx
     .insert(alert)
     .values(
-      members.map(({ id }) => ({
-        tenantId: scope.tenantId,
-        memberId: id,
+      recipients.map(({ memberId, kind }) => ({
+        tenantId,
+        memberId,
         conversationId,
         kind,
         eventKey,
-        messageId: latestContactMessage(scope.tenantId, conversationId),
+        messageId: latestContactMessage(tenantId, conversationId),
       })),
     )
     .onConflictDoUpdate({
@@ -64,6 +88,44 @@ export const raiseAlerts = async (
       setWhere: sql`${alert.eventKey} <> excluded.event_key`,
     })
     .returning({ memberId: alert.memberId, alertId: alert.id });
+};
+
+// Raises a Handoff Alert about the Conversation for every Member of the Tenant
+// whose Alert preferences have Handoffs on.
+export const raiseHandoffAlerts = async (
+  tx: Transaction,
+  scope: { tenantId: string },
+  conversationId: string,
+  eventKey: string,
+): Promise<AlertPing[]> => {
+  const members = await membersWithPreferences(tx, scope.tenantId);
+  return insertAlerts(
+    tx,
+    scope.tenantId,
+    conversationId,
+    eventKey,
+    members.filter((m) => m.handoff).map((m) => ({ memberId: m.id, kind: "handoff" })),
+  );
+};
+
+// Raises an Alert about a new Contact message for every Member who wants one:
+// a Team message Alert when the team owns the Conversation and the Member has
+// that kind on, otherwise an Any message Alert if they have that on. A Member
+// gets at most one Alert per message.
+export const raiseMessageAlerts = async (
+  tx: Transaction,
+  scope: { tenantId: string },
+  conversationId: string,
+  owner: (typeof conversation.$inferSelect)["owner"],
+  eventKey: string,
+): Promise<AlertPing[]> => {
+  const members = await membersWithPreferences(tx, scope.tenantId);
+  const recipients = members.flatMap((m): { memberId: string; kind: AlertKind }[] => {
+    if (owner === "team" && m.teamMessage) return [{ memberId: m.id, kind: "team_message" }];
+    if (m.anyMessage) return [{ memberId: m.id, kind: "any_message" }];
+    return [];
+  });
+  return insertAlerts(tx, scope.tenantId, conversationId, eventKey, recipients);
 };
 
 // One Member's own Alerts: every query is bound to the scope's Tenant and

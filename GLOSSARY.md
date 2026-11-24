@@ -59,7 +59,7 @@ A signal in the dashboard telling one Member that something happened in their Te
 _Avoid_: Notification, ping
 
 **Alert preferences**:
-A Member's own choice of which kinds of Alert they receive, and whether Alerts also play a sound or show a browser notification. They apply only to Alerts raised after the choice.
+A Member's own choice of which kinds of Alert they receive, and whether Alerts also play a sound or show a browser notification. They apply only to Alerts raised after the choice. A Contact message raises at most one Alert per Member: a Team message Alert if the team owns the Conversation and that kind is on, otherwise an Any message Alert if that kind is on.
 _Avoid_: Notification settings, subscriptions
 
 **Knowledge base**:

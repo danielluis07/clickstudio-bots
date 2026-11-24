@@ -1,0 +1,209 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "45ee5e71-924b-40ad-8d8d-c74d802eb8c4",
+  "prevIds": [
+    "b905b7c7-df23-4e64-abfc-8f966fd3ac09"
+  ],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "alert_preference"
+      ],
+      "writes": [
+        "s|tbl|public.alert_preference",
+        "n|tbl|public.alert_preference",
+        "e|tbl|public.alert_preference",
+        "n|rel|public.alert_preference",
+        "n|type|public.alert_preference",
+        "n|rel|public.alert_preference_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "alert_preference"
+      ],
+      "writes": [
+        "s|fk|public.alert_preference.alert_preference_member_id_member_id_fkey",
+        "n|fk|public.alert_preference.alert_preference_member_id_member_id_fkey",
+        "e|fk|public.alert_preference.alert_preference_member_id_member_id_fkey",
+        "n|con|public.alert_preference.alert_preference_member_id_member_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.alert_preference",
+        "n|sch|public",
+        "n|tbl|public.member",
+        "n|sch|public",
+        "n|col|public.alert_preference.member_id",
+        "n|col|public.member.id",
+        "e|uniqueness|public.member.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "alert_preference",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "alert_preference",
+        "name": "member_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "alert_preference",
+        "name": "handoff",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "true",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "alert_preference",
+        "name": "team_message",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "true",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "alert_preference",
+        "name": "any_message",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "alert_preference",
+        "name": "sound",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "alert_preference",
+        "name": "browser_notification",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "alert_preference",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "alert_preference",
+        "name": "alert_preference_member_id_member_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "member_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "member",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "alert_preference",
+        "name": "alert_preference_pkey",
+        "columns": [
+          "member_id"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    }
+  ]
+}
