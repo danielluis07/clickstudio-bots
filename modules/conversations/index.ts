@@ -7,6 +7,12 @@ export {
   type MemberAlerts,
 } from "@/modules/conversations/alerts";
 export {
+  createMemberAlertPreferences,
+  defaultAlertPreferences,
+  type AlertPreferences,
+  type MemberAlertPreferences,
+} from "@/modules/conversations/alert-preferences";
+export {
   countContactBotReplies,
   countPendingBotReplies,
   hasUnansweredContactMessages,

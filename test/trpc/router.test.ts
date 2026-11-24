@@ -17,6 +17,7 @@ import {
   createConversationRepository,
   createConversationStats,
   createHandoffControls,
+  createMemberAlertPreferences,
   createMemberAlerts,
   createReplyService,
   handOffAndNotify,
@@ -64,6 +65,7 @@ const callerFor = (
     }),
     conversations: (scope) => createConversationRepository(db, scope),
     alerts: (scope) => createMemberAlerts({ db, clock }, scope),
+    alertPreferences: (scope) => createMemberAlertPreferences({ db, clock }, scope),
     tenants: (scope) => createTenantRepository(db, scope),
     channels: createChannelService({
       db,
@@ -524,6 +526,34 @@ describe("tRPC router", () => {
     expect(await codeOf(callByPath(attendant, "alerts.clear", { tenantId: "tenant-a" }))).toBe(
       "BAD_REQUEST",
     );
+  });
+
+  test("each Member reads and changes only their own Alert preferences", async () => {
+    const ownerB = callerFor({ userId: "owner-b", activeTenantId: "tenant-b" });
+    const attendant = callerFor({ userId: "attendant", activeTenantId: "tenant-b" });
+
+    expect(await attendant.alerts.updatePreferences({ anyMessage: true, sound: true })).toEqual({
+      handoff: true,
+      teamMessage: true,
+      anyMessage: true,
+      sound: true,
+      browserNotification: false,
+    });
+    expect(await attendant.alerts.preferences()).toMatchObject({ anyMessage: true, sound: true });
+    expect(await ownerB.alerts.preferences()).toMatchObject({ anyMessage: false, sound: false });
+
+    expect(
+      await codeOf(
+        callByPath(attendant, "alerts.updatePreferences", {
+          handoff: false,
+          memberId: "someone-else",
+        }),
+      ),
+    ).toBe("BAD_REQUEST");
+    expect(await codeOf(callByPath(attendant, "alerts.updatePreferences", { handoff: "no" }))).toBe(
+      "BAD_REQUEST",
+    );
+    expect((await ownerB.alerts.preferences()).handoff).toBe(true);
   });
 
   test("Contact deletion refuses non-owners and foreign Contacts, and authorizes the owner", async () => {

@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, lte, or, type SQL } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
 import { conversation, handoffEvent, message } from "@/db/schema";
-import { raiseAlerts } from "@/modules/conversations/alerts";
+import { raiseHandoffAlerts } from "@/modules/conversations/alerts";
 import { serviceWindowHours } from "@/modules/conversations/repository";
 import { recordMemberActivity, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
@@ -89,7 +89,7 @@ export const handOff = async (
       .returning({ id: handoffEvent.id });
     // A Member who caused it needs no Alert, nor does the rest of the team.
     if (!byMember) {
-      const raised = await raiseAlerts(tx, scope, conversationId, "handoff", `handoff:${event.id}`);
+      const raised = await raiseHandoffAlerts(tx, scope, conversationId, `handoff:${event.id}`);
       alerts?.push(...raised);
     }
     return true;

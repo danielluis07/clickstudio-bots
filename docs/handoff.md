@@ -53,6 +53,7 @@ after they commit; others use `handOffAndNotify`, which notifies only when the
 Conversation changed hands.
 
 A change of hands the Bot caused also raises a Handoff Alert for every Member
+whose Alert preferences have Handoffs on,
 in the same transaction ([ADR 0010](adr/0010-alerts-stored-per-member-and-written-with-their-event.md),
 [Realtime inbox](realtime-inbox.md#alerts)). Member Handoffs raise none.
 

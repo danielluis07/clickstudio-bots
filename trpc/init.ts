@@ -2,6 +2,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { Database } from "@/db/database";
 import type {
+  MemberAlertPreferences,
   ContactDeletion,
   ConversationStatsReader,
   HandoffControls,
@@ -39,6 +40,8 @@ export type TRPCContext = {
   conversations: (scope: TenantScope) => ReturnType<typeof createConversationRepository>;
   // The scope's Member's own Alerts.
   alerts: (scope: TenantScope) => MemberAlerts;
+  // The scope's Member's own Alert preferences.
+  alertPreferences: (scope: TenantScope) => MemberAlertPreferences;
   tenants: (scope: TenantScope) => ReturnType<typeof createTenantRepository>;
   channels: Pick<ReturnType<typeof createChannelService>, "getChannel">;
   // The public identifiers the browser needs to open Meta's Embedded Signup,

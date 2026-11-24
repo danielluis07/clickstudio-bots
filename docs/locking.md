@@ -36,7 +36,7 @@ one table in ascending id.
 | 1 | wamid lock (`tenantId:wamid`) | advisory |
 | 2 | Tenant row (`organization`) | `for share` or `for update` |
 | 3 | Contact address lock (`contact:<sha256(tenantId:phone)>`) | advisory |
-| 4 | Rows owned by the Tenant, from owner to owned. Inbox side: Contact → Conversation → Message → Alert. Tenancy side: Channel, Invitation → User → Member, Knowledge entry | row |
+| 4 | Rows owned by the Tenant, from owner to owned. Inbox side: Contact → Conversation → Message → Alert. Tenancy side: Channel, Invitation → User → Member → Alert preference, Knowledge entry | row |
 | 5 | Reply usage row (`bot_reply_usage`, Tenant and month) | row |
 
 Why this order:
@@ -109,14 +109,21 @@ already wait for.
 ### Alerts
 
 Alerts ([ADR 0010](adr/0010-alerts-stored-per-member-and-written-with-their-event.md),
-`raiseAlerts`, `modules/conversations/alerts.ts`) are written by the
+`raiseHandoffAlerts` and `raiseMessageAlerts`,
+`modules/conversations/alerts.ts`) are written by the
 transaction of the Handoff or Contact message that raises them, last, after
 the Conversation and its Message rows. Their only foreign key is to the
 Conversation, which that transaction already holds (`handOff`'s `UPDATE`, or
 the inbound upsert), so the insert's `for key share` never waits. They have
 no reference to the Tenant row or the Member row, for the reason given above
-for Member activity. Reading the Tenant's Members to pick recipients is a
-plain `SELECT` and takes no lock.
+for Member activity. Reading the Tenant's Members and their Alert preferences
+to pick recipients is a plain `SELECT` and takes no lock.
+
+Alert preferences (`alert_preference`, `modules/conversations/alert-preferences.ts`)
+are written only by the Member's own single-statement upsert, which takes
+`for key share` on that Member row and holds no other lock. Removing a Member
+cascades from the Member row to their preference row; an upsert holding that
+row waits for nothing, so the removal only waits for it to commit.
 
 Two raises for the same Conversation are serialised by its row, so merging
 into a Member's unread Alert (`INSERT ... ON CONFLICT DO UPDATE` on the

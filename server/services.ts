@@ -15,6 +15,7 @@ import {
   createConversationRepository,
   createConversationStats,
   createHandoffControls,
+  createMemberAlertPreferences,
   createMemberAlerts,
   createReplyService,
   pruneAlerts,
@@ -99,6 +100,9 @@ export const conversationRepository = (scope: TenantScope) =>
 export const tenantRepository = (scope: TenantScope) => createTenantRepository(db, scope);
 export const memberAlerts = (scope: TenantScope) =>
   createMemberAlerts({ db, clock: systemClock }, scope);
+
+export const memberAlertPreferences = (scope: TenantScope) =>
+  createMemberAlertPreferences({ db, clock: systemClock }, scope);
 export const conversationStats = createConversationStats({
   db,
   clock: systemClock,

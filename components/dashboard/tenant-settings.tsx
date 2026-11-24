@@ -1,3 +1,4 @@
+import { PrefetchedAlertPreferences } from "@/components/alerts/prefetched-alert-preferences";
 import { DashboardPage } from "@/components/dashboard/dashboard-page";
 import { WhatsAppChannel } from "@/components/channels/whatsapp-channel";
 import { LegalAcceptanceList } from "@/components/dashboard/legal-acceptance-list";
@@ -27,6 +28,13 @@ export async function TenantSettings({ scope }: { scope: TenantScope }) {
       <SettingsSection id="equipe" title="Equipe">
         <MemberList members={members} canRemove={isOwner} />
         {isOwner && <MemberInvitations memberCount={members.length} invitations={invitations} />}
+      </SettingsSection>
+      <SettingsSection
+        id="notificacoes"
+        title="Notificações"
+        description="Somente para você: cada pessoa da equipe escolhe os próprios alertas."
+      >
+        <PrefetchedAlertPreferences />
       </SettingsSection>
       <SettingsSection
         id="termos-aceitos"

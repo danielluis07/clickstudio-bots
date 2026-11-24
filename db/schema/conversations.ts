@@ -273,8 +273,9 @@ export const earlyMessageStatus = pgTable(
   ],
 );
 
-// What an Alert tells a Member (#215). Alert preferences (#217) add the rest.
-export const alertKinds = ["handoff", "team_message"] as const;
+// What an Alert tells a Member (#215): a Handoff the Bot caused, a Contact
+// message in a Conversation the team owns, or one in any Conversation.
+export const alertKinds = ["handoff", "team_message", "any_message"] as const;
 
 // One Member's Alert about one Conversation (ADR 0010), raised in the same
 // transaction as the Handoff or Contact message, which already holds the
@@ -319,3 +320,19 @@ export const alert = pgTable(
     index("alert_raised_at_idx").on(t.raisedAt),
   ],
 );
+
+// A Member's Alert preferences (#217). No row means the defaults below. Raises
+// read it without a lock and only when they pick recipients, so a change
+// applies to Alerts raised after it and never to past ones. Deleted with the
+// Member, so with the Tenant.
+export const alertPreference = pgTable("alert_preference", {
+  memberId: text("member_id")
+    .primaryKey()
+    .references(() => member.id, { onDelete: "cascade" }),
+  handoff: boolean("handoff").notNull().default(true),
+  teamMessage: boolean("team_message").notNull().default(true),
+  anyMessage: boolean("any_message").notNull().default(false),
+  sound: boolean("sound").notNull().default(false),
+  browserNotification: boolean("browser_notification").notNull().default(false),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
