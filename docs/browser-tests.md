@@ -38,6 +38,10 @@ does not pick them up.
 - **Meta.** `META_GRAPH_API_URL` points the WhatsApp adapter at the fake. The
   seed encrypts a fake token with the suite's own key, and the inbox test
   checks that the fake received it. Production never sets this variable.
+  The app accepts only Meta's origin (`https://graph.facebook.com`) or a
+  loopback address (`localhost`, `127.0.0.1`, `[::1]`), with no path. Any
+  other value fails env validation, and the WhatsApp adapter refuses it too,
+  so no Graph API request is sent there.
 - **Model, Ably, QStash, Sentry.** Set to an empty value, which the app treats
   as unset (`emptyStringAsUndefined` in `platform/env.ts`). That also
   switches off whatever a developer's `.env` configures.

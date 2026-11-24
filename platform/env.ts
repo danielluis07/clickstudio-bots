@@ -1,6 +1,7 @@
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
 import { isUsSentryDsn } from "@/platform/diagnostics";
+import { isGraphApiOrigin } from "@/platform/whatsapp";
 
 export const env = createEnv({
   // An empty value counts as unset, so the browser suite can switch off an
@@ -26,9 +27,11 @@ export const env = createEnv({
       .regex(/^v\d+\.\d+$/)
       .default("v26.0"),
     // Replaces https://graph.facebook.com. Only the browser suite sets it, to
-    // a local fake (docs/browser-tests.md); production never does.
+    // a local fake (docs/browser-tests.md). An origin other than Meta's or a
+    // loopback address fails validation, so the app does not start.
     META_GRAPH_API_URL: z
       .url()
+      .refine(isGraphApiOrigin, "The Graph API origin must be Meta's or a loopback address")
       .transform((url) => url.replace(/\/+$/, ""))
       .optional(),
     WHATSAPP_TOKEN_KEY_VERSION: z.string().min(1).optional(),
