@@ -6,10 +6,16 @@ export {
   alertPreferenceOptions,
   alertPreviewText,
 } from "@/modules/conversations/hooks/alert-display";
+export {
+  alertTabTitle,
+  createAlertSignaller,
+  type AlertNotification,
+} from "@/modules/conversations/hooks/alert-signals";
 export { useAlertPreferences } from "@/modules/conversations/hooks/use-alert-preferences";
 export {
   useAlerts,
   useAlertsRealtime,
+  useAlertTabTitle,
   useClearAlerts,
   useReadConversationAlerts,
 } from "@/modules/conversations/hooks/use-alerts";
