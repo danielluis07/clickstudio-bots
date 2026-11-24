@@ -17,7 +17,9 @@ import {
   createConversationRepository,
   createConversationStats,
   createHandoffControls,
+  createMemberAlerts,
   createReplyService,
+  handOffAndNotify,
   recordInboundTextMessage,
 } from "@/modules/conversations";
 import type { TRPCContext } from "@/trpc/init";
@@ -61,6 +63,7 @@ const callerFor = (
       readBusinessHours: async (scope) => (await readBotSettings(db, scope)).hours,
     }),
     conversations: (scope) => createConversationRepository(db, scope),
+    alerts: (scope) => createMemberAlerts({ db, clock }, scope),
     tenants: (scope) => createTenantRepository(db, scope),
     channels: createChannelService({
       db,
@@ -308,12 +311,18 @@ describe("tRPC router", () => {
     ).toBe("BAD_REQUEST");
   });
 
-  test("realtime tokens grant only subscribe access to the Member's Tenant channel", async () => {
-    const { channel, tokenRequest } = await callerFor(ownerA).realtime.token();
+  test("realtime tokens grant only subscribe access to the Tenant's inbox and the Member's own Alerts", async () => {
+    const [{ id: memberId }] = await db
+      .select({ id: member.id })
+      .from(member)
+      .where(eq(member.userId, "owner-a"));
+    const { channel, alertsChannel, tokenRequest } = await callerFor(ownerA).realtime.token();
 
     expect(channel).toBe("tenant:tenant-a:inbox");
+    expect(alertsChannel).toBe(`tenant:tenant-a:member:${memberId}:alerts`);
     expect(JSON.parse(tokenRequest.capability!)).toEqual({
       "tenant:tenant-a:inbox": ["subscribe"],
+      [`tenant:tenant-a:member:${memberId}:alerts`]: ["subscribe"],
     });
     expect(tokenRequest.clientId).toBeString();
     expect(tokenRequest.ttl).toBe(5 * 60 * 1000);
@@ -477,6 +486,44 @@ describe("tRPC router", () => {
         }),
       ),
     ).toBe("BAD_REQUEST");
+  });
+
+  test("each Member lists, reads and clears only their own Alerts", async () => {
+    const ownerB = callerFor({ userId: "owner-b", activeTenantId: "tenant-b" });
+    const attendant = callerFor({ userId: "attendant", activeTenantId: "tenant-b" });
+    await handOffAndNotify(db, notifier, { tenantId: "tenant-b" }, conversationOfB, "no_answer");
+    const unread = async (caller: ReturnType<typeof callerFor>) =>
+      (await caller.alerts.list()).unread;
+
+    expect(await unread(ownerB)).toBe(1);
+    expect(await unread(attendant)).toBe(1);
+    expect(await callerFor(ownerA).alerts.list()).toEqual({ unread: 0, alerts: [] });
+
+    await callerFor(ownerA).alerts.markConversationRead({ conversationId: conversationOfB });
+    await callerFor(ownerA).alerts.clear();
+    expect(await unread(ownerB)).toBe(1);
+    expect(await unread(attendant)).toBe(1);
+
+    await attendant.alerts.markConversationRead({ conversationId: conversationOfB });
+    expect(await unread(attendant)).toBe(0);
+    expect((await attendant.alerts.list()).alerts).toMatchObject([{ read: true }]);
+    expect(await unread(ownerB)).toBe(1);
+
+    await ownerB.alerts.clear();
+    expect(await ownerB.alerts.list()).toEqual({ unread: 0, alerts: [] });
+    expect((await attendant.alerts.list()).alerts).toHaveLength(1);
+
+    expect(
+      await codeOf(
+        callByPath(attendant, "alerts.markConversationRead", {
+          conversationId: conversationOfB,
+          memberId: "someone-else",
+        }),
+      ),
+    ).toBe("BAD_REQUEST");
+    expect(await codeOf(callByPath(attendant, "alerts.clear", { tenantId: "tenant-a" }))).toBe(
+      "BAD_REQUEST",
+    );
   });
 
   test("Contact deletion refuses non-owners and foreign Contacts, and authorizes the owner", async () => {

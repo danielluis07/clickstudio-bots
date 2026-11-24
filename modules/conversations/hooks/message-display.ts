@@ -19,8 +19,10 @@ export const messageAuthorKind = ({ origin }: Pick<MessageAuthor, "origin">) =>
 
 export type MessageAuthorKind = ReturnType<typeof messageAuthorKind>;
 
+export type MessageType = InboundMessage["type"];
+
 // What a message shows in place of text it does not have.
-const mediaLabels: Record<Exclude<InboundMessage["type"], "text">, string> = {
+const mediaLabels: Record<Exclude<MessageType, "text">, string> = {
   audio: "Áudio",
   image: "Imagem",
   video: "Vídeo",
@@ -28,6 +30,8 @@ const mediaLabels: Record<Exclude<InboundMessage["type"], "text">, string> = {
   sticker: "Figurinha",
   unsupported: "Mídia não suportada",
 };
+
+export const mediaLabel = (type: Exclude<MessageType, "text">) => mediaLabels[type];
 
 export const messagePlaceholder = (message: {
   revokedAt: Date | null;

@@ -1,5 +1,6 @@
 import type { inferRouterOutputs } from "@trpc/server";
 import { createTRPCRouter } from "@/trpc/init";
+import { alertsRouter } from "@/trpc/routers/alerts";
 import {
   contactsRouter,
   conversationsRouter,
@@ -17,6 +18,7 @@ export const appRouter = createTRPCRouter({
   contacts: contactsRouter,
   replies: repliesRouter,
   handoff: handoffRouter,
+  alerts: alertsRouter,
   realtime: realtimeRouter,
   tenancy: tenancyRouter,
   sandbox: sandboxRouter,

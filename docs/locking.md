@@ -36,7 +36,7 @@ one table in ascending id.
 | 1 | wamid lock (`tenantId:wamid`) | advisory |
 | 2 | Tenant row (`organization`) | `for share` or `for update` |
 | 3 | Contact address lock (`contact:<sha256(tenantId:phone)>`) | advisory |
-| 4 | Rows owned by the Tenant, from owner to owned. Inbox side: Contact → Conversation → Message. Tenancy side: Channel, Invitation → User → Member, Knowledge entry | row |
+| 4 | Rows owned by the Tenant, from owner to owned. Inbox side: Contact → Conversation → Message → Alert. Tenancy side: Channel, Invitation → User → Member, Knowledge entry | row |
 | 5 | Reply usage row (`bot_reply_usage`, Tenant and month) | row |
 
 Why this order:
@@ -105,6 +105,31 @@ Deleting a Conversation, through Contact deletion or Tenant deletion, cascades
 to its Handoff events. Only a transaction that holds the Conversation row ever
 inserts one, so the cascade waits for nothing the Conversation row did not
 already wait for.
+
+### Alerts
+
+Alerts ([ADR 0010](adr/0010-alerts-stored-per-member-and-written-with-their-event.md),
+`raiseAlerts`, `modules/conversations/alerts.ts`) are written by the
+transaction of the Handoff or Contact message that raises them, last, after
+the Conversation and its Message rows. Their only foreign key is to the
+Conversation, which that transaction already holds (`handOff`'s `UPDATE`, or
+the inbound upsert), so the insert's `for key share` never waits. They have
+no reference to the Tenant row or the Member row, for the reason given above
+for Member activity. Reading the Tenant's Members to pick recipients is a
+plain `SELECT` and takes no lock.
+
+Two raises for the same Conversation are serialised by its row, so merging
+into a Member's unread Alert (`INSERT ... ON CONFLICT DO UPDATE` on the
+partial unique index) never races another raise. Reading, clearing and the
+daily prune are single statements on Alert rows alone, and wait for nothing
+else. A raise that meets one of them waits on the Alert row, holding the
+Conversation row, which none of them ever asks for.
+
+Removing a Member deletes that Member's Alerts last (see
+[Exceptions](#exceptions)). A raise that read the Member list just before the
+removal committed can still write an Alert for the removed Member. No scope
+resolves to that Member id again, a re-invited person gets a new one, and the
+daily prune deletes the row.
 
 ## Every lock
 
@@ -180,15 +205,15 @@ Ranks are those of the [ordering rule](#the-ordering-rule).
 
 | Path | Order taken |
 | --- | --- |
-| Inbound message, edit or revoke, imported history, app contact (`withContactAdmission`) | Tenant row (2, share) → Contact address (3) → Contact row, upsert (4) → Conversation row, upsert (4) → `resumeOnContactMessage`/`handOff` on that same Conversation (4) → Message rows (4) |
+| Inbound message, edit or revoke, imported history, app contact (`withContactAdmission`) | Tenant row (2, share) → Contact address (3) → Contact row, upsert (4) → Conversation row, upsert (4) → `resumeOnContactMessage`/`handOff` on that same Conversation (4) → Message rows (4) → Alert rows of that Conversation (4), a new inbound message only |
 | Echo (`recordMessageEcho`) | wamid (1) → admission in a savepoint: Tenant row (2, share) → Contact address (3) → Contact row → Conversation row `for update` (4) → message insert and early status. An error inside rolls back the whole transaction, so no lock outlives a failure. |
 | Delivery status (`recordMessageStatus`) | wamid (1) → Message row, or the early status row (4) |
 | Bot or dashboard reply acknowledged (`recordSentWamid`) | wamid (1) → Conversation row `for update` (4) → Message rows (4) → Handoff on that same Conversation → reply usage upsert (5), Bot replies only |
-| Bot reply reservation (`reserve`) | Conversation row, fencing `UPDATE` (4) → Message rows `for update` (4) → reply usage row `for update` (5) → message insert → Handoff on that same Conversation |
-| Pending Bot reply failed (`failPending`) | Conversation row `for update` (4) → Message rows (4) → Handoff on that same Conversation |
+| Bot reply reservation (`reserve`) | Conversation row, fencing `UPDATE` (4) → Message rows `for update` (4) → Handoff on that same Conversation → its Alert rows (4) → reply usage row `for update` (5) → message insert |
+| Pending Bot reply failed (`failPending`) | Conversation row `for update` (4) → Message rows (4) → Handoff on that same Conversation → its Alert rows (4) |
 | Return to the Bot (`resume`) | Conversation rows `for update`, ascending id (4) → Message rows (4) → those same Conversations |
 | Dashboard reply stored (`insertPendingReply`) | New message row → Conversation row (4). The new row is invisible to others, so the Conversation row is the only lock that can wait. |
-| Contact deletion (`deleteContact`) | Contact address (3) → message changes → Contact row → cascade to Conversation → Message, Handoff events (4) → inbox events. Message changes are only ever written under this Contact's address lock, and inbox events only by single statements outside any transaction, so nothing that holds one of those rows waits for another lock. |
+| Contact deletion (`deleteContact`) | Contact address (3) → message changes → Contact row → cascade to Conversation → Message, Handoff events, Alerts (4) → inbox events. Message changes are only ever written under this Contact's address lock, and inbox events only by single statements outside any transaction, so nothing that holds one of those rows waits for another lock. |
 | Cancel, disconnect, reactivate (`claim`) | Tenant row `for update` (2) → Channel rows (4) |
 | Member subscription (`claimSubscription`, `finishSubscription`, `finishCanceledSubscription`) | Tenant row `for update` (2) → Channel rows (4) |
 | Invitation (`inviteMember`) | Tenant row `for update` (2) → Invitation rows (4) |
@@ -207,6 +232,11 @@ the Member rows of a canceled Tenant, which no `TenantScope` resolves to, so
 when no Member row of theirs is visible, so it never cascades into the Member
 row that `removeMember` holds. No path that holds a Message or Knowledge entry
 row waits for a User or Member row.
+
+`removeMember` then deletes the Member's Alert rows, after the Member and User
+rows. A raise holding one of those Alert rows holds its Conversation row and
+never waits for a User or Member row (it reads the Members without a lock), so
+`removeMember` only waits for it to commit.
 
 **Tenant deletion (`pruneCanceledTenants`) takes everything in cascade order.**
 It locks the Tenant row `for update`, then its Users, then deletes the Tenant.

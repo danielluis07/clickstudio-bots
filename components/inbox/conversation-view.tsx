@@ -6,7 +6,7 @@ import { InboxNotice } from "@/components/inbox/inbox-notice";
 import { MessageList } from "@/components/inbox/message-list";
 import { ReplyComposer } from "@/components/inbox/reply-composer";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useConversation } from "@/modules/conversations/hooks";
+import { useConversation, useReadConversationAlerts } from "@/modules/conversations/hooks";
 
 export function ConversationView({
   conversationId,
@@ -18,6 +18,7 @@ export function ConversationView({
   onDeleted: () => void;
 }) {
   const { data: conversation, isPending, isError } = useConversation(conversationId);
+  useReadConversationAlerts(conversationId);
 
   if (isPending)
     return <Skeleton className="m-4 h-24" aria-busy="true" aria-label="Carregando conversa" />;

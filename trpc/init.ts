@@ -5,6 +5,7 @@ import type {
   ContactDeletion,
   ConversationStatsReader,
   HandoffControls,
+  MemberAlerts,
   ReplyService,
   createConversationRepository,
 } from "@/modules/conversations";
@@ -36,6 +37,8 @@ export type TRPCContext = {
   deleteContact: ContactDeletion;
   conversationStats: ConversationStatsReader;
   conversations: (scope: TenantScope) => ReturnType<typeof createConversationRepository>;
+  // The scope's Member's own Alerts.
+  alerts: (scope: TenantScope) => MemberAlerts;
   tenants: (scope: TenantScope) => ReturnType<typeof createTenantRepository>;
   channels: Pick<ReturnType<typeof createChannelService>, "getChannel">;
   // The public identifiers the browser needs to open Meta's Embedded Signup,

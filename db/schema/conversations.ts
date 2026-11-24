@@ -272,3 +272,50 @@ export const earlyMessageStatus = pgTable(
     index("early_message_status_received_at_idx").on(t.receivedAt),
   ],
 );
+
+// What an Alert tells a Member (#215). Alert preferences (#217) add the rest.
+export const alertKinds = ["handoff", "team_message"] as const;
+
+// One Member's Alert about one Conversation (ADR 0010), raised in the same
+// transaction as the Handoff or Contact message, which already holds the
+// Conversation row. Unread Alerts of one kind for one Conversation merge into
+// one row with a count. Ids only: the bell reads the Contact and the preview
+// from the Conversation and its latest Contact message. Deleted with the
+// Conversation, so with the Contact and the Tenant. No foreign key to the
+// Member or the Tenant, for the reason given for Handoff events: removing a
+// Member deletes their Alerts itself.
+export const alert = pgTable(
+  "alert",
+  {
+    id: id(),
+    tenantId: text("tenant_id").notNull(),
+    memberId: text("member_id").notNull(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversation.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: alertKinds }).notNull(),
+    // How many events this row merged while unread.
+    count: integer("count").notNull().default(1),
+    // The Conversation's latest Contact message when the latest event was
+    // raised, for the preview. No foreign key: it is deleted only with the
+    // Conversation, which deletes this row too.
+    messageId: text("message_id"),
+    // The latest event merged, so a retried job or Bot turn that raises the
+    // same event again counts it once.
+    eventKey: text("event_key").notNull(),
+    // The database's time of the transaction that raised the latest event;
+    // the bell lists the newest first.
+    raisedAt: timestamp("raised_at", { withTimezone: true }).defaultNow().notNull(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+  },
+  (t) => [
+    // The row the next event of this kind merges into.
+    uniqueIndex("alert_member_id_conversation_id_kind_unread_unique")
+      .on(t.memberId, t.conversationId, t.kind)
+      .where(sql`${t.readAt} is null`),
+    index("alert_member_id_raised_at_idx").on(t.memberId, t.raisedAt.desc(), t.id.desc()),
+    index("alert_conversation_id_idx").on(t.conversationId),
+    // The daily prune's scan across all Tenants.
+    index("alert_raised_at_idx").on(t.raisedAt),
+  ],
+);

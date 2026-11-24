@@ -15,7 +15,9 @@ import {
   createConversationRepository,
   createConversationStats,
   createHandoffControls,
+  createMemberAlerts,
   createReplyService,
+  pruneAlerts,
   pruneEarlyMessageStatuses,
   returnQuietHandoffs,
 } from "@/modules/conversations";
@@ -53,7 +55,10 @@ export const diagnostics = createDiagnostics({ dsn: env.SENTRY_DSN });
 
 export const realtime = env.ABLY_API_KEY ? createAblyRealtime({ apiKey: env.ABLY_API_KEY }) : null;
 // Messaging continues when realtime has not been configured locally.
-export const notifier: Notifier = realtime ?? { publish: async () => {} };
+export const notifier: Notifier = realtime ?? {
+  publish: async () => {},
+  publishAlert: async () => {},
+};
 
 export const mailer = createResendMailer({
   apiKey: env.RESEND_API_KEY,
@@ -92,6 +97,8 @@ export const contactDeletion = createContactDeletion({ db, clock: systemClock, n
 export const conversationRepository = (scope: TenantScope) =>
   createConversationRepository(db, scope);
 export const tenantRepository = (scope: TenantScope) => createTenantRepository(db, scope);
+export const memberAlerts = (scope: TenantScope) =>
+  createMemberAlerts({ db, clock: systemClock }, scope);
 export const conversationStats = createConversationStats({
   db,
   clock: systemClock,
@@ -197,6 +204,7 @@ export const dailyCronRoute = createDailyCronRoute({
     { name: "retry-reply-warnings", run: () => botAllowance.retryWarnings() },
     { name: "prune-bot-turn-records", run: () => pruneBotTurnRecords(db, systemClock) },
     { name: "prune-early-statuses", run: () => pruneEarlyMessageStatuses(db, systemClock) },
+    { name: "prune-alerts", run: () => pruneAlerts(db, systemClock) },
     // Vercel calls this independently of QStash, so it notices a dead sweep.
     {
       name: "alert-stale-sweep",

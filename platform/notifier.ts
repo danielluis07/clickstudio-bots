@@ -4,8 +4,12 @@ import { logError, type Diagnostic } from "@/platform/diagnostics";
 // through the application; a ping never contains Contact or message data.
 export type InboxPing = { conversationId: string } | { contactId: string };
 
+// An Alert raised for one Member, announced on that Member's own channel.
+export type AlertPing = { memberId: string; alertId: string };
+
 export type Notifier = {
   publish(tenantId: string, ping: InboxPing): Promise<void>;
+  publishAlert(tenantId: string, ping: AlertPing): Promise<void>;
 };
 
 // Best effort: the write it announces has already succeeded, and browsers
@@ -29,5 +33,23 @@ export const notifyInbox = async (
       },
       log,
     );
+  }
+};
+
+// Announces Alerts raised in a transaction that has committed. Best effort,
+// like `notifyInbox`: the Alerts are stored, and the bell refetches on
+// reconnect and focus.
+export const notifyAlerts = async (
+  notifier: Notifier,
+  tenantId: string,
+  pings: readonly AlertPing[],
+  log?: (entry: Diagnostic) => void,
+) => {
+  for (const ping of pings) {
+    try {
+      await notifier.publishAlert(tenantId, ping);
+    } catch (error) {
+      logError("notification_failed", error, { tenantId }, log);
+    }
   }
 };

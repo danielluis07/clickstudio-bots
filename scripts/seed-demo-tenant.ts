@@ -94,7 +94,7 @@ let sends = 0;
 const replies = createReplyService({
   db,
   clock: systemClock,
-  notifier: { publish: async () => {} },
+  notifier: { publish: async () => {}, publishAlert: async () => {} },
   getSender: () => ({
     async sendText() {
       if (++sends === 3) throw new Error("refused");

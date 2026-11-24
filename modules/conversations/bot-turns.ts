@@ -32,7 +32,7 @@ import {
 } from "@/modules/conversations/repository";
 import type { WhatsAppSender } from "@/modules/conversations/whatsapp-sender";
 import type { Clock } from "@/platform/clock";
-import { notifyInbox, type Notifier } from "@/platform/notifier";
+import { notifyAlerts, notifyInbox, type AlertPing, type Notifier } from "@/platform/notifier";
 
 export const botLeaseMs = 120_000;
 
@@ -217,7 +217,24 @@ export const listStrandedBotConversations = async (
   return stranded;
 };
 
-const createConversationBotRepository = (db: Database, scope: ChannelRoute) => {
+// A reservation that lost its race: its transaction rolls back, Handoff included.
+class ReservationConflict extends Error {}
+
+// Handoffs it writes add the Alerts they raise to `alerts` once their
+// transaction has committed, for the caller to announce.
+const createConversationBotRepository = (
+  db: Database,
+  scope: ChannelRoute,
+  alerts?: AlertPing[],
+) => {
+  const transactionRaising = async <T>(
+    work: (tx: Transaction, raised: AlertPing[]) => Promise<T>,
+  ) => {
+    const raised: AlertPing[] = [];
+    const result = await db.transaction((tx) => work(tx, raised));
+    alerts?.push(...raised);
+    return result;
+  };
   const ownsConversation = (conversationId: string) =>
     and(
       eq(conversation.id, conversationId),
@@ -271,7 +288,7 @@ const createConversationBotRepository = (db: Database, scope: ChannelRoute) => {
         .where(unanswered(conversationId))
         .orderBy(asc(message.createdAt), asc(message.id)),
     async failPending(conversationId: string, now: Date, staleOnly = false) {
-      return db.transaction(async (tx) => {
+      return transactionRaising(async (tx, raised) => {
         // Serialize only these local writes with reservation and cleanup.
         const locked = await tx
           .select({ id: conversation.id })
@@ -306,7 +323,7 @@ const createConversationBotRepository = (db: Database, scope: ChannelRoute) => {
           .set({ unavailableNoticeSent: false })
           .where(ownsConversation(conversationId));
         // A Member's earlier Handoff keeps its reason.
-        await handOff(tx, scope, conversationId, "bot_unavailable");
+        await handOff(tx, scope, conversationId, "bot_unavailable", { alerts: raised });
         // Now with the team, whatever those echoes were.
         await resolveUnresolvedEchoes(tx, scope.tenantId, conversationId, { handOff: false });
         return true;
@@ -321,7 +338,7 @@ const createConversationBotRepository = (db: Database, scope: ChannelRoute) => {
       handoffReason?: ConversationHandoffReason,
       beforeReserve?: (tx: Transaction) => Promise<void>,
     ) {
-      return db.transaction(async (tx) => {
+      return transactionRaising(async (tx, raised) => {
         // Fencing check and eligibility in one update; the lease is never a DB lock.
         const valid = await tx
           .update(conversation)
@@ -353,9 +370,14 @@ const createConversationBotRepository = (db: Database, scope: ChannelRoute) => {
         // notice or a spent Bot reply. The snapshot stays unanswered: the
         // Contact's next message returns it to the Bot with the rest.
         if (handoffReason === "bot_unavailable" && valid[0].unavailableNoticeSent) {
-          await handOff(tx, scope, conversationId, handoffReason);
+          await handOff(tx, scope, conversationId, handoffReason, { alerts: raised });
           return { withheld: true } as const;
         }
+        // Durable before Meta is called, so a crash after sending keeps it.
+        // Before `beforeReserve`, which takes the reply usage row: the
+        // Handoff's Alert rows rank below it (docs/locking.md).
+        if (handoffReason)
+          await handOff(tx, scope, conversationId, handoffReason, { alerts: raised });
         await beforeReserve?.(tx);
         const [pending] = await tx
           .insert(message)
@@ -373,7 +395,7 @@ const createConversationBotRepository = (db: Database, scope: ChannelRoute) => {
           })
           .onConflictDoNothing({ target: [message.conversationId, message.answeredMessageId] })
           .returning({ id: message.id });
-        if (!pending) return null;
+        if (!pending) throw new ReservationConflict();
         await tx
           .update(message)
           .set({ botAnswered: true })
@@ -386,9 +408,10 @@ const createConversationBotRepository = (db: Database, scope: ChannelRoute) => {
             unavailableNoticeSent: handoffReason === "bot_unavailable",
           })
           .where(ownsConversation(conversationId));
-        // Durable before Meta is called, so a crash after sending keeps it.
-        if (handoffReason) await handOff(tx, scope, conversationId, handoffReason);
         return pending.id;
+      }).catch((error: unknown) => {
+        if (error instanceof ReservationConflict) return null;
+        throw error;
       });
     },
     async consume(conversationId: string, token: string, ids: string[], now: Date) {
@@ -519,10 +542,16 @@ export const runBotTurn = async <T>(
 ): Promise<T | "busy" | "skipped" | "handoff"> => {
   const scope = await resolveBotConversation(db, conversationId);
   if (!scope) return "skipped";
-  const repository = createConversationBotRepository(db, scope);
+  // Alerts the turn's Handoffs raised and has yet to announce.
+  const alerts: AlertPing[] = [];
+  const repository = createConversationBotRepository(db, scope, alerts);
   const token = crypto.randomUUID();
   if (!(await repository.claim(conversationId, token, clock.now()))) return "busy";
-  const notify = () => notifyInbox(notifier, scope.tenantId, { conversationId });
+  const announce = () => notifyAlerts(notifier, scope.tenantId, alerts.splice(0));
+  const notify = async () => {
+    await notifyInbox(notifier, scope.tenantId, { conversationId });
+    await announce();
+  };
   let followUp = false;
   try {
     if (await repository.failPending(conversationId, clock.now())) {
@@ -555,6 +584,9 @@ export const runBotTurn = async <T>(
           beforeReserve,
         );
         if (reserved !== null && typeof reserved !== "string") await notify();
+        // A reserved Handoff notice reaches the inbox when it is sent, but
+        // its Alerts are due now.
+        else await announce();
         return reserved;
       },
       async acknowledge(messageId, wamid, onAcknowledged) {
@@ -573,6 +605,8 @@ export const runBotTurn = async <T>(
       },
     });
   } finally {
+    // Anything committed before a failure is announced all the same.
+    await announce();
     await repository.release(conversationId, token);
     await afterRelease?.(scope, followUp);
   }
@@ -590,9 +624,12 @@ export const recoverStaleBotTurns = async (
   for (const conversationId of await listBotRecoveryCandidates(db, now)) {
     const scope = await resolveBotConversation(db, conversationId);
     if (!scope) continue;
-    const repository = createConversationBotRepository(db, scope);
-    if (await repository.failPending(conversationId, now, true))
+    const alerts: AlertPing[] = [];
+    const repository = createConversationBotRepository(db, scope, alerts);
+    if (await repository.failPending(conversationId, now, true)) {
       await notifyInbox(notifier, scope.tenantId, { conversationId });
+      await notifyAlerts(notifier, scope.tenantId, alerts);
+    }
     await onRecovered(scope, conversationId);
     await repository.clearExpired(conversationId, now);
   }
