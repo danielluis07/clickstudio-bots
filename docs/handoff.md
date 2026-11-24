@@ -78,9 +78,10 @@ the notice's own send fails.
 - **Assumir** hands a Bot-owned Conversation to the team without sending.
 - A dashboard reply hands off in the same transaction that stores the pending
   reply, before Meta is called, so a failed send still silences the Bot.
-- A new outbound app echo whose wamid is not an own send hands off. Matched own
-  echoes, repeated echoes, edits/revokes (`original_message_id`) and imported
-  history never do.
+- A new outbound app echo whose wamid is not an own send hands off, whether it
+  is text or media (image, audio, video, document, sticker or another kind).
+  Matched own echoes, repeated echoes, edits/revokes (`original_message_id`),
+  reactions and imported history never do.
 
 A Handoff of a Conversation already with the team keeps its original reason,
 including a failed Bot send after **Assumir**. Every Handoff puts the

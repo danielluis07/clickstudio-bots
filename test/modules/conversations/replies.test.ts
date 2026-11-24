@@ -303,6 +303,7 @@ describe("Dashboard replies", () => {
       recordMessageEcho(db, channelA, {
         wamid,
         to: "5511988887777",
+        type: "text",
         text,
         sentAt: new Date("2026-10-21T09:31:00Z"),
       });
@@ -329,6 +330,7 @@ describe("Dashboard replies", () => {
       recordMessageEcho(db, channelA, {
         wamid,
         to: "5511988887777",
+        type: "text",
         text: "Pelo painel",
         sentAt: new Date("2026-10-21T09:30:01Z"),
       }),
@@ -355,6 +357,7 @@ describe("Dashboard replies", () => {
       await recordMessageEcho(db, channelA, {
         wamid: "wamid.OUT1",
         to: "5511988887777",
+        type: "text",
         text: "Pelo painel",
         sentAt: new Date("2026-10-21T09:30:01Z"),
       }),
@@ -477,6 +480,7 @@ describe("Delivery statuses that arrive before the reply's wamid", () => {
     await recordMessageEcho(db, channelA, {
       wamid: "wamid.APP1",
       to: "5511988887777",
+      type: "text",
       text: "Pelo app",
       sentAt: new Date("2026-10-21T09:10:00Z"),
     });

@@ -363,6 +363,7 @@ test.each(["inbound", "echo", "history"] as const)(
           recordMessageEcho(db, route, {
             wamid: "wamid.rejected",
             to: phone,
+            type: "text",
             text: "Oi",
             sentAt,
           }),

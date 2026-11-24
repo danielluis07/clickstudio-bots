@@ -175,27 +175,35 @@ const inboundMessageEventSchema = z.object({
 const mediaTypeSchema = z.enum(["audio", "image", "video", "document", "sticker", "unsupported"]);
 const captionSchema = z.object({ caption: z.string().optional() });
 
-// The Contact's live message, without fetching or retaining media content.
+// A live message's kind and text: a text's body, or a media caption. Media
+// content is never fetched or retained. Null for a message that is about
+// another one, or a text without a body.
+const readContent = (
+  item: { type: string; text?: { body: string } } & Record<string, unknown>,
+): Pick<InboundMessage, "type" | "text"> | null => {
+  if (referencingTypes.has(item.type)) return null;
+  if (item.type === "text") return item.text ? { type: "text", text: item.text.body } : null;
+  const type = mediaTypeSchema.catch("unsupported").parse(item.type);
+  const media = captionSchema.safeParse(item[item.type]);
+  return {
+    type,
+    text: type !== "audio" && media.success ? media.data.caption?.trim() || null : null,
+  };
+};
+
+// The Contact's live message.
 export const readInboundMessage = (payload: unknown): InboundMessage | null => {
   const parsed = inboundMessageEventSchema.safeParse(payload);
   if (!parsed.success) return null;
   const [inbound] = parsed.data.value.messages;
-  if (referencingTypes.has(inbound.type) || (inbound.type === "text" && !inbound.text)) return null;
-  const type =
-    inbound.type === "text" ? "text" : mediaTypeSchema.catch("unsupported").parse(inbound.type);
-  const media = captionSchema.safeParse(inbound[inbound.type]);
+  const content = readContent(inbound);
+  if (!content) return null;
   const sender = parsed.data.value.contacts?.find((candidate) => candidate.wa_id === inbound.from);
   return {
     wamid: inbound.id,
     from: inbound.from,
     profileName: sender?.profile?.name ?? null,
-    type,
-    text:
-      type === "text"
-        ? inbound.text!.body
-        : type !== "audio" && media.success
-          ? media.data.caption?.trim() || null
-          : null,
+    ...content,
     sentAt: inbound.timestamp,
   };
 };
@@ -233,26 +241,28 @@ const messageEchoEventSchema = z.object({
   field: z.literal("smb_message_echoes"),
   value: z.object({
     message_echoes: z.tuple([
-      z.object({
+      z.looseObject({
         // Meta's reference shows the recipient both with and without "+".
         to: recipientIdSchema,
         id: z.string().min(1),
         timestamp: timestampSchema,
-        type: z.literal("text"),
-        text: textSchema,
+        type: z.string().min(1),
+        text: textSchema.optional(),
         ...notInGroup,
       }),
     ]),
   }),
 });
 
-// The text a Member sent from the WhatsApp Business app that an inbox event
-// echoes, if any.
+// The message a Member sent from the WhatsApp Business app that an inbox
+// event echoes, if any: a text or media of any kind, but never an edit,
+// revoke or reaction, which are about another message.
 export const readMessageEcho = (payload: unknown): MessageEcho | null => {
   const parsed = messageEchoEventSchema.safeParse(payload);
   if (!parsed.success) return null;
   const [echo] = parsed.data.value.message_echoes;
-  return { wamid: echo.id, to: echo.to, text: echo.text.body, sentAt: echo.timestamp };
+  const content = readContent(echo);
+  return content && { wamid: echo.id, to: echo.to, ...content, sentAt: echo.timestamp };
 };
 
 const changeEnvelope = { id: z.string().min(1), timestamp: timestampSchema };

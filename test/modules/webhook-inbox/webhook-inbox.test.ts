@@ -500,6 +500,72 @@ describe("Coexistence echoes", () => {
       revokedAt: null,
     });
   });
+
+  test("media sent from the app appears as the team's reply with its kind and optional caption", async () => {
+    await receive(
+      metaDelivery(
+        textMessageChange({ phoneNumberId: "300", wamid: "wamid.A1", timestamp: "1792497600" }),
+        messageEchoChange({
+          phoneNumberId: "300",
+          wamid: "wamid.APP1",
+          type: "image",
+          caption: " Nosso cardápio ",
+          timestamp: "1792497700",
+        }),
+        messageEchoChange({
+          phoneNumberId: "300",
+          wamid: "wamid.APP2",
+          type: "document",
+          timestamp: "1792497800",
+        }),
+        messageEchoChange({
+          phoneNumberId: "300",
+          wamid: "wamid.APP3",
+          type: "location",
+          timestamp: "1792497900",
+        }),
+      ),
+    );
+    await runJobs();
+
+    const [{ messages }] = await conversationsOf(tenantA);
+    expect(
+      messages.map(({ wamid, direction, origin, status, type, text }) => ({
+        wamid,
+        direction,
+        origin,
+        status,
+        type,
+        text,
+      })),
+    ).toEqual([
+      expect.objectContaining({ wamid: "wamid.A1" }),
+      {
+        wamid: "wamid.APP1",
+        direction: "outbound",
+        origin: "app",
+        status: "sent",
+        type: "image",
+        text: "Nosso cardápio",
+      },
+      {
+        wamid: "wamid.APP2",
+        direction: "outbound",
+        origin: "app",
+        status: "sent",
+        type: "document",
+        text: null,
+      },
+      {
+        wamid: "wamid.APP3",
+        direction: "outbound",
+        origin: "app",
+        status: "sent",
+        type: "unsupported",
+        text: null,
+      },
+    ]);
+  });
 });
 
 describe("Edits and revokes", () => {

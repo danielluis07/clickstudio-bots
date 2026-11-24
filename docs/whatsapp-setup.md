@@ -125,7 +125,7 @@ whose phone-number-id the event names. A text message becomes the Contact (uniqu
 per Tenant and phone), their Conversation on that Channel, and the message
 (unique per wamid). Events for an unknown phone-number-id are marked `ignored`
 (`unknown_channel`) and create nothing. So are events not handled yet
-(`unsupported_event`: media, non-text echoes, caption edits, group messages;
+(`unsupported_event`: caption edits, app reactions, group messages;
 see #61). Processing is idempotent, so QStash retries and duplicate jobs are
 safe. A job that keeps failing goes to QStash's dead-letter queue; inspecting
 and replaying those uses the [internal recovery view](inbox-operations.md).
@@ -154,12 +154,13 @@ are not affected.
 
 Issue: [#46](https://github.com/danielluis07/clickstudio-bots/issues/46).
 
-A `smb_message_echoes` text whose wamid matches a message the platform sent is
+A `smb_message_echoes` message whose wamid matches a message the platform sent is
 an own echo. It creates nothing and is not Conversation activity. Any other
 echo is a Member's reply from the WhatsApp Business app (`origin: "app"`),
 shown as "Equipe (app WhatsApp)", since the echo does not say which Member
-sent it. `recordMessageEcho` returns this classification (`app_reply` or
-`own_echo`) for Handoff. Ownership is never inferred from read receipts, text
+sent it. A media echo (#140) keeps only its kind and optional caption, as
+inbound media does; no attachment is downloaded. `recordMessageEcho` returns
+this classification (`app_reply` or `own_echo`) for Handoff. Ownership is never inferred from read receipts, text
 or timing. If an echo is processed before Meta's answer to our send is stored,
 it is first filed as an app reply. Storing the wamid then replaces that row
 with the dashboard reply under a per-wamid lock, keeping its delivery status. Handoff (#57) must treat that
