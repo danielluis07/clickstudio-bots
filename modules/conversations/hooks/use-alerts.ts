@@ -3,12 +3,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useDocumentVisible } from "@/hooks/use-document-visible";
+import { alertTabTitle } from "@/modules/conversations/hooks/alert-signals";
 import {
-  alertTabTitle,
+  alertTabState,
   createBrowserAlertSignaller,
-  getViewedConversation,
   setViewedConversation,
-} from "@/modules/conversations/hooks/alert-signals";
+} from "@/modules/conversations/hooks/browser-alert-signals";
 import { startAlertsRealtime } from "@/modules/conversations/hooks/realtime";
 import { useTRPC } from "@/trpc/client";
 
@@ -40,19 +40,16 @@ export const useAlertsRealtime = ({
       openConversation: (conversationId) => open.current(conversationId),
     });
     const signal = async (alertId: string) => {
-      const [list, preferences] = await Promise.all([
-        queryClient
-          .invalidateQueries(trpc.alerts.list.queryFilter())
-          .then(() => queryClient.getQueryData(trpc.alerts.list.queryKey())),
-        queryClient.ensureQueryData(trpc.alerts.preferences.queryOptions()),
-      ]);
+      await queryClient.invalidateQueries(trpc.alerts.list.queryFilter());
+      const list = queryClient.getQueryData(trpc.alerts.list.queryKey());
       const alert = list?.alerts.find((entry) => entry.id === alertId);
       if (!alert) return;
-      const visible = document.visibilityState === "visible";
       await signaller.signal({
         alert,
-        preferences,
-        tab: { visible, viewing: visible && getViewedConversation() === alert.conversationId },
+        // Fresh, so a switch changed in another tab or device counts.
+        preferences: () =>
+          queryClient.fetchQuery({ ...trpc.alerts.preferences.queryOptions(), staleTime: 0 }),
+        tab: alertTabState(alert.conversationId),
       });
     };
     return startAlertsRealtime({

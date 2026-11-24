@@ -1,6 +1,9 @@
 import type { AlertKind } from "@/modules/conversations/alerts";
 import { alertCountLabel, alertKindLabel } from "@/modules/conversations/hooks/alert-display";
-import { contactDisplayName } from "@/modules/conversations/hooks/contact-display";
+import {
+  contactDisplayName,
+  type ContactNames,
+} from "@/modules/conversations/hooks/contact-display";
 
 const countPrefix = /^\(\d+\+?\) /;
 
@@ -16,12 +19,7 @@ export type SignalledAlert = {
   count: number;
   read: boolean;
   conversationId: string;
-  contact: {
-    name: string | null;
-    appName: string | null;
-    profileName: string | null;
-    phone: string;
-  };
+  contact: ContactNames;
 };
 
 // What a browser notification shows: the Contact and the kind, never message text.
@@ -55,28 +53,34 @@ const claimDelay = { viewing: 0, visible: 250, hidden: 1000 };
 // Plays the sound and shows the browser notification for a new Alert, in only
 // one of the Member's open dashboard tabs. Every tab offers each Alert event;
 // the first to claim it, under a browser-wide lock, signals and records it so
-// the others stay quiet. A merged Alert keeps its id, so each event is its id
-// and count.
+// the others stay quiet. A merged Alert keeps its id and counts its events, so
+// a tab claims an Alert only at a higher count than any tab claimed before; a
+// tab whose refetch still shows an earlier count stays quiet.
 export const createAlertSignaller = (browser: AlertSignalBrowser) => {
-  const readClaimed = (): string[] => {
+  // The highest claimed count of each recent Alert, oldest first.
+  const readClaimed = (): [string, number][] => {
     try {
       const stored: unknown = JSON.parse(browser.storage.getItem(claimedKey) ?? "[]");
-      return Array.isArray(stored) ? stored.filter((key) => typeof key === "string") : [];
+      return Array.isArray(stored)
+        ? stored.filter(
+            (entry): entry is [string, number] =>
+              Array.isArray(entry) && typeof entry[0] === "string" && typeof entry[1] === "number",
+          )
+        : [];
     } catch {
       return [];
     }
   };
 
-  // True when this tab is the first to claim the event.
-  const claim = (event: string) =>
+  // True when this tab is the first to claim the Alert at this count.
+  const claim = (alertId: string, count: number) =>
     browser.locks.request(claimLock, () => {
       const claimed = readClaimed();
-      if (claimed.includes(event)) return false;
+      const previous = claimed.find(([id]) => id === alertId)?.[1] ?? 0;
+      if (count <= previous) return false;
+      const updated = [...claimed.filter(([id]) => id !== alertId), [alertId, count]];
       try {
-        browser.storage.setItem(
-          claimedKey,
-          JSON.stringify([...claimed, event].slice(-claimedLimit)),
-        );
+        browser.storage.setItem(claimedKey, JSON.stringify(updated.slice(-claimedLimit)));
       } catch {
         // Storage full or blocked: this tab still signals.
       }
@@ -90,16 +94,19 @@ export const createAlertSignaller = (browser: AlertSignalBrowser) => {
       tab,
     }: {
       alert: SignalledAlert;
-      preferences: { sound: boolean; browserNotification: boolean };
+      // Read only by the tab that signals, so a switch changed in another tab
+      // counts.
+      preferences: () => Promise<{ sound: boolean; browserNotification: boolean }>;
       tab: { visible: boolean; viewing: boolean };
     }) {
       // An Alert for the Conversation the Member is reading arrives read.
       const silent = alert.read || tab.viewing;
       const rank = tab.viewing ? "viewing" : tab.visible ? "visible" : "hidden";
       await browser.wait(claimDelay[rank]);
-      if (!(await claim(`${alert.id}:${alert.count}`)) || silent) return;
-      if (preferences.sound) browser.playSound();
-      if (preferences.browserNotification && !tab.visible)
+      if (!(await claim(alert.id, alert.count)) || silent) return;
+      const { sound, browserNotification } = await preferences();
+      if (sound) browser.playSound();
+      if (browserNotification && !tab.visible)
         browser.notify({
           title: contactDisplayName(alert.contact),
           body: alertKindLabel(alert),
@@ -109,89 +116,3 @@ export const createAlertSignaller = (browser: AlertSignalBrowser) => {
     },
   };
 };
-
-// The Conversation this tab has open, if any. Only one ConversationView is
-// mounted at a time.
-let viewedConversation: string | null = null;
-export const setViewedConversation = (conversationId: string | null) => {
-  viewedConversation = conversationId;
-};
-export const getViewedConversation = () => viewedConversation;
-
-let audio: AudioContext | undefined;
-
-// A short two-note chime, made in the browser so no sound file is served.
-// Browsers may refuse to play before the Member interacts with the page;
-// then it stays silent.
-const playChime = () => {
-  try {
-    audio ??= new AudioContext();
-    const context = audio;
-    void context.resume().catch(() => {});
-    const start = context.currentTime;
-    [880, 1320].forEach((frequency, index) => {
-      const at = start + index * 0.12;
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      oscillator.type = "sine";
-      oscillator.frequency.value = frequency;
-      gain.gain.setValueAtTime(0.0001, at);
-      gain.gain.exponentialRampToValueAtTime(0.2, at + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.25);
-      oscillator.connect(gain).connect(context.destination);
-      oscillator.start(at);
-      oscillator.stop(at + 0.3);
-    });
-  } catch {
-    // No Web Audio: no sound.
-  }
-};
-
-export const notificationsSupported = () =>
-  typeof window !== "undefined" && "Notification" in window;
-
-// Asks the browser for permission. Call it only from the Member turning
-// browser notifications on.
-export const requestNotificationPermission = async () => {
-  if (!notificationsSupported()) return false;
-  if (Notification.permission === "granted") return true;
-  if (Notification.permission === "denied") return false;
-  return (await Notification.requestPermission()) === "granted";
-};
-
-// The real browser behind the signals. Clicking a notification brings the tab
-// forward and opens the Conversation.
-export const createBrowserAlertSignaller = ({
-  openConversation,
-}: {
-  openConversation: (conversationId: string) => void;
-}) =>
-  createAlertSignaller({
-    locks: {
-      // Without Web Locks (insecure context, old browser) each tab decides on
-      // its own, so several may signal.
-      request: (name, run) =>
-        typeof navigator !== "undefined" && navigator.locks
-          ? navigator.locks.request(name, run)
-          : Promise.resolve().then(run),
-    },
-    storage: {
-      getItem: (key) => window.localStorage.getItem(key),
-      setItem: (key, value) => window.localStorage.setItem(key, value),
-    },
-    wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-    playSound: playChime,
-    notify: ({ title, body, tag, conversationId }) => {
-      if (!notificationsSupported() || Notification.permission !== "granted") return;
-      try {
-        const notification = new Notification(title, { body, tag });
-        notification.onclick = () => {
-          window.focus();
-          openConversation(conversationId);
-          notification.close();
-        };
-      } catch {
-        // Some mobile browsers only notify through a service worker.
-      }
-    },
-  });

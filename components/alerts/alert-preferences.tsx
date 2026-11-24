@@ -5,7 +5,7 @@ import { alertPreferenceOptions, useAlertPreferences } from "@/modules/conversat
 
 // The signed-in Member's own Alert preferences. Each switch saves at once.
 export function AlertPreferences() {
-  const { query, update, change, notificationsBlocked } = useAlertPreferences();
+  const { query, update, isOn, change, notificationsBlocked } = useAlertPreferences();
 
   if (query.isError)
     return (
@@ -22,7 +22,7 @@ export function AlertPreferences() {
           id={`alerta-${key}`}
           label={label}
           description={description}
-          checked={query.data?.[key] ?? false}
+          checked={isOn(key)}
           disabled={!query.data}
           onCheckedChange={(checked) => void change(key, checked)}
         />

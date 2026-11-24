@@ -22,7 +22,7 @@ const alert = {
   contact: { name: "Maria Souza", appName: null, profileName: null, phone: "5511999990000" },
   preview: { type: "text" as const, text: "Meu cartão é 1234", revoked: false },
 };
-const allOn = { sound: true, browserNotification: true };
+const allOn = async () => ({ sound: true, browserNotification: true });
 
 // One browser: tabs share its locks and storage, and what each one plays or shows.
 const createBrowser = () => {
@@ -104,22 +104,55 @@ test("an Alert for the Conversation the Member is reading signals in no tab", as
 
 test("each signal follows its own preference switch", async () => {
   const soundOnly = createBrowser();
-  await soundOnly
-    .openTab("a")
-    .signal({ alert, preferences: { sound: true, browserNotification: false }, tab: hidden });
+  await soundOnly.openTab("a").signal({
+    alert,
+    preferences: async () => ({ sound: true, browserNotification: false }),
+    tab: hidden,
+  });
   expect([soundOnly.sounds.length, soundOnly.notifications.length]).toEqual([1, 0]);
 
   const notificationOnly = createBrowser();
-  await notificationOnly
-    .openTab("a")
-    .signal({ alert, preferences: { sound: false, browserNotification: true }, tab: hidden });
+  await notificationOnly.openTab("a").signal({
+    alert,
+    preferences: async () => ({ sound: false, browserNotification: true }),
+    tab: hidden,
+  });
   expect([notificationOnly.sounds.length, notificationOnly.notifications.length]).toEqual([0, 1]);
 
   const off = createBrowser();
-  await off
-    .openTab("a")
-    .signal({ alert, preferences: { sound: false, browserNotification: false }, tab: hidden });
+  await off.openTab("a").signal({
+    alert,
+    preferences: async () => ({ sound: false, browserNotification: false }),
+    tab: hidden,
+  });
   expect([off.sounds.length, off.notifications.length]).toEqual([0, 0]);
+});
+
+test("a slow tab that still sees an earlier merge count stays quiet", async () => {
+  const browser = createBrowser();
+  await browser
+    .openTab("fast")
+    .signal({ alert: { ...alert, count: 2 }, preferences: allOn, tab: hidden });
+  await browser.openTab("slow").signal({ alert, preferences: allOn, tab: hidden });
+
+  expect(browser.sounds).toEqual(["fast"]);
+});
+
+test("only the tab that signals reads the preferences, as they are then", async () => {
+  const browser = createBrowser();
+  let reads = 0;
+  const preferences = async () => {
+    reads += 1;
+    return { sound: true, browserNotification: false };
+  };
+  await Promise.all(
+    ["a", "b", "c"].map((name) =>
+      browser.openTab(name).signal({ alert, preferences, tab: hidden }),
+    ),
+  );
+
+  expect(reads).toBe(1);
+  expect(browser.sounds).toHaveLength(1);
 });
 
 test("a later event merged into the same Alert signals again, once", async () => {
