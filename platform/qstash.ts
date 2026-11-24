@@ -49,8 +49,10 @@ export const createQStashJobQueue = ({
           ...(type === "process-inbox-event"
             ? { failureCallback: qstashJobUrl(appUrl, "inbox-event-failed") }
             : {}),
+          // QStash accepts only letters, digits, "-", "_" and "." in a key and
+          // refuses the whole batch otherwise.
           ...(type === "run-bot-turn"
-            ? { flowControl: { key: `bot:${ids.conversationId}`, parallelism: 1 } }
+            ? { flowControl: { key: `bot-${ids.conversationId}`, parallelism: 1 } }
             : {}),
         })),
       );
