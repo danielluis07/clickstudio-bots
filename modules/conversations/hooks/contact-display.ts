@@ -4,7 +4,7 @@ import {
   type ContactDetailField,
 } from "@/modules/conversations/contact-details";
 
-type ContactNames = {
+export type ContactNames = {
   name: string | null;
   appName: string | null;
   profileName: string | null;
