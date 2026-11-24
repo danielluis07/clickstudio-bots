@@ -31,7 +31,7 @@ export const invalidateInbox = (
 
 // The small portion of the browser SDK used here, also implemented by the
 // fake connection in tests. No application data travels over this interface.
-type InboxRealtimeClient = {
+type RealtimeClient = {
   channels: {
     get(name: string): {
       subscribe(name: string, listener: (message: { data?: unknown }) => void): Promise<unknown>;
@@ -43,66 +43,114 @@ type InboxRealtimeClient = {
   close(): void;
 };
 
-export const subscribeToInbox = (
-  client: InboxRealtimeClient,
+// The single identifier a ping may carry, or null for anything else.
+const readId = (data: unknown, key: string) =>
+  data &&
+  typeof data === "object" &&
+  Object.keys(data).length === 1 &&
+  key in data &&
+  typeof (data as Record<string, unknown>)[key] === "string" &&
+  (data as Record<string, string>)[key].length > 0
+    ? (data as Record<string, string>)[key]
+    : null;
+
+// Listens for one event on one channel. `catchUp` runs on every attachment:
+// the first (after the initial reads) and recovery after a disconnect or a
+// loss of message continuity. Cleanup closes the connection.
+const subscribe = (
+  client: RealtimeClient,
   channelName: string,
-  invalidate: (ping?: InboxPing) => void,
+  {
+    event,
+    receive,
+    catchUp,
+    label,
+  }: {
+    event: string;
+    receive: (data: unknown) => void;
+    catchUp: () => void;
+    label: string;
+  },
 ) => {
   const channel = client.channels.get(channelName);
   let active = true;
-  const receive = ({ data }: { data?: unknown }) => {
-    if (!active || !data || typeof data !== "object" || Object.keys(data).length !== 1) return;
-    if (
-      "conversationId" in data &&
-      typeof data.conversationId === "string" &&
-      data.conversationId.length > 0
-    ) {
-      invalidate({ conversationId: data.conversationId });
-    } else if (
-      "contactId" in data &&
-      typeof data.contactId === "string" &&
-      data.contactId.length > 0
-    ) {
-      invalidate({ contactId: data.contactId });
-    }
+  const listener = ({ data }: { data?: unknown }) => {
+    if (active) receive(data);
   };
-  // Includes the first attachment (after the initial reads) and recovery
-  // after a disconnect or a loss of message continuity.
-  const catchUp = () => {
-    if (active) invalidate();
+  const attached = () => {
+    if (active) catchUp();
   };
-  channel.on("attached", catchUp);
-  channel.on("update", catchUp);
-  void channel.subscribe("invalidate", receive).catch(() => {
-    if (active) console.error("Inbox subscription failed");
+  channel.on("attached", attached);
+  channel.on("update", attached);
+  void channel.subscribe(event, listener).catch(() => {
+    if (active) console.error(`${label} subscription failed`);
   });
   return () => {
     active = false;
-    channel.unsubscribe("invalidate", receive);
-    channel.off("attached", catchUp);
-    channel.off("update", catchUp);
+    channel.unsubscribe(event, listener);
+    channel.off("attached", attached);
+    channel.off("update", attached);
     client.close();
   };
 };
 
-type InboxClientOptions = Pick<ClientOptions, "autoConnect" | "authCallback">;
-type InboxClientFactory = (
-  options: InboxClientOptions,
-) => InboxRealtimeClient & { connect(): void };
+export const subscribeToInbox = (
+  client: RealtimeClient,
+  channelName: string,
+  invalidate: (ping?: InboxPing) => void,
+) =>
+  subscribe(client, channelName, {
+    event: "invalidate",
+    label: "Inbox",
+    receive: (data) => {
+      const conversationId = readId(data, "conversationId");
+      const contactId = readId(data, "contactId");
+      if (conversationId) invalidate({ conversationId });
+      else if (contactId) invalidate({ contactId });
+    },
+    catchUp: () => invalidate(),
+  });
 
-const loadAblyClient = async (): Promise<InboxClientFactory> => {
+// `refresh` gets the new Alert's id, or nothing after a (re)attachment.
+export const subscribeToAlerts = (
+  client: RealtimeClient,
+  channelName: string,
+  refresh: (alertId?: string) => void,
+) =>
+  subscribe(client, channelName, {
+    event: "alert",
+    label: "Alerts",
+    receive: (data) => {
+      const alertId = readId(data, "alertId");
+      if (alertId) refresh(alertId);
+    },
+    catchUp: () => refresh(),
+  });
+
+type RealtimeClientOptions = Pick<ClientOptions, "autoConnect" | "authCallback">;
+type RealtimeClientFactory = (
+  options: RealtimeClientOptions,
+) => RealtimeClient & { connect(): void };
+
+const loadAblyClient = async (): Promise<RealtimeClientFactory> => {
   const { Realtime } = await import("ably");
   return (options) => new Realtime(options);
 };
 
-export const startInboxRealtime = ({
+// Opens one connection on the channel `channelOf` picks from the token
+// procedure's answer, retrying transient startup failures every five seconds.
+const startRealtime = <Access extends { tokenRequest: TokenRequest }>({
   issueToken,
-  invalidate,
+  channelOf,
+  open,
+  label,
   loadClient = loadAblyClient,
 }: {
-  issueToken: () => Promise<{ channel: string; tokenRequest: TokenRequest }>;
-  invalidate: (ping?: InboxPing) => void;
-  loadClient?: () => Promise<InboxClientFactory>;
+  issueToken: () => Promise<Access>;
+  channelOf: (access: Access) => string;
+  open: (client: RealtimeClient, channelName: string) => () => void;
+  label: string;
+  loadClient?: () => Promise<RealtimeClientFactory>;
 }) => {
   let disposed = false;
   let stop: (() => void) | undefined;
@@ -122,29 +170,29 @@ export const startInboxRealtime = ({
             return;
           }
           // Renewal rechecks the session and membership. Never retain the
-          // old Tenant's subscription when authorization changes.
+          // old Tenant's or Member's subscription when authorization changes.
           void issueToken().then(
             (renewed) => {
-              if (disposed || renewed.channel !== access.channel) {
+              if (disposed || channelOf(renewed) !== channelOf(access)) {
                 stop?.();
-                callback("Inbox authorization changed", null);
+                callback(`${label} authorization changed`, null);
                 return;
               }
               callback(null, renewed.tokenRequest);
             },
-            () => callback("Inbox authorization failed", null),
+            () => callback(`${label} authorization failed`, null),
           );
         },
       });
-      stop = subscribeToInbox(client, access.channel, invalidate);
+      stop = open(client, channelOf(access));
       client.connect();
     } catch (error) {
       if (disposed) return;
       stop?.();
       stop = undefined;
-      console.error("Inbox realtime unavailable");
+      console.error(`${label} realtime unavailable`);
       // Disabled realtime and authorization refusals need no retry. Network,
-      // server and chunk-loading failures recover while the inbox stays open.
+      // server and chunk-loading failures recover while the page stays open.
       if (
         error instanceof TRPCClientError &&
         ["UNAUTHORIZED", "FORBIDDEN", "PRECONDITION_FAILED"].includes(error.data?.code)
@@ -162,3 +210,38 @@ export const startInboxRealtime = ({
     stop?.();
   };
 };
+
+export const startInboxRealtime = ({
+  issueToken,
+  invalidate,
+  loadClient,
+}: {
+  issueToken: () => Promise<{ channel: string; tokenRequest: TokenRequest }>;
+  invalidate: (ping?: InboxPing) => void;
+  loadClient?: () => Promise<RealtimeClientFactory>;
+}) =>
+  startRealtime({
+    issueToken,
+    channelOf: (access) => access.channel,
+    open: (client, channelName) => subscribeToInbox(client, channelName, invalidate),
+    label: "Inbox",
+    loadClient,
+  });
+
+// The Member's own Alerts, on every dashboard page.
+export const startAlertsRealtime = ({
+  issueToken,
+  refresh,
+  loadClient,
+}: {
+  issueToken: () => Promise<{ alertsChannel: string; tokenRequest: TokenRequest }>;
+  refresh: (alertId?: string) => void;
+  loadClient?: () => Promise<RealtimeClientFactory>;
+}) =>
+  startRealtime({
+    issueToken,
+    channelOf: (access) => access.alertsChannel,
+    open: (client, channelName) => subscribeToAlerts(client, channelName, refresh),
+    label: "Alerts",
+    loadClient,
+  });

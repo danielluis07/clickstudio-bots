@@ -52,6 +52,10 @@ lease expired cannot hand off. Callers inside a transaction notify the inbox
 after they commit; others use `handOffAndNotify`, which notifies only when the
 Conversation changed hands.
 
+A change of hands the Bot caused also raises a Handoff Alert for every Member
+in the same transaction ([ADR 0010](adr/0010-alerts-stored-per-member-and-written-with-their-event.md),
+[Realtime inbox](realtime-inbox.md#alerts)). Member Handoffs raise none.
+
 A Bot-initiated Handoff sends its short notice to the Contact through the
 normal reservation and send gates. System Handoffs (`bot_unavailable`,
 `allowance_exhausted`, `contact_cap_reached`) send nothing.

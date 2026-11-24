@@ -1,3 +1,4 @@
+import { AlertBell } from "@/components/alerts/alert-bell";
 import { DashboardHeaderActions } from "@/components/app-shell/dashboard-header-actions";
 import { cookies } from "next/headers";
 import type { ReactNode } from "react";
@@ -19,6 +20,7 @@ export async function DashboardShell({ children }: { children: ReactNode }) {
           <span className="shrink-0 text-sm text-muted-foreground">Painel</span>
           <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-4">
             <ChannelStatus />
+            <AlertBell />
             <DashboardHeaderActions />
           </div>
         </header>

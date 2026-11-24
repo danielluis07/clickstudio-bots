@@ -54,6 +54,14 @@ _Avoid_: Escalation, transfer, takeover
 The record of one Handoff: when it happened, which Conversation, its reason, and whether the Bot or a Member caused it. A Handoff of a Conversation already with the team records none.
 _Avoid_: Handoff log, escalation record
 
+**Alert**:
+A signal in the dashboard telling one Member that something happened in their Tenant which may need a person: a Handoff the Bot caused, or a new Contact message. Each Member reads and clears their own Alerts. Handoffs a Member causes and returns to the Bot raise none.
+_Avoid_: Notification, ping
+
+**Alert preferences**:
+A Member's own choice of which kinds of Alert they receive, and whether Alerts also play a sound or show a browser notification. They apply only to Alerts raised after the choice.
+_Avoid_: Notification settings, subscriptions
+
 **Knowledge base**:
 Everything a Tenant has told its Bot about the business. The Bot answers Contacts only from it.
 _Avoid_: Training data, training, context, documents

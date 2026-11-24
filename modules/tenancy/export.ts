@@ -28,6 +28,7 @@ export type TenantExportFile = { filename: string; content: string };
 
 // Administrator-only portability snapshot. Explicit projections keep auth
 // secrets, encrypted Meta tokens and operational leases out of delivered files.
+// Alerts are per-Member signals, not Tenant data, and stay out (ADR 0010).
 export const createTenantExport = ({ db, clock }: { db: Database; clock: Clock }) => ({
   async export(actorId: string, tenantId: string, format: "json" | "csv") {
     if (!(await isPlatformAdmin(db, actorId)))

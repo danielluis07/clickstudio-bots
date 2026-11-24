@@ -1,6 +1,12 @@
 // Contacts, their Conversations with a Tenant on one Channel, and the
 // messages in them.
 export {
+  createMemberAlerts,
+  pruneAlerts,
+  type AlertKind,
+  type MemberAlerts,
+} from "@/modules/conversations/alerts";
+export {
   countContactBotReplies,
   countPendingBotReplies,
   hasUnansweredContactMessages,

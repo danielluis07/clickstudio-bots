@@ -32,7 +32,7 @@ import { isPlatformAdmin } from "@/modules/identity";
 import { annotateError, classifyError, logError } from "@/platform/diagnostics";
 import type { InboxDiagnostics } from "@/modules/webhook-inbox/diagnostics";
 import type { Clock } from "@/platform/clock";
-import { notifyInbox, type Notifier } from "@/platform/notifier";
+import { notifyAlerts, notifyInbox, type AlertPing, type Notifier } from "@/platform/notifier";
 import type { LiveBot } from "@/modules/bot";
 
 // A pending event this old that never failed has no live job: QStash delivers
@@ -91,6 +91,7 @@ export const createWebhookInbox = ({
     route: ChannelRoute,
     payload: unknown,
     receivedAt: Date,
+    alerts: AlertPing[],
   ): Promise<
     | {
         conversationId?: string | null;
@@ -102,7 +103,7 @@ export const createWebhookInbox = ({
     const inbound = readInboundMessage(payload);
     if (inbound)
       return {
-        conversationId: await recordInboundMessage(db, route, { ...inbound, receivedAt }),
+        conversationId: await recordInboundMessage(db, route, { ...inbound, receivedAt }, alerts),
       };
     const statusUpdate = readMessageStatus(payload);
     if (statusUpdate)
@@ -167,7 +168,9 @@ export const createWebhookInbox = ({
     try {
       const route = await resolveRoute(event);
       tenantId = route?.tenantId;
-      const recorded = route && (await recordEvent(route, event.payload, event.receivedAt));
+      // The Alerts the event raised, announced once its write has committed.
+      const alerts: AlertPing[] = [];
+      const recorded = route && (await recordEvent(route, event.payload, event.receivedAt, alerts));
       if (!recorded || recorded === "known_event") {
         await repository.settle(inboxEventId, clock.now(), {
           status: "ignored",
@@ -189,6 +192,7 @@ export const createWebhookInbox = ({
           ? { contactId: recorded.contactId }
           : null;
       if (ping) await notifyInbox(notifier, route!.tenantId, ping, diagnostics?.log);
+      await notifyAlerts(notifier, route!.tenantId, alerts, diagnostics?.log);
       await repository.settle(inboxEventId, clock.now(), { status: "processed" });
       return { ok: true as const, status: "processed" as const };
     } catch (error) {

@@ -1,8 +1,8 @@
 # Realtime inbox
 
-Set `ABLY_API_KEY` in the server environment (`.env` locally, Vercel environment variables when deployed). Create an Ably Pub/Sub app and a key with `publish` and `subscribe` capabilities restricted to `tenant:*:inbox`. Keep the key server-only; it has no `NEXT_PUBLIC_` counterpart. Ably documents resource patterns and token restrictions in [Capabilities](https://ably.com/docs/auth/capabilities).
+Set `ABLY_API_KEY` in the server environment (`.env` locally, Vercel environment variables when deployed). Create an Ably Pub/Sub app and a key with `publish` and `subscribe` capabilities restricted to `tenant:*:inbox` and `tenant:*:member:*:alerts`. Keep the key server-only; it has no `NEXT_PUBLIC_` counterpart. Ably documents resource patterns and token restrictions in [Capabilities](https://ably.com/docs/auth/capabilities).
 
-Without this variable, messaging and authenticated inbox queries continue to work, but live updates are disabled. The token procedure refuses with `PRECONDITION_FAILED`, and the browser logs `Inbox realtime unavailable` once per inbox mount. No Ably credentials are needed for the routine test suite.
+Without this variable, messaging, Alerts and authenticated queries continue to work, but live updates are disabled. The token procedure refuses with `PRECONDITION_FAILED`, and the browser logs `Inbox realtime unavailable` once per inbox mount and `Alerts realtime unavailable` once per dashboard load. No Ably credentials are needed for the routine test suite.
 
 ## Data and authorization
 
@@ -18,9 +18,15 @@ Without this variable, messaging and authenticated inbox queries continue to wor
 
 The adapter explicitly projects these identifiers. Message text, names, phone numbers and credentials never belong in a ping.
 
-The browser calls the authenticated `realtime.token` tRPC mutation. `tenantProcedure` resolves current membership before the server signs an Ably TokenRequest, with a five-minute TTL and `subscribe` access to exactly that Tenant's inbox channel. The procedure accepts no Tenant, channel or capability input. The Member id is the token's client identity. The [Ably TokenRequest flow](https://ably.com/docs/auth/token) exchanges that signed request for a token without exposing the API key.
+Alerts ([ADR 0010](adr/0010-alerts-stored-per-member-and-written-with-their-event.md)) travel on each Member's own channel, `tenant:<tenantId>:member:<memberId>:alerts`. The adapter publishes an `alert` event whose payload is exactly:
 
-The SDK renews through the same mutation, rechecking membership. If the session's Tenant changes, the browser closes the old connection. Removal does not revoke an already issued Ably token immediately: it expires within five minutes. Every application data read rechecks membership regardless of token lifetime.
+```json
+{ "alertId": "<id>" }
+```
+
+The browser calls the authenticated `realtime.token` tRPC mutation. `tenantProcedure` resolves current membership before the server signs an Ably TokenRequest, with a five-minute TTL and `subscribe` access to exactly that Tenant's inbox channel and the Member's own Alerts channel, never another Member's. It returns both channel names. The procedure accepts no Tenant, Member, channel or capability input. The Member id is the token's client identity. The [Ably TokenRequest flow](https://ably.com/docs/auth/token) exchanges that signed request for a token without exposing the API key.
+
+The SDK renews through the same mutation, rechecking membership. If the session's Tenant or Member changes, the browser closes the old connection. Removal does not revoke an already issued Ably token immediately: it expires within five minutes. Every application data read rechecks membership regardless of token lifetime.
 
 ## Delivery and refetch
 
@@ -32,6 +38,14 @@ The inbox loads the browser SDK on mount, retrying transient startup failures ev
 
 Future Conversation state changes should publish a `conversationId` ping through the same port after committing their writes.
 
+## Alerts
+
+Alerts are written in the same transaction as the Handoff or Contact message that raises them (`raiseAlerts`, `modules/conversations/alerts.ts`), so a failed write fails the job and QStash retries it. The Alerts a transaction raised are announced after it commits, one `alert` ping per Member, best effort like inbox pings: the webhook inbox job announces those of an inbound message, a Bot turn those of its Handoffs. A Handoff the Bot causes raises a Handoff Alert for every Member; a new Contact message in a Conversation the team owns raises a Team message Alert. Assumir, Member replies and returns to the Bot raise none. Unread Alerts of one kind for one Conversation merge into one with a count, which moves to the top; each keeps its latest event's key, so a retried job or Bot turn adds nothing.
+
+The subscription lives in the `/painel` header's bell (`AlertBell`), so it runs on every dashboard page. It opens its own connection with the same token procedure, subscribes to `alertsChannel`, and refetches `alerts.list` on each ping and on every (re)attachment. Opening a Conversation in Conversas, by any route, marks its Alerts read through `alerts.markConversationRead`; while it stays open in a visible tab, Alerts raised for it are marked read as they arrive. "Limpar tudo" deletes the Member's own Alerts.
+
+The daily cron's `prune-alerts` deletes Alerts whose latest event is more than 30 days old. Deleting a Contact deletes their Alerts with the Conversation, and removing a Member deletes that Member's. Alerts are not part of the Tenant data export.
+
 ## Manual check with Ably configured
 
 1. Open `/painel/conversas` in two Member sessions belonging to one Tenant and select a Conversation.
@@ -39,5 +53,6 @@ Future Conversation state changes should publish a `conversationId` ping through
 3. Reply from one dashboard and from the WhatsApp Business app; check that the other dashboard updates, including delivery status, edits and revocations.
 4. Disconnect and reconnect the browser's network, then check that messages received while offline appear after reattachment.
 5. Inspect Ably events: payloads must contain only a Conversation or Contact id. A different Tenant's dashboard must receive none of those events.
+6. With both sessions on another dashboard page, take over a Conversation in one and send an inbound message to it: both bells count one Alert without a reload. Open the Conversation from one bell: only that Member's Alert turns read. Alert payloads must contain only an Alert id, on the receiving Member's own channel.
 
-Automated tests exercise token isolation, public messaging operations with a fake Notifier, and browser cache invalidation/subscription cleanup. They do not contact a live Ably app.
+Automated tests exercise token isolation, public messaging operations and Alert raising with a fake Notifier, and browser cache invalidation/subscription cleanup. They do not contact a live Ably app.

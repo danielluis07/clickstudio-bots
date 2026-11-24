@@ -1,10 +1,11 @@
 import { and, asc, eq, inArray, lte, or, type SQL } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
 import { conversation, handoffEvent, message } from "@/db/schema";
+import { raiseAlerts } from "@/modules/conversations/alerts";
 import { serviceWindowHours } from "@/modules/conversations/repository";
 import { recordMemberActivity, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
-import { notifyInbox, type Notifier } from "@/platform/notifier";
+import { notifyAlerts, notifyInbox, type AlertPing, type Notifier } from "@/platform/notifier";
 
 export type ConversationHandoffReason = NonNullable<
   (typeof conversation.$inferSelect)["handoffReason"]
@@ -43,14 +44,16 @@ export const unansweredContactMessages = (
 // Member Handoff still stops it returning on the Contact's next message. With
 // `leaseToken`, only the live turn holding that lease may hand off. A change
 // of hands is recorded as a Handoff event in the same transaction; with a
-// TenantScope, a Member Handoff records that Member. True when it changed
-// hands. The caller notifies the inbox after the transaction commits.
+// TenantScope, a Member Handoff records that Member. A change of hands the
+// Bot caused also raises a Handoff Alert for every Member, added to `alerts`.
+// True when it changed hands. The caller notifies the inbox, and announces
+// the Alerts, after the transaction commits.
 export const handOff = async (
   tx: Transaction,
   scope: { tenantId: string } | TenantScope,
   conversationId: string,
   reason: ConversationHandoffReason,
-  { leaseToken }: { leaseToken?: string } = {},
+  { leaseToken, alerts }: { leaseToken?: string; alerts?: AlertPing[] } = {},
 ) => {
   const byMember = memberHandoffReasons.includes(reason);
   const changed = await tx
@@ -74,13 +77,21 @@ export const handOff = async (
   if (changed.length > 0) {
     // The update above already holds the Conversation row, so the insert's
     // reference to it never waits (docs/locking.md).
-    await tx.insert(handoffEvent).values({
-      tenantId: scope.tenantId,
-      conversationId,
-      reason,
-      actor: byMember ? "member" : "bot",
-      memberId: byMember && "memberId" in scope ? scope.memberId : null,
-    });
+    const [event] = await tx
+      .insert(handoffEvent)
+      .values({
+        tenantId: scope.tenantId,
+        conversationId,
+        reason,
+        actor: byMember ? "member" : "bot",
+        memberId: byMember && "memberId" in scope ? scope.memberId : null,
+      })
+      .returning({ id: handoffEvent.id });
+    // A Member who caused it needs no Alert, nor does the rest of the team.
+    if (!byMember) {
+      const raised = await raiseAlerts(tx, scope, conversationId, "handoff", `handoff:${event.id}`);
+      alerts?.push(...raised);
+    }
     return true;
   }
   if (byMember)
@@ -99,17 +110,24 @@ export const handOff = async (
   return false;
 };
 
-// A Handoff outside a transaction, published to the inbox once it is written.
+// A Handoff outside a transaction, published to the inbox, and its Alerts
+// announced, once it is written.
 export const handOffAndNotify = async (
   db: Database,
   notifier: Notifier,
   scope: { tenantId: string },
   conversationId: string,
   reason: ConversationHandoffReason,
-  options: { leaseToken?: string } = {},
+  { leaseToken }: { leaseToken?: string } = {},
 ) => {
-  const changed = await db.transaction((tx) => handOff(tx, scope, conversationId, reason, options));
-  if (changed) await notifyInbox(notifier, scope.tenantId, { conversationId });
+  const alerts: AlertPing[] = [];
+  const changed = await db.transaction((tx) =>
+    handOff(tx, scope, conversationId, reason, { leaseToken, alerts }),
+  );
+  if (changed) {
+    await notifyInbox(notifier, scope.tenantId, { conversationId });
+    await notifyAlerts(notifier, scope.tenantId, alerts);
+  }
   return changed;
 };
 

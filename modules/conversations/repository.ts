@@ -1,17 +1,10 @@
 import { and, desc, eq, ilike, inArray, like, or, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Database } from "@/db/database";
-import {
-  contact,
-  conversation,
-  handoffEvent,
-  member,
-  message,
-  messageChange,
-  user,
-} from "@/db/schema";
+import { contact, conversation, handoffEvent, member, message, user } from "@/db/schema";
 import { recordSentWamid } from "@/modules/conversations/echoes";
 import { handOff } from "@/modules/conversations/handoff";
+import { currentText, editedAt, revokedAt } from "@/modules/conversations/message-text";
 import type { TenantScope } from "@/modules/tenancy";
 import type { ChannelRoute } from "@/modules/channels";
 import type { ContactDetails } from "@/modules/conversations/contact-details";
@@ -74,24 +67,6 @@ export const serviceWindowOpen = (now: Date) => sql`exists(
   select 1 from ${message} where ${opensServiceWindow()}
   and ${message.sentAt} > ${now.toISOString()}::timestamptz - make_interval(hours => ${serviceWindowHours})
 )`;
-
-// The message's changes of one kind, matched by its wamid and direction.
-const changesOf = (
-  kind: (typeof messageChange.kind.enumValues)[number],
-) => sql`from ${messageChange}
-  where ${messageChange.tenantId} = ${message.tenantId} and ${messageChange.originalWamid} = ${message.wamid}
-    and ${messageChange.direction} = ${message.direction} and ${messageChange.kind} = ${kind}`;
-
-const latestEditText = sql`(select ${messageChange.text} ${changesOf("edit")}
-  order by ${messageChange.changedAt} desc, ${messageChange.wamid} desc limit 1)`;
-
-// A subquery's timestamp, null when no change matches.
-const nullableTime = (query: SQL) => query.mapWith(message.sentAt) as SQL<Date | null>;
-
-const editedAt = nullableTime(sql`(select max(${messageChange.changedAt}) ${changesOf("edit")})`);
-const revokedAt = nullableTime(
-  sql`(select min(${messageChange.changedAt}) ${changesOf("revoke")})`,
-);
 
 // Rows after the cursor in (time, id) descending order. Timestamps come from
 // JS dates, so millisecond precision loses nothing.
@@ -202,9 +177,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
           failureCode: message.failureCode,
           type: message.type,
           // As last edited; a revoked message shows no text.
-          text: sql<
-            string | null
-          >`case when ${revokedAt} is null then coalesce(${latestEditText}, ${message.text}) end`,
+          text: currentText,
           sentAt: message.sentAt,
           imported: message.imported,
           editedAt,

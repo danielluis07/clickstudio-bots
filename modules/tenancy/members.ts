@@ -1,7 +1,7 @@
 import { and, asc, count, eq, gt, ne } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
-import { invitation, member, organization, user } from "@/db/schema";
+import { alert, invitation, member, organization, user } from "@/db/schema";
 import { createUserRepository, isPlatformAdmin } from "@/modules/identity";
 import { recordMemberActivity } from "@/modules/tenancy/activity";
 import { memberInvitationEmail } from "@/modules/tenancy/invitation-email";
@@ -228,6 +228,10 @@ export const createMemberManagement = ({
         } else {
           await users.delete(deleted.userId);
         }
+        // Alerts have no foreign key to the Member (docs/locking.md#alerts).
+        await tx
+          .delete(alert)
+          .where(and(eq(alert.tenantId, scope.tenantId), eq(alert.memberId, memberId)));
         await recordMemberActivity(tx, scope, {
           action: "member.removed",
           subjectIds: [memberId],

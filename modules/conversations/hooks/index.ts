@@ -1,4 +1,17 @@
 export {
+  alertBellLabel,
+  alertChannelLabels,
+  alertCountLabel,
+  alertKindLabel,
+  alertPreviewText,
+} from "@/modules/conversations/hooks/alert-display";
+export {
+  useAlerts,
+  useAlertsRealtime,
+  useClearAlerts,
+  useReadConversationAlerts,
+} from "@/modules/conversations/hooks/use-alerts";
+export {
   contactDisplayName,
   formatContactPhone,
 } from "@/modules/conversations/hooks/contact-display";
@@ -37,7 +50,9 @@ export { useDeleteContact } from "@/modules/conversations/hooks/use-delete-conta
 export { useReplyComposer } from "@/modules/conversations/hooks/use-reply-composer";
 export {
   invalidateInbox,
+  startAlertsRealtime,
   startInboxRealtime,
+  subscribeToAlerts,
   subscribeToInbox,
 } from "@/modules/conversations/hooks/realtime";
 export { useInboxRealtime } from "@/modules/conversations/hooks/use-inbox-realtime";
