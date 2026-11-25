@@ -3,7 +3,7 @@ import { BotLinksForm } from "@/components/bot/bot-links-form";
 import { BotPageDescription } from "@/components/bot/bot-page-description";
 import { DashboardPage } from "@/components/dashboard/dashboard-page";
 import { linkSettingsLimits } from "@/modules/bot";
-import type { TenantScope } from "@/modules/tenancy";
+import { isOwner, type TenantScope } from "@/modules/tenancy";
 import { captureSettingsEditor, linkSettingsEditor } from "@/server/services";
 
 export async function BotCaptureAndLinksEditor({ scope }: { scope: TenantScope }) {
@@ -12,7 +12,7 @@ export async function BotCaptureAndLinksEditor({ scope }: { scope: TenantScope }
     linkSettingsEditor.getLinks(scope),
   ]);
   // Disabling the forms is not the authorization: the module re-checks.
-  const canEdit = scope.role === "owner";
+  const canEdit = isOwner(scope);
 
   return (
     <DashboardPage

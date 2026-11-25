@@ -5,7 +5,7 @@ import type { BotTurn } from "@/modules/bot/repository";
 import { ReservationRaceError } from "@/modules/bot/reservation-race";
 import { botTimeZone } from "@/modules/bot/schedule";
 import { countPendingBotReplies } from "@/modules/conversations";
-import { findTenantOwnerEmail, type TenantScope } from "@/modules/tenancy";
+import { findTenantOwnerEmail, type TenantScope, isOwner } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 import type { Mailer } from "@/platform/mailer";
 
@@ -142,7 +142,7 @@ export const createBotAllowance = ({
   };
   return {
     async status(scope: TenantScope) {
-      if (scope.role !== "owner") return null;
+      if (!isOwner(scope)) return null;
       return read(scope);
     },
     async canReply(turn: BotTurn) {

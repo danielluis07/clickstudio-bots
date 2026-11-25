@@ -10,7 +10,7 @@ import {
 } from "@/modules/knowledge-base/allowance";
 import { knowledgeEntryKinds } from "@/modules/knowledge-base/kinds";
 import { normalizeEntryText } from "@/modules/knowledge-base/text";
-import type { TenantScope } from "@/modules/tenancy";
+import { isOwner, forbidden, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 
 // The longest question or section title, so titles stay headings.
@@ -48,11 +48,9 @@ export type KnowledgeEntrySummary = Awaited<
 type EntryText = z.input<typeof entryTextFields>;
 
 const invalid = { ok: false as const, error: "invalid" as const };
-const forbidden = { ok: false as const, error: "forbidden" as const };
 const notFound = { ok: false as const, error: "not_found" as const };
 
 // Only the owner edits; every Member may read what the Bot knows.
-const isOwner = (scope: TenantScope) => scope.role === "owner";
 
 export const createKnowledgeBaseEditor = ({ db, clock }: { db: Database; clock: Clock }) => {
   // Runs `save` only when the entry `replacing` is the Tenant's (otherwise

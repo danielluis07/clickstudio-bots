@@ -1,4 +1,5 @@
 import { and, eq, isNotNull, ne, or, sql } from "drizzle-orm";
+import { forbidden } from "@/modules/tenancy/scope";
 import type { Database } from "@/db/database";
 import { channel, organization } from "@/db/schema";
 import type { WhatsAppGateway } from "@/modules/channels";
@@ -109,8 +110,7 @@ export const createTenantLifecycle = ({
 
   return {
     async cancel(actorId: string, tenantId: string) {
-      if (!(await isPlatformAdmin(db, actorId)))
-        return { ok: false as const, error: "forbidden" as const };
+      if (!(await isPlatformAdmin(db, actorId))) return forbidden;
       return disconnect(tenantId, "cancel");
     },
     // System-only, composed into the authenticated daily task. Recheck the
@@ -138,8 +138,7 @@ export const createTenantLifecycle = ({
       if (failed) throw new Error("Tenant disconnection failed");
     },
     async reactivate(actorId: string, tenantId: string) {
-      if (!(await isPlatformAdmin(db, actorId)))
-        return { ok: false as const, error: "forbidden" as const };
+      if (!(await isPlatformAdmin(db, actorId))) return forbidden;
       const claimed = await claim(tenantId, "reactivate");
       if (!claimed.ok) return claimed;
       if ("pending" in claimed) return { ok: false as const, error: "busy" as const };

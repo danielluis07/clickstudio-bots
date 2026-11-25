@@ -1,10 +1,10 @@
 import { BotSandbox } from "@/components/bot/bot-sandbox";
 import { DashboardPage } from "@/components/dashboard/dashboard-page";
-import type { TenantScope } from "@/modules/tenancy";
+import { isOwner, type TenantScope } from "@/modules/tenancy";
 
 // The sandbox runs only for the owner; the module re-checks every message.
 export function BotSandboxOverview({ scope }: { scope: TenantScope }) {
-  if (scope.role !== "owner")
+  if (!isOwner(scope))
     return (
       <DashboardPage
         title="Testar"

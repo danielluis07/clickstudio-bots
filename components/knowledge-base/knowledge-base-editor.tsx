@@ -2,7 +2,7 @@ import { KnowledgeBaseManager } from "@/components/knowledge-base/knowledge-base
 import { KnowledgeBasePage } from "@/components/knowledge-base/knowledge-base-page";
 import { KnowledgeEntrySection } from "@/components/knowledge-base/knowledge-entry-section";
 import { entryTitleMaxLength } from "@/modules/knowledge-base";
-import type { TenantScope } from "@/modules/tenancy";
+import { isOwner, type TenantScope } from "@/modules/tenancy";
 import { knowledgeBaseEditor } from "@/server/services";
 import {
   deleteKnowledgeEntryAction,
@@ -12,7 +12,7 @@ import {
 export async function KnowledgeBaseEditor({ scope }: { scope: TenantScope }) {
   const { entries, used, cap } = await knowledgeBaseEditor.getKnowledgeBase(scope);
   // Hiding the controls is not the authorization: the module re-checks.
-  if (scope.role === "owner")
+  if (isOwner(scope))
     return (
       <KnowledgeBaseManager
         entries={entries}

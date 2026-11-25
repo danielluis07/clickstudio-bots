@@ -12,7 +12,7 @@ import {
   organization,
 } from "@/db/schema";
 import type { ChannelRoute } from "@/modules/channels";
-import { recordMemberActivity, type TenantScope } from "@/modules/tenancy";
+import { recordMemberActivity, type TenantScope, isOwner, forbidden } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 import { notifyInbox, type Notifier } from "@/platform/notifier";
 
@@ -182,7 +182,7 @@ export const deleteContact = async ({
   clock: Clock;
   contactId: string;
 }) => {
-  if (scope.role !== "owner") return { ok: false as const, error: "forbidden" as const };
+  if (!isOwner(scope)) return forbidden;
   const deleted = await db.transaction(async (tx) => {
     const [found] = await tx
       .select({ phone: contact.phone })

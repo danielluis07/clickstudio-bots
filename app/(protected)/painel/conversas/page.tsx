@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { isOwner } from "@/modules/tenancy";
 import { PrefetchedInbox } from "@/components/inbox/prefetched-inbox";
 import { searchParamText } from "@/lib/search-params";
 import { isWaitingFilter } from "@/modules/conversations/hooks";
@@ -23,7 +24,7 @@ export default async function ConversationsPage({ searchParams }: PageProps<"/pa
       waiting={isWaitingFilter(searchParamText(filtro))}
       conversationId={searchParamText(conversa)}
       historyNotImported={channel?.historyNotImported ?? false}
-      canDeleteContacts={scope.role === "owner"}
+      canDeleteContacts={isOwner(scope)}
     />
   );
 }

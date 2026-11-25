@@ -11,7 +11,7 @@ import {
   invitationUrl,
 } from "@/modules/tenancy/invitations";
 import { createTenantRepository } from "@/modules/tenancy/repository";
-import type { TenantScope } from "@/modules/tenancy/scope";
+import { forbidden, isOwner, type TenantScope } from "@/modules/tenancy/scope";
 import type { Clock } from "@/platform/clock";
 import { logError } from "@/platform/diagnostics";
 import type { Mailer } from "@/platform/mailer";
@@ -34,7 +34,6 @@ const newMemberInvitationSchema = z.object({
 export type NewMemberInvitation = z.input<typeof newMemberInvitationSchema>;
 
 // Only the owner manages Members; the default roles have no finer grants.
-const isOwner = (scope: TenantScope) => scope.role === "owner";
 
 export const createMemberManagement = ({
   db,
@@ -79,7 +78,7 @@ export const createMemberManagement = ({
 
     async cancelInvitation(scope: TenantScope, invitationId: string) {
       if (!isOwner(scope)) {
-        return { ok: false as const, error: "forbidden" as const };
+        return forbidden;
       }
       const canceled = await db.transaction(async (tx) => {
         if (!(await createTenantRepository(tx, scope).cancelInvitation(invitationId))) return false;
@@ -96,7 +95,7 @@ export const createMemberManagement = ({
 
     async inviteMember(scope: TenantScope, input: NewMemberInvitation) {
       if (!isOwner(scope)) {
-        return { ok: false as const, error: "forbidden" as const };
+        return forbidden;
       }
       const parsed = newMemberInvitationSchema.safeParse(input);
       if (!parsed.success) {
@@ -194,7 +193,7 @@ export const createMemberManagement = ({
     // another Tenant or the platform administrator role still needs it.
     async removeMember(scope: TenantScope, memberId: string) {
       if (!isOwner(scope)) {
-        return { ok: false as const, error: "forbidden" as const };
+        return forbidden;
       }
 
       const removed = await db.transaction(async (tx) => {

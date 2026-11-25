@@ -16,6 +16,11 @@ export type TenantScope = {
   readonly [tenantScopeBrand]: true;
 };
 
+export const isOwner = (scope: Pick<TenantScope, "role">) => scope.role === "owner";
+
+// The refusal every owner-only operation returns to a non-owner Member.
+export const forbidden = { ok: false as const, error: "forbidden" as const };
+
 type ScopeRequest = {
   userId: string;
   // The session's active Tenant; when absent, the user's first membership.
