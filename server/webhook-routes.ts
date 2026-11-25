@@ -7,7 +7,6 @@ import {
 import { logError, reportError } from "@/platform/diagnostics";
 import { readVerifiedBody, type QStashVerifier } from "@/server/qstash-verification";
 
-
 const empty = (status: number) => new Response(null, { status });
 
 const receiveStatus = {
