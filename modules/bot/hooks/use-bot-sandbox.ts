@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { captureFieldOptions } from "@/modules/bot/hooks/settings-labels";
 import type { SandboxContact, SandboxMessage } from "@/modules/bot/sandbox";
+import type { ModelHandoffReason } from "@/modules/bot/tools";
 import { useTRPC } from "@/trpc/client";
 
 export type SandboxChatMessage = SandboxMessage & { id: string; handoff?: boolean };
@@ -22,6 +23,8 @@ export const useBotSandbox = () => {
   const [messages, setMessages] = useState<SandboxChatMessage[]>([]);
   // The test Contact's captured details, kept only in this page like the transcript.
   const [contact, setContact] = useState<SandboxContact | undefined>(undefined);
+  // The Handoff the Bot put off to ask for required details, kept the same way.
+  const [pendingHandoff, setPendingHandoff] = useState<ModelHandoffReason | null>(null);
   const send = useMutation(
     trpc.sandbox.respond.mutationOptions({
       onMutate: (input) => {
@@ -38,6 +41,7 @@ export const useBotSandbox = () => {
       onSuccess: ({ outcome, contact }) => {
         setText("");
         setContact(contact);
+        setPendingHandoff(outcome.kind === "answer" ? (outcome.pendingHandoff ?? null) : null);
         setMessages((previous) => [
           ...previous,
           ...(outcome.kind === "nothing_to_answer"
@@ -75,6 +79,7 @@ export const useBotSandbox = () => {
       text,
       history: messages.slice(-20).map(({ author, text }) => ({ author, text })),
       contact,
+      pendingHandoff,
     });
   };
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {

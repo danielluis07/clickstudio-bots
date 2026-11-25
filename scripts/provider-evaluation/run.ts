@@ -88,6 +88,7 @@ export const runEvaluation = async ({
         }),
         getContactDetails: async () => noContactDetails,
         saveContactDetails: async () => {},
+        getPendingHandoff: async () => null,
         listRecentMessages: async () =>
           item.messages.map((message, index) => ({
             ...message,

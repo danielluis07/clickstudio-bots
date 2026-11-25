@@ -1,5 +1,6 @@
 import type { BotConfiguration } from "@/modules/bot/configuration";
 import type { BotSchedule, BusinessHours } from "@/modules/bot/schedule";
+import type { ModelHandoffReason } from "@/modules/bot/tools";
 import type { ChannelRoute } from "@/modules/channels";
 import type { ContactDetails } from "@/modules/conversations";
 import type { TenantScope } from "@/modules/tenancy";
@@ -55,6 +56,10 @@ export type ContextMessage = {
   sentAt: Date;
 };
 
+// A model Handoff the Bot put off to ask for required Contact details, and
+// when it asked.
+export type PendingHandoff = { reason: ModelHandoffReason; askedAt: Date };
+
 // The latest messages sent at or after `since`, at most `limit` of them.
 export type ContextWindow = { since: Date; limit: number };
 
@@ -66,4 +71,7 @@ export interface BotRepository {
   // Stores captured details on the turn's Contact, keeping the others.
   saveContactDetails(turn: BotTurn, details: Partial<ContactDetails>): Promise<void>;
   listRecentMessages(turn: BotTurn, window: ContextWindow): Promise<ContextMessage[]>;
+  // The Handoff the Bot's latest reply put off to ask for missing required
+  // Contact details, if that request is still pending.
+  getPendingHandoff(turn: BotTurn): Promise<PendingHandoff | null>;
 }

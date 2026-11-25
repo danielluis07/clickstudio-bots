@@ -1,9 +1,8 @@
-import { detailsRequest, isDetailsRequest, missingRequired } from "@/modules/bot/capture";
+import { detailsRequest, missingRequired } from "@/modules/bot/capture";
 import { configuredLinkReply } from "@/modules/bot/links";
 import {
   contextWindow,
   defaultContextLimits,
-  memberLabel,
   replayContext,
   type ContextLimits,
 } from "@/modules/bot/context";
@@ -22,7 +21,13 @@ import {
   renderKnowledgeBase,
 } from "@/modules/bot/prompt";
 import type { BotRepository, BotTurn } from "@/modules/bot/repository";
-import { checkToolCalls, handoffReply, modelTools, type HandoffReason } from "@/modules/bot/tools";
+import {
+  checkToolCalls,
+  handoffReply,
+  modelTools,
+  type HandoffReason,
+  type ModelHandoffReason,
+} from "@/modules/bot/tools";
 import type { Clock } from "@/platform/clock";
 import { logError } from "@/platform/diagnostics";
 import { RetryableError } from "@/platform/retryable";
@@ -34,15 +39,18 @@ export type TurnTokens = ModelUsage & {
 };
 
 // A Handoff's reply tells the Contact the team will answer; with a mixed
-// question it also carries the answerable part. Every outcome that called the
-// Model carries its tokens, including a Handoff after a provider error.
+// question it also carries the answerable part. An answer that asks for
+// missing required Contact details carries the Handoff it put off, for the
+// caller to keep until the next turn. Every outcome that called the Model
+// carries its tokens, including a Handoff after a provider error.
 export type TurnOutcome =
-  | { kind: "answer"; reply: string; tokens: TurnTokens }
+  | { kind: "answer"; reply: string; pendingHandoff?: ModelHandoffReason; tokens: TurnTokens }
   | { kind: "handoff"; reason: HandoffReason; reply: string; tokens: TurnTokens }
   | { kind: "nothing_to_answer" };
 
 type Decision =
-  { kind: "answer"; reply: string } | { kind: "handoff"; reason: HandoffReason; reply: string };
+  | { kind: "answer"; reply: string; pendingHandoff?: ModelHandoffReason }
+  | { kind: "handoff"; reason: HandoffReason; reply: string };
 
 export type TurnDecision = Decision | { kind: "nothing_to_answer" };
 
@@ -60,8 +68,10 @@ export const splitTokens = (
   outcome: TurnOutcome,
 ): { decision: TurnDecision; tokens: TurnTokens } => {
   if (outcome.kind === "nothing_to_answer") return { decision: outcome, tokens: { ...noTokens } };
-  if (outcome.kind === "answer")
-    return { decision: { kind: outcome.kind, reply: outcome.reply }, tokens: outcome.tokens };
+  if (outcome.kind === "answer") {
+    const { tokens, ...decision } = outcome;
+    return { decision, tokens };
+  }
   const { kind, reason, reply, tokens } = outcome;
   return { decision: { kind, reason, reply }, tokens };
 };
@@ -108,20 +118,18 @@ export const createBotCore = ({
     { retryTransient = false }: { retryTransient?: boolean } = {},
   ): Promise<TurnOutcome> {
     const window = contextWindow(clock.now(), context);
-    const [{ behaviour, knowledgeBase, capture, links }, details, recent] = await Promise.all([
-      repository.getConfiguration(turn),
-      repository.getContactDetails(turn),
-      repository.listRecentMessages(turn, window),
-    ]);
+    const [{ behaviour, knowledgeBase, capture, links }, details, recent, pending] =
+      await Promise.all([
+        repository.getConfiguration(turn),
+        repository.getContactDetails(turn),
+        repository.listRecentMessages(turn, window),
+        repository.getPendingHandoff(turn),
+      ]);
     const messages = replayContext(recent, window);
     if (!messages) return { kind: "nothing_to_answer" };
-    // Required details are asked for once: if the Bot's latest reply asked,
-    // the Contact has answered it, and a Handoff now goes ahead regardless.
-    const latestBotReply = messages.findLast(
-      (message) => message.role === "assistant" && !message.text.startsWith(memberLabel),
-    );
-    const askedForDetails =
-      latestBotReply?.role === "assistant" && isDetailsRequest(latestBotReply.text);
+    // A request older than the context window no longer binds: a Contact who
+    // comes back later with something else is answered afresh.
+    const pendingHandoff = pending && pending.askedAt >= window.since ? pending.reason : null;
     const request: ModelRequest = {
       tools: modelTools(capture, links),
       instructions: renderInstructions(behaviour, capture, links),
@@ -172,11 +180,20 @@ export const createBotCore = ({
         const reply = checked.links.length
           ? configuredLinkReply(checked.links)
           : response.text.trim();
+        // Required details are asked for once. The Contact has now answered
+        // the request, so the Handoff it put off goes ahead with whatever they
+        // gave, whether or not the model hands off again.
+        if (pendingHandoff) return handoff(pendingHandoff, reply);
         if (checked.handoff) {
+          const { reason } = checked.handoff;
           const missing = missingRequired(capture, known);
-          if (missing.length && !askedForDetails)
-            return { kind: "answer", reply: detailsRequest(missing, reply) };
-          return handoff(checked.handoff.reason, reply);
+          if (missing.length)
+            return {
+              kind: "answer",
+              reply: detailsRequest(missing, reply),
+              pendingHandoff: reason,
+            };
+          return handoff(reason, reply);
         }
         if (reply) return { kind: "answer", reply };
         // A capture alone gets one chance to write the reply it left out.

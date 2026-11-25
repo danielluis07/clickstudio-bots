@@ -10,7 +10,11 @@ import {
 } from "@/modules/conversations/bot-lease";
 import { createBotReservation } from "@/modules/conversations/bot-reservation";
 import { recordSentWamid } from "@/modules/conversations/echoes";
-import { handOffAndNotify, type ConversationHandoffReason } from "@/modules/conversations/handoff";
+import {
+  handOffAndNotify,
+  type ConversationHandoffReason,
+  type ConversationPendingHandoff,
+} from "@/modules/conversations/handoff";
 import {
   createConversationRepository,
   serviceWindowOpen,
@@ -65,13 +69,17 @@ const createConversationBotRepository = (
             limit: pending.length,
           })
         : null;
-      const [recipient] = await db
+      const [found] = await db
         .select({
-          tenantId: conversation.tenantId,
-          phoneNumberId: channel.phoneNumberId,
-          wabaId: channel.wabaId,
-          credential: channel.credential,
-          to: contact.phone,
+          recipient: {
+            tenantId: conversation.tenantId,
+            phoneNumberId: channel.phoneNumberId,
+            wabaId: channel.wabaId,
+            credential: channel.credential,
+            to: contact.phone,
+          },
+          pendingReason: conversation.pendingHandoffReason,
+          pendingAt: conversation.pendingHandoffAt,
         })
         .from(conversation)
         .innerJoin(
@@ -87,7 +95,11 @@ const createConversationBotRepository = (
         pending,
         history: history?.messages ?? [],
         current: current?.messages ?? [],
-        recipient: recipient ?? null,
+        recipient: found?.recipient ?? null,
+        pendingHandoff:
+          found?.pendingReason && found.pendingAt
+            ? { reason: found.pendingReason, askedAt: found.pendingAt }
+            : null,
       };
     },
   };
@@ -105,6 +117,9 @@ export type BotTurnSnapshot = {
   readonly current: readonly BotTurnMessage[];
   // The latest messages, oldest first. It may include the current ones.
   readonly history: readonly BotTurnMessage[];
+  // The Handoff the Bot's latest reply put off to ask for missing required
+  // Contact details, and when it asked, if any.
+  readonly pendingHandoff: { reason: ConversationPendingHandoff; askedAt: Date } | null;
 };
 
 export type BotTurnDependencies = { db: Database; clock: Clock; notifier: Notifier };
@@ -131,6 +146,8 @@ export type LiveBotTurn = {
     text: string,
     options?: {
       handoffReason?: ConversationHandoffReason;
+      // Kept for the next turn when the reply asks for required details.
+      pendingHandoff?: ConversationPendingHandoff;
       beforeReserve?: (tx: Transaction) => Promise<void>;
     },
   ): Promise<string | { withheld: true } | null>;
@@ -185,7 +202,11 @@ export const runBotTurn = async <T>(
     return await respond({
       scope,
       conversationId,
-      snapshot: { current: snapshot.current, history: snapshot.history },
+      snapshot: {
+        current: snapshot.current,
+        history: snapshot.history,
+        pendingHandoff: snapshot.pendingHandoff,
+      },
       recipient: snapshot.recipient,
       async consume() {
         await repository.consume(conversationId, token, ids, clock.now());
@@ -196,16 +217,12 @@ export const runBotTurn = async <T>(
       async skip() {
         if (await repository.markSkipped(conversationId, token, clock.now())) await notify();
       },
-      async reserve(text, { handoffReason, beforeReserve } = {}) {
-        const reserved = await repository.reserve(
-          conversationId,
-          token,
-          ids,
-          text,
-          clock.now(),
+      async reserve(text, { handoffReason, pendingHandoff, beforeReserve } = {}) {
+        const reserved = await repository.reserve(conversationId, token, ids, text, clock.now(), {
           handoffReason,
+          pendingHandoff,
           beforeReserve,
-        );
+        });
         if (reserved !== null && typeof reserved !== "string") await notify();
         // A reserved Handoff notice reaches the inbox when it is sent, but
         // its Alerts are due now.

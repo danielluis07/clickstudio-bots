@@ -5,7 +5,11 @@ import type { ChannelRoute } from "@/modules/channels";
 import { botEligible } from "@/modules/conversations/bot-eligibility";
 import { botLeaseMs, botOwnership } from "@/modules/conversations/bot-lease";
 import { resolveUnresolvedEchoes } from "@/modules/conversations/echoes";
-import { handOff, type ConversationHandoffReason } from "@/modules/conversations/handoff";
+import {
+  handOff,
+  type ConversationHandoffReason,
+  type ConversationPendingHandoff,
+} from "@/modules/conversations/handoff";
 import { serviceWindowOpen } from "@/modules/conversations/repository";
 import type { TenantScope } from "@/modules/tenancy";
 import type { AlertPing } from "@/platform/notifier";
@@ -138,8 +142,16 @@ export const createBotReservation = (db: Database, scope: ChannelRoute, alerts?:
       ids: string[],
       text: string,
       now: Date,
-      handoffReason?: ConversationHandoffReason,
-      beforeReserve?: (tx: Transaction) => Promise<void>,
+      {
+        handoffReason,
+        pendingHandoff,
+        beforeReserve,
+      }: {
+        handoffReason?: ConversationHandoffReason;
+        // The model's Handoff this reply puts off to ask for required details.
+        pendingHandoff?: ConversationPendingHandoff;
+        beforeReserve?: (tx: Transaction) => Promise<void>;
+      } = {},
     ) {
       return transactionRaising(async (tx, raised) => {
         // Fencing check and eligibility in one update; the lease is never a DB lock.
@@ -209,6 +221,10 @@ export const createBotReservation = (db: Database, scope: ChannelRoute, alerts?:
             lastMessageAt: sql`greatest(${conversation.lastMessageAt}, ${now.toISOString()}::timestamptz)`,
             // Any other reply means the Model answered again.
             unavailableNoticeSent: handoffReason === "bot_unavailable",
+            // Set by a details request. The turn after one always hands off,
+            // so null here only restates what that Handoff already cleared.
+            pendingHandoffReason: pendingHandoff ?? null,
+            pendingHandoffAt: pendingHandoff ? now : null,
           })
           .where(ownsConversation(conversationId));
         return pending.id;

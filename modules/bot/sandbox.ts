@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
-import { botSandboxUsage } from "@/db/schema";
+import { botSandboxUsage, modelHandoffReasons } from "@/db/schema";
 import type { BotActivation } from "@/modules/bot/activation";
 import { readBotConfiguration } from "@/modules/bot/configuration";
 import type { Model } from "@/modules/bot/model";
@@ -36,6 +36,9 @@ export const sandboxInputSchema = z.strictObject({
   text: z.string().trim().min(1).max(4_096),
   history: z.array(sandboxMessageSchema).max(20),
   contact: sandboxContactSchema.optional(),
+  // The Handoff the Bot's latest reply put off to ask for required details,
+  // as the previous response returned it.
+  pendingHandoff: z.enum(modelHandoffReasons).nullable().optional(),
 });
 
 export type SandboxMessage = z.infer<typeof sandboxMessageSchema>;
@@ -112,6 +115,11 @@ export const createBotSandbox = ({
             contact = { ...contact, ...details, name: contact.name ?? details.name ?? null };
           },
           listRecentMessages: async () => messages,
+          // The transcript has no times: the request is as recent as this message.
+          getPendingHandoff: async () => {
+            const reason = parsed.data.pendingHandoff;
+            return reason ? { reason, askedAt: now } : null;
+          },
         },
       });
       const outcome = await core.respond({ scope, conversationId: "sandbox" });

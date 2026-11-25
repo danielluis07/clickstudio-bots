@@ -62,7 +62,6 @@ const requestedDetails: Record<ContactDetailField, string> = {
   need: "o que você precisa",
 };
 
-// Starts every request, so a later turn can tell the Bot already asked.
 const detailsRequestOpening = "Antes de chamar a equipe, me informe";
 
 const joinedInPortuguese = (items: string[]) =>
@@ -74,8 +73,6 @@ export const detailsRequest = (missing: ContactDetailField[], answered: string) 
   const request = `${detailsRequestOpening} ${joinedInPortuguese(missing.map((field) => requestedDetails[field]))}, por favor.`;
   return answered ? `${answered}\n\n${request}` : request;
 };
-
-export const isDetailsRequest = (text: string) => text.includes(detailsRequestOpening);
 
 // Before the owner's first save.
 export const disabledCapture: CaptureSettings = {

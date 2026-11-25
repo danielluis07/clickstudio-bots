@@ -1651,6 +1651,103 @@ test("a live Handoff first asks for missing required details, leaving the Bot in
     waiting: false,
     handoffReason: null,
   });
+  expect(await pendingHandoff(conversationId)).toBe("contact_request");
+});
+
+// A required name, then a live Handoff the Bot puts off to ask for it.
+const askedForName = async () => {
+  const seeded = await setup();
+  const { scope, clock, model, activation, conversationId, worker } = seeded;
+  await createCaptureSettingsEditor({ db, clock }).saveCapture(scope, {
+    enabled: true,
+    fields: { name: "required", email: "off", city: "off", need: "off" },
+  });
+  await activation.activate(scope);
+  model.script({
+    toolCalls: [{ id: "call-1", name: "handoff", input: { reason: "contact_request" } }],
+  });
+  await worker.run(conversationId);
+  // The Contact's next message.
+  const reply = async (text: string) => {
+    clock.advance(60_000);
+    await recordInboundTextMessage(db, seeded.route, {
+      wamid: crypto.randomUUID(),
+      from: "5511999990001",
+      profileName: null,
+      text,
+      sentAt: clock.now(),
+    });
+  };
+  return { ...seeded, reply };
+};
+
+const pendingHandoff = async (conversationId: string) =>
+  (
+    await db
+      .select({ reason: conversation.pendingHandoffReason })
+      .from(conversation)
+      .where(eq(conversation.id, conversationId))
+  )[0]?.reason;
+
+test("the Contact's next message completes the put-off Handoff even when the model only replies", async () => {
+  const { model, sender, conversationId, worker, repository, reply } = await askedForName();
+  await reply("Sou a Ana");
+  model.script({ text: "Obrigado, Ana!", toolCalls: [captureCall({ name: "Ana" })] });
+
+  await worker.run(conversationId);
+
+  expect(sender.sent.at(-1)?.text).toBe(
+    "Obrigado, Ana!\n\nCerto, vou chamar alguém da equipe para continuar o atendimento.",
+  );
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "team",
+    waiting: true,
+    handoffReason: "contact_request",
+    contact: { name: "Ana" },
+  });
+  expect(await pendingHandoff(conversationId)).toBeNull();
+});
+
+test("a Contact who returns after the context window is answered, not handed off", async () => {
+  const { clock, model, sender, conversationId, worker, repository, reply } = await askedForName();
+  clock.advance(8 * 24 * 60 * 60_000);
+  await reply("Quanto custa o corte?");
+  model.script({ text: "O corte custa R$ 80." });
+
+  await worker.run(conversationId);
+
+  expect(sender.sent.at(-1)?.text).toBe("O corte custa R$ 80.");
+  expect(await repository.getConversation(conversationId)).toMatchObject({ owner: "bot" });
+  expect(await pendingHandoff(conversationId)).toBeNull();
+});
+
+test("a Member's takeover clears the put-off Handoff, so the Bot answers after its return", async () => {
+  const { scope, model, sender, conversationId, worker, repository, reply, dependencies } =
+    await askedForName();
+  const controls = createHandoffControls(dependencies);
+  await controls.takeOver(scope, conversationId);
+  expect(await pendingHandoff(conversationId)).toBeNull();
+  await controls.returnToBot(scope, conversationId);
+  await reply("Quanto custa o corte?");
+  model.script({ text: "O corte custa R$ 80." });
+
+  await worker.run(conversationId);
+
+  expect(sender.sent.at(-1)?.text).toBe("O corte custa R$ 80.");
+  expect(await repository.getConversation(conversationId)).toMatchObject({ owner: "bot" });
+});
+
+test("marking the Conversation resolved clears the put-off Handoff while the Bot is in charge", async () => {
+  const { scope, model, conversationId, worker, repository, reply, dependencies } =
+    await askedForName();
+  await createHandoffControls(dependencies).resolve(scope, conversationId);
+  expect(await pendingHandoff(conversationId)).toBeNull();
+  await reply("Quanto custa o corte?");
+  model.script({ text: "O corte custa R$ 80." });
+
+  await worker.run(conversationId);
+
+  expect(await repository.getConversation(conversationId)).toMatchObject({ owner: "bot" });
 });
 
 test("a Bot capture never replaces a name a Member gave, but fills the other details", async () => {

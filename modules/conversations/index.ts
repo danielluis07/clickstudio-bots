@@ -61,6 +61,7 @@ export {
   handOffAndNotify,
   returnQuietHandoffs,
   type ConversationHandoffReason,
+  type ConversationPendingHandoff,
   type HandoffControls,
 } from "@/modules/conversations/handoff";
 export { recordImportedHistory, type ImportedHistory } from "@/modules/conversations/history";

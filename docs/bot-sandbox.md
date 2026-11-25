@@ -137,7 +137,8 @@ reader, retaining its ordering and Tenant isolation. Adding a setting changes th
 configuration reader and its inferred `BotConfiguration` type, without adding a
 repository method or changing live and sandbox wiring.
 
-The repository also reads and saves Contact details and reads recent messages;
+The repository also reads and saves Contact details, reads recent messages and
+reads the Handoff a details request put off;
 the Contact detail write remains separate from configuration. Live Schedule
 checks still read only Behaviour settings at each reply checkpoint, including
 after the Model call.

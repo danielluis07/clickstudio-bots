@@ -11,6 +11,11 @@ export type ConversationHandoffReason = NonNullable<
   (typeof conversation.$inferSelect)["handoffReason"]
 >;
 
+// A model Handoff the Bot put off to ask for required Contact details.
+export type ConversationPendingHandoff = NonNullable<
+  (typeof conversation.$inferSelect)["pendingHandoffReason"]
+>;
+
 // Handoffs a Member caused. After any of them a Member is on the Conversation,
 // so a "Bot indisponível" Handoff no longer returns on the Contact's next message.
 const memberHandoffReasons: readonly ConversationHandoffReason[] = [
@@ -63,6 +68,9 @@ export const handOff = async (
       handoffReason: reason,
       waiting: true,
       resumeOnContactMessage: reason === "bot_unavailable",
+      // Whatever the Bot put off to ask for details has now happened.
+      pendingHandoffReason: null,
+      pendingHandoffAt: null,
       // A Member on the Conversation hears of the next outage again.
       ...(byMember ? { unavailableNoticeSent: false } : {}),
     })
@@ -189,6 +197,9 @@ const resume = async (
     .set({
       owner: "bot",
       resumeOnContactMessage: false,
+      // Resolved or back from a Handoff: the Contact's next message starts afresh.
+      pendingHandoffReason: null,
+      pendingHandoffAt: null,
       // The automatic returns keep it: no Member acted, and no turn succeeded.
       ...(byMemberAt ? { returnedByMemberAt: byMemberAt, unavailableNoticeSent: false } : {}),
       ...(resolved ? { waiting: false, handoffReason: null } : {}),
