@@ -69,7 +69,7 @@ wait. A Contact who keeps writing is answered once their oldest unanswered
 message is 15 s old. A single message waits only the 3 s delay before its turn.
 The quiet threshold stays below the delay, because Meta timestamps are truncated
 to the second, so a job never waits on its own message. If the later job is
-lost, the sweep recovers the burst after two minutes. Sweep jobs are not delayed.
+lost, the sweep recovers the burst at its next run after two minutes. Sweep jobs are not delayed.
 The values are `burstWait` in `modules/bot/live.ts`.
 
 ## Reply gate
@@ -113,7 +113,7 @@ reconciling an own echo that arrived first. Member Handoffs, resumption and the
 waiting list are described in [Handoff ownership and controls](handoff.md). A retry finding pending without a
 wamid marks it failed and hands off as **Bot indisponível**; it never resends.
 
-The [sweep](inbox-operations.md#the-sweep), every five minutes, fails stuck
+The [sweep](inbox-operations.md#the-sweep), every 30 minutes, fails stuck
 pending sends once their lease is absent or expired, hands off those
 Conversations, clears stale leases, and re-enqueues eligible unanswered messages
 from recovered leases. It preserves healthy leases and publishes inbox

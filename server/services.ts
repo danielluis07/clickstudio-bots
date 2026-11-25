@@ -219,7 +219,7 @@ export const dailyCronRoute = createDailyCronRoute({
   ],
 });
 
-// Called every five minutes by a QStash schedule (ADR 0007).
+// Called every 30 minutes by a QStash schedule (ADR 0007).
 export const sweepRoute = createSweepRoute({
   config:
     env.QSTASH_CURRENT_SIGNING_KEY && env.QSTASH_NEXT_SIGNING_KEY

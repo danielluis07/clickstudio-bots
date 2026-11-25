@@ -32,6 +32,7 @@ import { isPlatformAdmin } from "@/modules/identity";
 import { annotateError, classifyError, logError } from "@/platform/diagnostics";
 import type { InboxDiagnostics } from "@/modules/webhook-inbox/diagnostics";
 import type { Clock } from "@/platform/clock";
+import { sweepIntervalMs } from "@/platform/qstash";
 import { notifyAlerts, notifyInbox, type AlertPing, type Notifier } from "@/platform/notifier";
 import type { LiveBot } from "@/modules/bot";
 
@@ -44,7 +45,7 @@ const stalledAfterFailureMs = 35 * 60_000;
 const stalledPerSweep = 100;
 // Past two requeues, a pending event that never failed means the queue is not
 // draining (#137). Failed events alert on their own, after their last replay.
-export const staleQueueAfterMs = 15 * 60_000;
+export const staleQueueAfterMs = stalledAfterMs + 2 * sweepIntervalMs;
 // Automatic replays of a failed event (#135), each measured from the failure
 // before it and each a full QStash delivery with its own retries. Together
 // they outlast an outage of several hours and alert well inside WhatsApp's

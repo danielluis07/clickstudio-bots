@@ -72,9 +72,17 @@ export const createQStashJobQueue = ({
   };
 };
 
+// How often the sweep runs. Every 30 minutes, not 5, so Neon's compute can
+// suspend between runs on the Free plan (ADR 0011): it suspends after 5
+// minutes without queries, so a five-minute sweep kept it running all month.
+// Back to 5 on a paid plan. Must divide 60 and stay under 58 (the stranded-
+// message window).
+export const sweepIntervalMinutes = 30;
+export const sweepIntervalMs = sweepIntervalMinutes * 60_000;
+
 // Creates or updates the QStash schedule that calls the sweep (ADR 0007).
 // The fixed id makes it safe to run again. A failed run is not retried: the
-// next one is five minutes away.
+// next one is one interval away.
 export const scheduleSweep = async ({
   token,
   baseUrl,
@@ -88,7 +96,7 @@ export const scheduleSweep = async ({
   return client.schedules.create({
     scheduleId: "sweep",
     destination: qstashJobUrl(appUrl, "sweep"),
-    cron: "*/5 * * * *",
+    cron: `*/${sweepIntervalMinutes} * * * *`,
     retries: 0,
   });
 };

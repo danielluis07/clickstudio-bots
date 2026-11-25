@@ -114,7 +114,8 @@ After storing, the webhook enqueues one QStash job per still-pending event,
 carrying only `{ inboxEventId }`, and returns 200. If enqueueing fails it returns
 500. The stored events stay pending, and Meta's redelivery enqueues them again.
 Meta retries for up to seven days. An event left pending without a live job is
-re-enqueued by the [sweep](inbox-operations.md#the-sweep) after five minutes.
+re-enqueued by the [sweep](inbox-operations.md#the-sweep) at its first run after
+five minutes.
 Redelivery can enqueue a duplicate
 job for an event that is already queued; processing treats it as a no-op.
 

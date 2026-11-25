@@ -3,8 +3,9 @@ import { isLocalUrl, scheduleSweep } from "@/platform/qstash";
 
 // Usage: bun run sweep:schedule, with the target environment's APP_URL,
 // QSTASH_TOKEN and QSTASH_URL (see docs/inbox-operations.md#the-sweep).
-// Creates or updates the QStash schedule that calls APP_URL's sweep every five
-// minutes (ADR 0007). Safe to run again after APP_URL or QSTASH_URL changes.
+// Creates or updates the QStash schedule that calls APP_URL's sweep every
+// `sweepIntervalMinutes` (ADR 0007). Safe to run again after APP_URL,
+// QSTASH_URL or the interval changes.
 if (!env.QSTASH_TOKEN) {
   console.error("QSTASH_TOKEN is required to schedule the sweep.");
   process.exit(1);

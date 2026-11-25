@@ -1,6 +1,6 @@
 # Recover stuck work with a sweep triggered by a QStash schedule
 
-A sweep runs every five minutes and puts stuck work back on the queue (#134). A QStash schedule with the fixed id `sweep` calls `POST /api/jobs/sweep`. The route runs only for a QStash signature bound to that exact URL, verified the same way as the job routes. Each run does three things:
+A sweep runs every five minutes and puts stuck work back on the queue (#134). Since 2026-11-25 it runs every 30 minutes while production is on Neon's Free plan (ADR 0011). A QStash schedule with the fixed id `sweep` calls `POST /api/jobs/sweep`. The route runs only for a QStash signature bound to that exact URL, verified the same way as the job routes. Each run does three things:
 
 - It re-enqueues `pending` inbox events received at least five minutes earlier, or, for an event whose job already failed, at least 35 minutes after the last failure.
 - It replays failed inbox events automatically, up to three times with backoff, before they alert and wait for an administrator (#135).

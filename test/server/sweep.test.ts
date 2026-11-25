@@ -94,7 +94,7 @@ test("a sweep whose tasks all succeed answers 200", async () => {
   expect(await response.json()).toEqual({ ok: true, tasks: [{ name: "only", ok: true }] });
 });
 
-test("the daily watchdog alerts when no sweep finished in the last 30 minutes", async () => {
+test("the daily watchdog alerts when no sweep finished within three intervals", async () => {
   const db = await createTestDatabase();
   onTestFinished(() => closeTestDatabase(db));
   const clock = createTestClock(new Date("2026-11-11T05:00:00Z"));

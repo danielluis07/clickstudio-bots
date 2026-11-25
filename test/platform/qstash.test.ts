@@ -181,7 +181,7 @@ describe("reading the sweep schedule", () => {
     withSchedules(
       Response.json({
         scheduleId: "sweep",
-        cron: "*/5 * * * *",
+        cron: "*/30 * * * *",
         createdAt: 0,
         destination: "https://bots.example.com/api/jobs/sweep",
         method: "POST",
