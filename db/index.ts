@@ -1,4 +1,5 @@
 import type { Database } from "@/db/database";
+import { databasePoolOptions } from "@/db/pool-options";
 import { env } from "@/platform/env";
 import { attachDatabasePool } from "@vercel/functions";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -7,7 +8,7 @@ import { Pool } from "pg";
 const globalForDb = globalThis as unknown as { pool?: Pool };
 
 const createPool = () => {
-  const pool = new Pool({ connectionString: env.DATABASE_URL });
+  const pool = new Pool(databasePoolOptions(env.DATABASE_URL));
   attachDatabasePool(pool);
   return pool;
 };

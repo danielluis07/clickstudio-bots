@@ -19,6 +19,7 @@ The report checks:
 - Selected provider and key presence, using Gateway precedence. This does not establish that a key is valid or the model is available.
 - Database connectivity and applied migration names against this checkout's migration folders, matching the installed Drizzle migrator. Missing history counts as pending; migrations unknown to this branch also fail readiness.
 - Presence of an owner membership. This does not verify a password or browser session.
+- That the role `DATABASE_URL` connects with has `statement_timeout`, `lock_timeout` and `idle_in_transaction_session_timeout` set, and cannot change the schema (not a superuser, owns no table, cannot create in `public` or the database). Both fail until `DATABASE_URL` uses the application role; see [Database roles](../README.md#database-roles).
 - An HTTP 200 response from `/entrar` at the configured `APP_URL` origin.
 - With `QSTASH_TOKEN` and a public `APP_URL`, that the QStash schedule `sweep` exists, is not paused and calls this `APP_URL`. It only reads the schedule. Locally it is skipped; see [the watchdog](inbox-operations.md#the-watchdog).
 

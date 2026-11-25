@@ -22,7 +22,15 @@ export const inspectDatabaseReadiness = async (
       exists(select 1 from information_schema.columns
         where table_schema = 'drizzle' and table_name = '__drizzle_migrations'
         and column_name = 'name') as has_migrations,
-      to_regclass('public.member') is not null as has_members`);
+      to_regclass('public.member') is not null as has_members,
+      current_setting('statement_timeout') as statement_timeout,
+      current_setting('lock_timeout') as lock_timeout,
+      current_setting('idle_in_transaction_session_timeout') as idle_in_transaction_session_timeout,
+      (select rolsuper from pg_roles where rolname = current_user)
+        or has_database_privilege(current_database(), 'CREATE')
+        or has_schema_privilege('public', 'CREATE')
+        or exists(select 1 from pg_tables
+          where schemaname = 'public' and pg_has_role(tableowner, 'USAGE')) as can_change_schema`);
     const applied = tables.has_migrations
       ? await query("select name from drizzle.__drizzle_migrations")
       : null;
@@ -34,6 +42,12 @@ export const inspectDatabaseReadiness = async (
       appliedMigrationNames:
         applied?.flatMap(({ name }) => (typeof name === "string" ? [name] : [])) ?? null,
       ownerAvailable: owner[0]?.available === true,
+      timeouts: {
+        statementTimeout: String(tables.statement_timeout),
+        lockTimeout: String(tables.lock_timeout),
+        idleInTransactionSessionTimeout: String(tables.idle_in_transaction_session_timeout),
+      },
+      canChangeSchema: tables.can_change_schema === true,
     };
   } catch (error) {
     await query("ROLLBACK");

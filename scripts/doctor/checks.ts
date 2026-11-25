@@ -8,6 +8,8 @@ export type DoctorCheck = {
     | "database"
     | "migrations"
     | "owner"
+    | "database_timeouts"
+    | "database_privileges"
     | "server"
     | "sweep_schedule"
     | "provider_probe";
@@ -18,6 +20,14 @@ export type DoctorCheck = {
 export type DatabaseReadiness = {
   appliedMigrationNames: string[] | null;
   ownerAvailable: boolean;
+  // As Postgres reports them for this connection's role; "0" means none.
+  timeouts: {
+    statementTimeout: string;
+    lockTimeout: string;
+    idleInTransactionSessionTimeout: string;
+  };
+  // A superuser, a table owner, or a role allowed to create objects.
+  canChangeSchema: boolean;
 };
 
 export type SweepSchedule = { destination: string; paused: boolean };
@@ -108,6 +118,38 @@ const checkSweepSchedule = async (
   );
 };
 
+type AddCheck = (name: DoctorCheck["name"], status: DoctorCheck["status"], message: string) => void;
+
+// The app's role carries its timeouts, since the pooled endpoint refuses
+// session `SET` (ADR 0003), and cannot change the schema (#148).
+const checkDatabaseRole = (database: DatabaseReadiness, add: AddCheck) => {
+  const { statementTimeout, lockTimeout, idleInTransactionSessionTimeout } = database.timeouts;
+  const missing = Object.entries({
+    statement_timeout: statementTimeout,
+    lock_timeout: lockTimeout,
+    idle_in_transaction_session_timeout: idleInTransactionSessionTimeout,
+  }).flatMap(([setting, value]) => (value === "0" ? [setting] : []));
+  add(
+    "database_timeouts",
+    missing.length ? "fail" : "pass",
+    missing.length
+      ? `O papel da DATABASE_URL não tem limite de tempo para: ${missing.join(", ")}. Configure-o com bun run db:roles.`
+      : `O papel da DATABASE_URL tem limites de tempo: comando ${statementTimeout}, bloqueio ${lockTimeout}, transação ociosa ${idleInTransactionSessionTimeout}.`,
+  );
+  add(
+    "database_privileges",
+    database.canChangeSchema ? "fail" : "pass",
+    database.canChangeSchema
+      ? "A DATABASE_URL usa um papel que pode alterar o esquema. Use o papel da aplicação, criado com bun run db:roles; migrações usam o papel dono do esquema."
+      : "O papel da DATABASE_URL não pode criar nem alterar tabelas.",
+  );
+};
+
+const skipDatabaseRole = (add: AddCheck) => {
+  add("database_timeouts", "skip", "Verificação depende do banco acessível.");
+  add("database_privileges", "skip", "Verificação depende do banco acessível.");
+};
+
 // This public report contains diagnoses only, never environment values or raw
 // errors: both may carry credentials. All external work is behind these ports.
 export const runDoctor = async ({
@@ -184,6 +226,7 @@ export const runDoctor = async ({
           ? "Há um responsável vinculado a um Tenant."
           : "Nenhum responsável encontrado. Conclua o convite de um Tenant ou prepare o Tenant de demonstração.",
       );
+      checkDatabaseRole(database, add);
     } catch {
       add(
         "database",
@@ -192,11 +235,13 @@ export const runDoctor = async ({
       );
       add("migrations", "skip", "Verificação depende do banco acessível.");
       add("owner", "skip", "Verificação depende do banco acessível.");
+      skipDatabaseRole(add);
     }
   } else {
     add("database", "skip", "Configure uma DATABASE_URL válida para inspecionar o banco.");
     add("migrations", "skip", "Verificação depende do banco acessível.");
     add("owner", "skip", "Verificação depende do banco acessível.");
+    skipDatabaseRole(add);
   }
 
   if (appUrlValid) {
