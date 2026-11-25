@@ -1,6 +1,6 @@
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { sandboxInputSchema } from "@/modules/bot";
+import { unwrap } from "@/trpc/errors";
 import { createTRPCRouter, tenantProcedure } from "@/trpc/init";
 
 const failures = {
@@ -18,15 +18,13 @@ const failures = {
 } as const;
 
 export const sandboxRouter = createTRPCRouter({
-  status: tenantProcedure.input(z.void()).query(async ({ ctx }) => {
-    const result = await ctx.sandbox.status(ctx.scope);
-    if (!result.ok) throw new TRPCError(failures[result.error]);
-    return result;
-  }),
+  status: tenantProcedure
+    .input(z.void())
+    .query(async ({ ctx }) => unwrap(await ctx.sandbox.status(ctx.scope), failures)),
 
-  respond: tenantProcedure.input(sandboxInputSchema).mutation(async ({ ctx, input }) => {
-    const result = await ctx.sandbox.respond(ctx.scope, input);
-    if (!result.ok) throw new TRPCError(failures[result.error]);
-    return result;
-  }),
+  respond: tenantProcedure
+    .input(sandboxInputSchema)
+    .mutation(async ({ ctx, input }) =>
+      unwrap(await ctx.sandbox.respond(ctx.scope, input), failures),
+    ),
 });
