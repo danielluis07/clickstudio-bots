@@ -100,6 +100,7 @@ const replies = createReplyService({
       if (++sends === 3) throw new Error("refused");
       return { wamid: `wamid.SEED.OUT${sends}` };
     },
+    async indicateTyping() {},
   }),
 });
 const [anaConversation] = await db

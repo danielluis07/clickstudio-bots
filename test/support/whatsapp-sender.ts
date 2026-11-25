@@ -3,9 +3,14 @@ import { RetryableError } from "@/platform/retryable";
 import { CredentialRejectedError } from "@/platform/whatsapp-credentials";
 
 type SentText = Parameters<WhatsAppSender["sendText"]>[0];
+type TypingIndicator = Parameters<WhatsAppSender["indicateTyping"]>[0];
 
 export type TestWhatsAppSender = WhatsAppSender & {
   sent: SentText[];
+  // Every typing indicator asked of Meta, whether it succeeded or not.
+  typing: TypingIndicator[];
+  // Meta refuses every typing indicator from now on.
+  failTyping(): void;
   // Every call to `sendText`, whether Meta accepted it or not.
   attempts: number;
   // The next send may or may not have reached Meta.
@@ -26,10 +31,19 @@ export const createTestWhatsAppSender = (): TestWhatsAppSender => {
   let refusals = 0;
   let credentialRejected = false;
   let onAccepted: ((wamid: string) => Promise<unknown>) | null = null;
+  let typingFails = false;
 
   const sender: TestWhatsAppSender = {
     sent,
+    typing: [],
     attempts: 0,
+    failTyping: () => {
+      typingFails = true;
+    },
+    indicateTyping: async (input) => {
+      sender.typing.push(input);
+      if (typingFails) throw new Error("WhatsApp typing indicator refused");
+    },
     failNext: () => {
       shouldFail = true;
     },

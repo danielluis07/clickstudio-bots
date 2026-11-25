@@ -18,6 +18,10 @@ export const conversationAnswererLabels = {
   team: "Equipe atendendo",
 } as const;
 
+// The Bot is working on a reply to the Contact's latest messages (#229). Not
+// "respondendo", which says the Bot is in charge of the Conversation.
+export const botReplyingLabel = "Bot digitando…";
+
 // On the waiting list: a Handoff no Member has marked "Resolvida" yet.
 export const openConversationLabel = "Em aberto";
 

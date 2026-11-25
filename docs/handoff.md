@@ -207,9 +207,9 @@ The Bot lease (`bot_lease_token`, `bot_lease_until`) is written only by
 `claim`, `release` and `clearExpired` in `bot-turns.ts` (see
 [Locks and leases](locking.md#leases)). It never changes the state, but it
 fences the writes a live turn makes. The reply gate's Handoffs pass the
-turn's token, so a turn whose lease expired cannot hand off. Reservation
-renews the lease only while it still holds the token and the Conversation is
-Bot-owned. Every other transition ignores the lease. A turn that is running
+turn's token, so a turn whose lease expired cannot hand off. A skipped turn's
+`bot_skipped_at` is fenced the same way. Reservation renews the lease only
+while it still holds the token and the Conversation is Bot-owned. Every other transition ignores the lease. A turn that is running
 when one of them commits finds out at reservation, which refuses a team-owned
 Conversation or a settled snapshot.
 

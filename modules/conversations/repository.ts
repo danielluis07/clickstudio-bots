@@ -2,6 +2,7 @@ import { and, desc, eq, ilike, inArray, like, or, sql, type SQL } from "drizzle-
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Database } from "@/db/database";
 import { contact, conversation, handoffEvent, member, message, user } from "@/db/schema";
+import { botReplyingUntil } from "@/modules/conversations/bot-replying";
 import { recordSentWamid } from "@/modules/conversations/echoes";
 import { handOff } from "@/modules/conversations/handoff";
 import { currentText, editedAt, revokedAt } from "@/modules/conversations/message-text";
@@ -103,6 +104,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
         waiting: conversation.waiting,
         contact: contactPanelFields,
         serviceWindowClosesAt: serviceWindowClosesAt(),
+        botReplyingUntil: botReplyingUntil(scope),
       })
       .from(conversation)
       .innerJoin(contact, eq(contact.id, conversation.contactId))
@@ -134,6 +136,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
           waiting: conversation.waiting,
           contact: contactFields,
           lastMessageAt: conversation.lastMessageAt,
+          botReplyingUntil: botReplyingUntil(scope),
           messageType: message.type,
           messageText: currentText,
           revokedAt,

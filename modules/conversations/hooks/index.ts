@@ -25,6 +25,7 @@ export {
   formatContactPhone,
 } from "@/modules/conversations/hooks/contact-display";
 export {
+  botReplyingLabel,
   conversationAnswererLabels,
   conversationFilters,
   conversationStatusLine,

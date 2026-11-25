@@ -1,7 +1,8 @@
 import { fakeGraphPort } from "@/test/e2e/environment";
 
 // Stands in for Meta's Graph API while the browser suite runs: it accepts
-// every text send and remembers it, so a test can check what reached "Meta".
+// every text send and remembers it, so a test can check what reached "Meta",
+// and accepts typing indicators without remembering them.
 // Anything else gets Meta's error shape, so an unexpected call fails loudly.
 
 type Send = { phoneNumberId: string; authorization: string | null; to: string; text: string };
@@ -19,7 +20,10 @@ Bun.serve({
 
     const send = pathname.match(sendPath);
     if (request.method === "POST" && send) {
-      const body = (await request.json()) as { to: string; text: { body: string } };
+      const body = (await request.json()) as
+        { status: "read" } | { status?: undefined; to: string; text: { body: string } };
+      // A read receipt with a typing indicator sends nothing to the Contact.
+      if (body.status === "read") return Response.json({ success: true });
       sends.push({
         phoneNumberId: send[1],
         authorization: request.headers.get("authorization"),

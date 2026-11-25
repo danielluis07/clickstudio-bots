@@ -18,6 +18,7 @@ import {
 import type { Database, Transaction } from "@/db/database";
 import { channel, contact, conversation, message, organization } from "@/db/schema";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
+import { botEligible } from "@/modules/conversations/bot-eligibility";
 import type { TenantScope } from "@/modules/tenancy";
 import { recordSentWamid, resolveUnresolvedEchoes } from "@/modules/conversations/echoes";
 import {
@@ -98,19 +99,6 @@ export const countContactBotReplies = async (
     );
   return replies!.total;
 };
-
-// The Bot may reply in a Conversation only while it owns it and its Channel is
-// activated, unpaused, subscribed and healthy. The reply gate reads this and
-// the reservation fences on it, so both always agree. An unhealthy Channel
-// leaves its Conversations with the Bot, which resumes once it is healthy:
-// Members could not send from it either (#145).
-const botEligible = sql`(${conversation.owner} = 'bot' and exists(
-  select 1 from ${channel} where ${channel.id} = ${conversation.channelId}
-  and ${channel.botEnabled} and not ${channel.botPaused} and ${channel.subscriptionStatus} = 'subscribed'
-  and ${channel.health} = 'healthy'
-  and exists(select 1 from ${organization} where ${organization.id} = ${channel.tenantId}
-    and ${organization.canceledAt} is null)
-))`;
 
 // Only verified jobs and daily maintenance call this resolver. It derives
 // proof from the stored Channel phone-number-id, never a request's Tenant id.
@@ -426,6 +414,21 @@ const createConversationBotRepository = (
           ),
         );
     },
+    // Fenced like `consume`: a turn whose lease expired records nothing.
+    async markSkipped(conversationId: string, token: string, now: Date) {
+      const skipped = await db
+        .update(conversation)
+        .set({ botSkippedAt: now })
+        .where(
+          and(
+            ownsConversation(conversationId),
+            eq(conversation.botLeaseToken, token),
+            gt(conversation.botLeaseUntil, now),
+          ),
+        )
+        .returning({ id: conversation.id });
+      return skipped.length > 0;
+    },
     async clearExpired(conversationId: string, now: Date) {
       return db
         .update(conversation)
@@ -504,6 +507,9 @@ export type LiveBotTurn = {
   readonly recipient: Omit<Parameters<WhatsAppSender["sendText"]>[0], "text">;
   // Marks the snapshot answered without a Bot reply.
   consume(): Promise<void>;
+  // Leaves the snapshot unanswered on purpose, as outside the Schedule: the
+  // inbox stops showing the Bot replying to it (#229).
+  skip(): Promise<void>;
   // Stores the Bot reply as pending, the durable barrier before sending, and
   // returns its id. Null when the lease, eligibility, service window or
   // snapshot no longer hold. `beforeReserve` runs in the same transaction,
@@ -572,6 +578,11 @@ export const runBotTurn = async <T>(
       async consume() {
         await repository.consume(conversationId, token, ids, clock.now());
         followUp = true;
+        // The inbox stops showing the Bot replying.
+        await notify();
+      },
+      async skip() {
+        if (await repository.markSkipped(conversationId, token, clock.now())) await notify();
       },
       async reserve(text, { handoffReason, beforeReserve } = {}) {
         const reserved = await repository.reserve(

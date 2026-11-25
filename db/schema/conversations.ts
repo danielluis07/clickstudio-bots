@@ -105,6 +105,10 @@ export const conversation = pgTable(
     returnedByMemberAt: timestamp("returned_by_member_at", { withTimezone: true }),
     botLeaseToken: text("bot_lease_token"),
     botLeaseUntil: timestamp("bot_lease_until", { withTimezone: true }),
+    // When a Bot turn last left the Contact's messages unanswered on purpose,
+    // such as outside the Schedule. The inbox stops showing the Bot replying
+    // to the messages sent before it (#229).
+    botSkippedAt: timestamp("bot_skipped_at", { withTimezone: true }),
     // When the latest message was sent; the inbox lists the most recent first.
     lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull(),
     ...timestamps(),
