@@ -824,6 +824,28 @@ test("a retried attempt records the tokens it used before the transient failure"
   ]);
 });
 
+test("a turn record shows how long the turn waited on the Model, a timed-out call included", async () => {
+  const { scope, model, clock, activation, conversationId, worker } = await setup();
+  await activation.activate(scope);
+  model.script(overloaded(), { text: "O corte custa R$ 80." });
+  const waits = [10_000, 1_500];
+  const generate = model.generate;
+  model.generate = async (request) => {
+    clock.advance(waits.shift()!);
+    return generate(request);
+  };
+  expect(await worker.run(conversationId, { attempt: 1 })).toBe("retry");
+  expect(await worker.run(conversationId, { attempt: 2 })).toBe("sent");
+  const records = await db
+    .select({ outcome: botTurnRecord.outcome, modelDurationMs: botTurnRecord.modelDurationMs })
+    .from(botTurnRecord)
+    .orderBy(botTurnRecord.at);
+  expect(records).toEqual([
+    { outcome: "retried", modelDurationMs: 10_000 },
+    { outcome: "sent", modelDurationMs: 1_500 },
+  ]);
+});
+
 test("a reservation that loses the last reply slot to a concurrent turn asks for a retry", async () => {
   const { scope, model, sender, activation, conversationId, worker, repository } = await setup({
     ...createTestBotAllowance(),

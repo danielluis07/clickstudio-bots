@@ -14,6 +14,8 @@ export type BotTurnRecord = {
   // None when the turn ended before calling the Model.
   tokens?: TurnTokens;
   durationMs: number;
+  // None when the turn ended before calling the Model.
+  modelDurationMs?: number;
 };
 
 export const recordBotTurn = async (db: Database, scope: ChannelRoute, record: BotTurnRecord) => {
@@ -28,6 +30,8 @@ export const recordBotTurn = async (db: Database, scope: ChannelRoute, record: B
     cacheWriteTokens: record.tokens?.cacheWriteTokens ?? 0,
     toolRoundTrips: record.tokens?.toolRoundTrips ?? 0,
     durationMs: Math.max(0, Math.round(record.durationMs)),
+    modelDurationMs:
+      record.modelDurationMs === undefined ? null : Math.max(0, Math.round(record.modelDurationMs)),
   });
 };
 

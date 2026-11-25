@@ -105,6 +105,7 @@ test("a sent reply records its outcome, tokens and duration under its Tenant", a
       cacheWriteTokens: 40,
       toolRoundTrips: 0,
       durationMs: 1500,
+      modelDurationMs: 1500,
     },
   ]);
 });

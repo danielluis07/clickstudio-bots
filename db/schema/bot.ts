@@ -138,6 +138,10 @@ export const botTurnRecord = pgTable(
     cacheWriteTokens: integer("cache_write_tokens").notNull(),
     toolRoundTrips: integer("tool_round_trips").notNull(),
     durationMs: integer("duration_ms").notNull(),
+    // Of `durationMs`, the time spent waiting on the Model, including a call
+    // that timed out. Null when the turn never called it, and on rows written
+    // before it was measured.
+    modelDurationMs: integer("model_duration_ms"),
   },
   (t) => [
     index("bot_turn_record_tenant_id_at_idx").on(t.tenantId, t.at),

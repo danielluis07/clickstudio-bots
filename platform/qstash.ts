@@ -1,11 +1,19 @@
 import { Client, Receiver } from "@upstash/qstash";
 
-// Delivery retries per job type, never left to the plan's default. QStash
-// backs off about 12 s, 2.5 min, then 30 min: enough to outlast a crashed
-// Bot turn's two-minute lease, and for `botTurnAttempts` (`@/modules/bot`)
-// deliveries after a transient Model failure. The sweep re-enqueues whatever
-// is still stuck.
+// Delivery retries per job type, never left to the plan's default. The sweep
+// re-enqueues whatever is still stuck.
 const deliveryRetries = { "process-inbox-event": 3, "run-bot-turn": 3 } as const;
+
+// QStash's default backoff (about 12 s, 2.5 min, then 30 min) suits inbox
+// events. A Contact waits on a Bot job's retry, which most often follows a
+// transient Model failure, so it comes back after 2 s, then 30 s, then 2 min
+// (`retried` counts from 0). The later ones give a rate limit time to clear,
+// and together they still outlast a crashed turn's two-minute lease. The
+// `botTurnAttempts` (`@/modules/bot`) deliveries end about 32 s after the
+// first.
+const retryDelays: Partial<Record<keyof typeof deliveryRetries, string>> = {
+  "run-bot-turn": "min(120000, 2000 * pow(15, retried))",
+};
 
 // A job is its type plus ids; the type names the route that handles it. A
 // delay postpones delivery and never reaches the handler.
@@ -45,6 +53,7 @@ export const createQStashJobQueue = ({
           url: qstashJobUrl(appUrl, type),
           body: ids,
           retries: deliveryRetries[type],
+          ...(retryDelays[type] ? { retryDelay: retryDelays[type] } : {}),
           ...(delaySeconds ? { delay: delaySeconds } : {}),
           ...(type === "process-inbox-event"
             ? { failureCallback: qstashJobUrl(appUrl, "inbox-event-failed") }

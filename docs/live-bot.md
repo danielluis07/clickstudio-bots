@@ -132,10 +132,12 @@ before. There is still no fallback provider.
 - **Model.** A timeout, a 408/409/429 or a 5xx (Anthropic or AI Gateway) is
   retryable. The adapter never retries within the turn. Instead the turn
   reserves nothing and releases its lease, and the job answers 503 without
-  alerting, so QStash delivers it again (about 12 s, then 2.5 min later). The
-  job reads its attempt from `Upstash-Retried`. On attempt `botTurnAttempts`
-  (3), or when the count is missing, the turn hands off as **Bot
-  indisponível**: a Contact waits about three minutes at most. Each attempt
+  alerting, so QStash delivers it again 2 s, then 30 s later (the job's
+  `retryDelay` in `platform/qstash.ts`; a fourth delivery, 2 min after the
+  third, outlasts a crashed turn's lease). The job reads its attempt from
+  `Upstash-Retried`. On attempt `botTurnAttempts` (3), or when the count is
+  missing, the turn hands off as **Bot indisponível**: a Contact waits about a
+  minute at most, counting each attempt's 10 s Model timeout. Each attempt
   generates the reply again, and each retried one writes a `retried`
   [turn record](#turn-records) with the tokens it used. A Model error that is
   not retryable, such as a 400, hands off at once.
@@ -166,7 +168,9 @@ Issue: [#137](https://github.com/danielluis07/clickstudio-bots/issues/137).
 Every live turn that completes writes one `bot_turn_record` row under its
 Tenant: when it finished, how it ended (`sent`, `skipped` or `handoff`), the
 Handoff reason, the Model's input, output, cache-read and cache-write tokens,
-tool round trips and the turn's duration in milliseconds. A Model-requested
+tool round trips, the turn's duration in milliseconds and how much of it was
+spent waiting on the Model (`model_duration_ms`, including a call that timed
+out; null when the turn never called the Model). A Model-requested
 Handoff that also sends a reply is recorded as `handoff`. A skip before the
 Model records zero tokens. The row holds counts and codes only, never message
 text, names or phone numbers. An attempt its job retries after a
