@@ -75,6 +75,14 @@ const before = (time: AnyPgColumn, id: AnyPgColumn, cursor: { at: Date; id: stri
     ? sql`(${time}, ${id}) < (${cursor.at.toISOString()}::timestamptz, ${cursor.id})`
     : undefined;
 
+// The Conversation's latest message, which the list previews. The subquery's
+// own `message` shadows the joined one, so it reads every message of the
+// row's Conversation.
+const latestMessageId = () =>
+  sql<string | null>`(select ${message.id} from ${message}
+    where ${message.conversationId} = ${conversation.id}
+    order by ${message.sentAt} desc, ${message.id} desc limit 1)`;
+
 // Fetches one row past the page to learn whether another page follows.
 const toPage = <Row, Cursor>(rows: Row[], limit: number, cursorOf: (row: Row) => Cursor) => {
   const hasMore = rows.length > limit;
@@ -126,9 +134,13 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
           waiting: conversation.waiting,
           contact: contactFields,
           lastMessageAt: conversation.lastMessageAt,
+          messageType: message.type,
+          messageText: currentText,
+          revokedAt,
         })
         .from(conversation)
         .innerJoin(contact, eq(contact.id, conversation.contactId))
+        .leftJoin(message, eq(message.id, latestMessageId()))
         .where(
           and(
             eq(conversation.tenantId, scope.tenantId),
@@ -147,7 +159,16 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
         lastMessageAt: row.lastMessageAt,
         id: row.id,
       }));
-      return { conversations: page, nextCursor };
+      return {
+        conversations: page.map(({ messageType, messageText, revokedAt, ...row }) => ({
+          ...row,
+          // Null only for a Conversation with no message yet.
+          lastMessage: messageType
+            ? { type: messageType, text: messageText, revoked: revokedAt !== null }
+            : null,
+        })),
+        nextCursor,
+      };
     },
 
     // The latest messages in the order they were sent; the cursor pages back to

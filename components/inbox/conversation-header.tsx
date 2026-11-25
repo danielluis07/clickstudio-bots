@@ -7,6 +7,7 @@ import {
   contactDisplayName,
   conversationAnswererLabels,
   formatContactPhone,
+  openConversationLabel,
 } from "@/modules/conversations/hooks";
 import type { RouterOutput } from "@/trpc/routers/_app";
 
@@ -51,7 +52,7 @@ export function ConversationHeader({
         <p className="truncate text-xs text-muted-foreground">
           {formatContactPhone(conversation.contact.phone)} ·{" "}
           {conversationAnswererLabels[conversation.owner]}
-          {conversation.waiting && " · Aguardando"}
+          {conversation.waiting && ` · ${openConversationLabel}`}
         </p>
       </div>
       <div className="order-last basis-full sm:order-none sm:basis-auto">
