@@ -1,13 +1,13 @@
-import { inArray, like } from "drizzle-orm";
+import { like } from "drizzle-orm";
 import { db } from "@/db";
-import { channel, memberActivity, organization, signInAttempt, user } from "@/db/schema";
-import { resolveChannelPhoneNumber } from "@/modules/channels";
+import { channel, organization, signInAttempt, user } from "@/db/schema";
 import { recordInboundTextMessage } from "@/modules/conversations";
 import { createPlatformAdmin } from "@/modules/identity";
 import { createTenantOnboarding } from "@/modules/tenancy";
 import { systemClock } from "@/platform/clock";
 import { env } from "@/platform/env";
 import { createWhatsAppTokenCipher } from "@/platform/whatsapp-credentials";
+import { deleteSeededTenants, requireChannelRoute } from "@/scripts/support/seed-tenant";
 import { e2eAccessToken, e2eDatabaseUrl, type E2eFixtures } from "@/test/e2e/environment";
 
 // Usage: run by the browser suite's global setup (docs/browser-tests.md).
@@ -23,17 +23,10 @@ const emailDomain = "e2e.example.com";
 const password = "senha-e2e-123";
 
 // The suite's Tenants all have an "e2e-" slug, and its users this domain.
-const stale = await db
-  .select({ id: organization.id })
-  .from(organization)
-  .where(like(organization.slug, "e2e-%"));
-const staleIds = stale.map(({ id }) => id);
-if (staleIds.length > 0) {
-  await db.delete(organization).where(inArray(organization.id, staleIds));
-  // Allowed by the append-only trigger now that the Tenants are gone.
-  await db.delete(memberActivity).where(inArray(memberActivity.tenantId, staleIds));
-}
-await db.delete(user).where(like(user.email, `%@${emailDomain}`));
+await deleteSeededTenants(db, {
+  tenantWhere: like(organization.slug, "e2e-%"),
+  userWhere: like(user.email, `%@${emailDomain}`),
+});
 // A rerun within 15 minutes must not start near the sign-in attempt limit.
 await db.delete(signInAttempt);
 
@@ -84,8 +77,7 @@ const seedTenant = async (input: {
     credential: cipher.encrypt(e2eAccessToken, context),
     subscriptionFields: [],
   });
-  const route = await resolveChannelPhoneNumber(db, input.phoneNumberId);
-  if (!route) throw new Error(`No Channel route for ${input.name}`);
+  const route = await requireChannelRoute(db, input.phoneNumberId);
   // Received now, so the 24-hour service window is open.
   const conversationId = await recordInboundTextMessage(db, route, {
     wamid: `wamid.E2E.${input.slug}`,

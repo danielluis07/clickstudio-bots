@@ -1,8 +1,6 @@
-import { hashPassword } from "better-auth/crypto";
 import { desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { channel, conversation, member, organization, user } from "@/db/schema";
-import { resolveChannelPhoneNumber } from "@/modules/channels";
 import {
   createReplyService,
   recordInboundTextMessage,
@@ -10,10 +8,15 @@ import {
   recordMessageEcho,
   recordMessageStatus,
 } from "@/modules/conversations";
-import { createUserRepository } from "@/modules/identity";
 import { createMemberManagement, resolveTenantScope } from "@/modules/tenancy";
 import { systemClock } from "@/platform/clock";
 import { env } from "@/platform/env";
+import {
+  createUserFactory,
+  deleteSeededTenants,
+  refuseNonLocalSeed,
+  requireChannelRoute,
+} from "@/scripts/support/seed-tenant";
 
 // Usage: bun run db:seed
 // Recreates a demo Tenant on the dev database: an owner who can sign in, an
@@ -21,12 +24,7 @@ import { env } from "@/platform/env";
 // by a removed Member, a reply from the WhatsApp Business app, and edited and
 // deleted messages. Times are relative to now, so re-run it to
 // reopen the window.
-// Local `.env` holds the dev branch; production's URL lives only in Vercel.
-// A local APP_URL is the sign that this is not a deployment.
-if (!["localhost", "127.0.0.1", "[::1]"].includes(new URL(env.APP_URL).hostname)) {
-  console.error(`Refusing to seed: APP_URL (${env.APP_URL}) is not local.`);
-  process.exit(1);
-}
+refuseNonLocalSeed();
 
 const tenantId = "seed-tenant";
 const ownerEmail = "dono.teste@example.com";
@@ -34,23 +32,14 @@ const attendantEmail = "atendente.teste@example.com";
 const password = process.env.SEED_PASSWORD ?? "senha-teste-123";
 const hours = (count: number) => new Date(Date.now() - count * 60 * 60 * 1000);
 
-await db.delete(organization).where(inArray(organization.id, [tenantId]));
-await db.delete(user).where(inArray(user.email, [ownerEmail, attendantEmail]));
+await deleteSeededTenants(db, {
+  tenantWhere: eq(organization.id, tenantId),
+  userWhere: inArray(user.email, [ownerEmail, attendantEmail]),
+});
 
-const users = createUserRepository(db);
-const passwordHash = await hashPassword(password);
-const owner = await users.createWithPassword({
-  name: "Olga Dona",
-  email: ownerEmail,
-  emailVerified: true,
-  passwordHash,
-});
-const attendant = await users.createWithPassword({
-  name: "Ari Atendente",
-  email: attendantEmail,
-  emailVerified: true,
-  passwordHash,
-});
+const createUser = await createUserFactory(db, password);
+const owner = await createUser({ name: "Olga Dona", email: ownerEmail });
+const attendant = await createUser({ name: "Ari Atendente", email: attendantEmail });
 await db
   .insert(organization)
   .values({ id: tenantId, name: "Clínica Teste", slug: "clinica-teste" });
@@ -68,7 +57,7 @@ await db.insert(channel).values({
   subscriptionFields: [],
 });
 
-const route = (await resolveChannelPhoneNumber(db, "999000000000001"))!;
+const route = await requireChannelRoute(db, "999000000000001");
 const ownerScope = (await resolveTenantScope(db, { userId: owner.id }))!;
 const attendantScope = (await resolveTenantScope(db, { userId: attendant.id }))!;
 const receive = (wamid: string, from: string, profileName: string, text: string, sentAt: Date) =>

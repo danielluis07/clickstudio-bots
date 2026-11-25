@@ -67,51 +67,49 @@ export const mailer = createResendMailer({
   from: env.EMAIL_FROM,
 });
 
+// The wiring every service shares.
+const base = { db, clock: systemClock };
+
 const dependencies = {
-  db,
+  ...base,
   mailer,
-  clock: systemClock,
   appUrl: env.APP_URL,
 };
 
 export const tenantOnboarding = createTenantOnboarding(dependencies);
 export const tenantLifecycle = createTenantLifecycle({
-  db,
-  clock: systemClock,
+  ...base,
   getWhatsApp: createWhatsAppGateway,
 });
 
 export const memberManagement = createMemberManagement(dependencies);
 
 export const channelService = createChannelService({
-  db,
-  clock: systemClock,
+  ...base,
   getWhatsApp: createWhatsAppGateway,
 });
 
-export const knowledgeBaseEditor = createKnowledgeBaseEditor({ db, clock: systemClock });
+export const knowledgeBaseEditor = createKnowledgeBaseEditor(base);
 
-export const botSettingsEditor = createBotSettingsEditor({ db, clock: systemClock });
+export const botSettingsEditor = createBotSettingsEditor(base);
 
-export const botActivation = createBotActivation({ db, clock: systemClock });
-export const handoffControls = createHandoffControls({ db, clock: systemClock, notifier });
-export const contactDeletion = createContactDeletion({ db, clock: systemClock, notifier });
+export const botActivation = createBotActivation(base);
+export const handoffControls = createHandoffControls({ ...base, notifier });
+export const contactDeletion = createContactDeletion({ ...base, notifier });
 export const conversationRepository = (scope: TenantScope) =>
   createConversationRepository(db, scope);
 export const tenantRepository = (scope: TenantScope) => createTenantRepository(db, scope);
-export const memberAlerts = (scope: TenantScope) =>
-  createMemberAlerts({ db, clock: systemClock }, scope);
+export const memberAlerts = (scope: TenantScope) => createMemberAlerts(base, scope);
 
 export const memberAlertPreferences = (scope: TenantScope) =>
-  createMemberAlertPreferences({ db, clock: systemClock }, scope);
+  createMemberAlertPreferences(base, scope);
 export const conversationStats = createConversationStats({
-  db,
-  clock: systemClock,
+  ...base,
   readBusinessHours: async (scope) => (await readBotSettings(db, scope)).hours,
 });
 
-export const captureSettingsEditor = createCaptureSettingsEditor({ db, clock: systemClock });
-export const linkSettingsEditor = createLinkSettingsEditor({ db, clock: systemClock });
+export const captureSettingsEditor = createCaptureSettingsEditor(base);
+export const linkSettingsEditor = createLinkSettingsEditor(base);
 
 const model = createBotModel({
   gatewayApiKey: env.AI_GATEWAY_API_KEY,
@@ -122,12 +120,11 @@ const queue = env.QSTASH_TOKEN
   ? createQStashJobQueue({ token: env.QSTASH_TOKEN, baseUrl: env.QSTASH_URL, appUrl: env.APP_URL })
   : null;
 
-export const botAllowance = createBotAllowance({ db, clock: systemClock, mailer });
+export const botAllowance = createBotAllowance({ ...base, mailer });
 
 export const liveBot = queue
   ? createLiveBot({
-      db,
-      clock: systemClock,
+      ...base,
       model,
       queue,
       notifier,
@@ -137,15 +134,13 @@ export const liveBot = queue
   : null;
 
 export const botSandbox = createBotSandbox({
-  db,
-  clock: systemClock,
+  ...base,
   model,
   activation: botActivation,
 });
 
 export const replyService = createReplyService({
-  db,
-  clock: systemClock,
+  ...base,
   notifier,
   getSender: createWhatsAppGateway,
 });
@@ -153,8 +148,7 @@ export const replyService = createReplyService({
 export const webhookInbox =
   env.META_APP_SECRET && env.QSTASH_TOKEN
     ? createWebhookInbox({
-        db,
-        clock: systemClock,
+        ...base,
         notifier,
         diagnostics,
         bot: liveBot,
@@ -214,7 +208,7 @@ export const dailyCronRoute = createDailyCronRoute({
     // Vercel calls this independently of QStash, so it notices a dead sweep.
     {
       name: "alert-stale-sweep",
-      run: () => alertStaleSweep({ db, clock: systemClock, diagnostics }),
+      run: () => alertStaleSweep({ ...base, diagnostics }),
     },
   ],
 });
@@ -238,21 +232,21 @@ export const sweepRoute = createSweepRoute({
     { name: "alert-stale-inbox", run: async () => webhookInbox?.alertStaleQueue() },
     {
       name: "alert-bot-handoff-spikes",
-      run: () => alertBotHandoffSpikes({ db, clock: systemClock, diagnostics }),
+      run: () => alertBotHandoffSpikes({ ...base, diagnostics }),
     },
     {
       name: "check-channel-health",
-      run: () => sweepChannelHealth({ db, clock: systemClock, diagnostics }),
+      run: () => sweepChannelHealth({ ...base, diagnostics }),
     },
     { name: "requeue-inbox-events", run: async () => webhookInbox?.requeueStalled() },
     { name: "retry-failed-inbox-events", run: async () => webhookInbox?.retryFailed() },
     { name: "sweep-bot-turns", run: async () => liveBot?.sweep() },
     {
       name: "return-quiet-handoffs",
-      run: () => returnQuietHandoffs({ db, clock: systemClock, notifier }),
+      run: () => returnQuietHandoffs({ ...base, notifier }),
     },
     // Last, so the daily cron's watchdog sees when a run reached its end.
-    { name: "record-sweep-run", run: () => recordSweepRun({ db, clock: systemClock }) },
+    { name: "record-sweep-run", run: () => recordSweepRun(base) },
   ],
 });
 
