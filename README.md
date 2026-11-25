@@ -157,7 +157,7 @@ For production, run the script once with production's direct string, then replac
 
 Production's Neon plan does not allow turning off scale to zero. The compute suspends after 5 minutes without queries, and the next connection wakes it, usually in well under a second. Only the pool's 5-second connection timeout covers that wait; the role's timeouts start once a session is open. A wake-up slower than that fails its request with HTTP 500: Meta redelivers webhooks, QStash retries jobs, the sweep runs again 30 minutes later, and a failed daily task alerts and runs again the next day. A person loading the dashboard sees the error and reloads.
 
-The sweep runs every 30 minutes and queries the database. At its old five-minute interval the compute never suspended and used up the Free plan's allowance; at 30 minutes it sleeps for most of each interval when nobody is writing. On a paid plan, a shorter interval recovers stuck work sooner (`sweepIntervalMinutes` in `platform/qstash.ts`, then `bun run sweep:schedule`). Watch the plan's monthly compute usage in the Neon console: a compute that uses up its allowance is suspended until the next cycle.
+The sweep runs every 30 minutes and queries the database. At its old five-minute interval the compute never suspended and used up the Free plan's allowance; at 30 minutes it sleeps for most of each interval when nobody is writing. On a paid plan, set it back to 5 minutes as ADR 0011 describes. Watch the plan's monthly compute usage in the Neon console: a compute that uses up its allowance is suspended until the next cycle.
 
 ## Demo Tenant
 

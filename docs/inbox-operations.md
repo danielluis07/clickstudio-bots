@@ -250,7 +250,8 @@ Issue: [#134](https://github.com/danielluis07/clickstudio-bots/issues/134).
 Decision: [ADR 0007](adr/0007-periodic-sweep-on-a-qstash-schedule.md).
 
 A QStash schedule calls `POST /api/jobs/sweep` every 30 minutes
-(`sweepIntervalMinutes` in `platform/qstash.ts`). The route
+(`sweepIntervalMinutes` in `platform/qstash.ts`; see
+[ADR 0011](adr/0011-sweep-every-30-minutes-on-neon-free.md)). The route
 verifies the QStash signature against its own URL and returns 401 otherwise, or
 503 without the QStash signing keys. Each run has 60 seconds. The alerts run
 first: after a large incident the recovery tasks can use the whole time, and

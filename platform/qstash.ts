@@ -72,9 +72,11 @@ export const createQStashJobQueue = ({
   };
 };
 
-// How often the sweep runs (ADR 0007). Every 30 minutes, not 5, so Neon's
-// compute can suspend between runs: it suspends after 5 minutes without
-// queries, so a five-minute sweep kept it running all month. Must divide 60.
+// How often the sweep runs. Every 30 minutes, not 5, so Neon's compute can
+// suspend between runs on the Free plan (ADR 0011): it suspends after 5
+// minutes without queries, so a five-minute sweep kept it running all month.
+// Back to 5 on a paid plan. Must divide 60 and stay under 58 (the stranded-
+// message window).
 export const sweepIntervalMinutes = 30;
 export const sweepIntervalMs = sweepIntervalMinutes * 60_000;
 
