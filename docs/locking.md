@@ -138,6 +138,17 @@ removal committed can still write an Alert for the removed Member. No scope
 resolves to that Member id again, a re-invited person gets a new one, and the
 daily prune deletes the row.
 
+### Sign-in attempt counters
+
+Sign-in attempt counters (`sign_in_attempt`, `createSignInThrottle`,
+`modules/identity/sign-in-throttle.ts`; #77) are written by a single-statement
+`INSERT ... ON CONFLICT DO UPDATE` per key, never inside a transaction. Each
+statement locks one counter row and commits before the next key is counted, and
+the table has no foreign keys. Concurrent attempts on one key wait for each
+other's upsert and nothing else, which is what makes the count exact. The daily
+prune deletes only rows whose window has ended. `acceptInvitation` counts its
+attempt before its transaction opens, so it adds no rank.
+
 ## Every lock
 
 ### Advisory locks

@@ -1,4 +1,13 @@
-import { boolean, index, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { id, timestamps } from "@/db/columns";
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
@@ -70,4 +79,16 @@ export const verification = pgTable(
     ...timestamps(),
   },
   (t) => [index("verification_identifier_idx").on(t.identifier)],
+);
+
+// Sign-in attempts counted per key ("ip:…", "email:…") in a fixed window, so
+// the limit holds across serverless instances (#77). See sign-in-throttle.ts.
+export const signInAttempt = pgTable(
+  "sign_in_attempt",
+  {
+    key: text("key").primaryKey(),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull(),
+    attempts: integer("attempts").notNull(),
+  },
+  (t) => [index("sign_in_attempt_window_started_at_idx").on(t.windowStartedAt)],
 );

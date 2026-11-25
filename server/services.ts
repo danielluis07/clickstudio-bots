@@ -9,6 +9,7 @@ import {
   pruneCanceledTenants,
 } from "@/modules/tenancy";
 import { createResendMailer } from "@/platform/resend-mailer";
+import { pruneSignInAttempts } from "@/modules/identity";
 import { createChannelService, sweepChannelHealth } from "@/modules/channels";
 import {
   createContactDeletion,
@@ -209,6 +210,7 @@ export const dailyCronRoute = createDailyCronRoute({
     { name: "prune-bot-turn-records", run: () => pruneBotTurnRecords(db, systemClock) },
     { name: "prune-early-statuses", run: () => pruneEarlyMessageStatuses(db, systemClock) },
     { name: "prune-alerts", run: () => pruneAlerts(db, systemClock) },
+    { name: "prune-sign-in-attempts", run: () => pruneSignInAttempts(db, systemClock) },
     // Vercel calls this independently of QStash, so it notices a dead sweep.
     {
       name: "alert-stale-sweep",

@@ -1,0 +1,146 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "41e24465-9964-49ba-a743-96efe72bd4a9",
+  "prevIds": [
+    "45ee5e71-924b-40ad-8d8d-c74d802eb8c4"
+  ],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "sign_in_attempt"
+      ],
+      "writes": [
+        "s|tbl|public.sign_in_attempt",
+        "n|tbl|public.sign_in_attempt",
+        "e|tbl|public.sign_in_attempt",
+        "n|rel|public.sign_in_attempt",
+        "n|type|public.sign_in_attempt",
+        "n|rel|public.sign_in_attempt_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "sign_in_attempt",
+        "sign_in_attempt_window_started_at_idx"
+      ],
+      "writes": [
+        "s|idx|public.sign_in_attempt_window_started_at_idx",
+        "n|idx|public.sign_in_attempt_window_started_at_idx",
+        "e|idx|public.sign_in_attempt_window_started_at_idx",
+        "n|rel|public.sign_in_attempt_window_started_at_idx"
+      ],
+      "reads": [
+        "n|tbl|public.sign_in_attempt",
+        "n|sch|public",
+        "n|col|public.sign_in_attempt.window_started_at"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "sign_in_attempt",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "sign_in_attempt",
+        "name": "key",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "sign_in_attempt",
+        "name": "window_started_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "sign_in_attempt",
+        "name": "attempts",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "sign_in_attempt",
+        "name": "sign_in_attempt_window_started_at_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "window_started_at",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "sign_in_attempt",
+        "name": "sign_in_attempt_pkey",
+        "columns": [
+          "key"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    }
+  ]
+}
