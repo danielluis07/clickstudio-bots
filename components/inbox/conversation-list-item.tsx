@@ -1,8 +1,13 @@
 import { ConversationListAvatar } from "@/components/inbox/conversation-list-avatar";
+import { ConversationOwnerIcon } from "@/components/inbox/conversation-owner-icon";
 import { Badge } from "@/components/ui/badge";
 import { formatListTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { contactDisplayName, conversationStatusLine } from "@/modules/conversations/hooks";
+import {
+  contactDisplayName,
+  messagePreviewText,
+  openConversationLabel,
+} from "@/modules/conversations/hooks";
 import type { RouterOutput } from "@/trpc/routers/_app";
 
 type ConversationListItemProps = {
@@ -67,11 +72,14 @@ export function ConversationListItem({
             {formatListTime(conversation.lastMessageAt, now)}
           </time>
         </span>
-        <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          <span className="min-w-0 flex-1 truncate">{conversationStatusLine(conversation)}</span>
+        <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <ConversationOwnerIcon conversation={conversation} />
+          <span className="min-w-0 flex-1 truncate">
+            {messagePreviewText(conversation.lastMessage)}
+          </span>
           {waiting && (
-            <Badge className="h-4 bg-brand px-1.5 text-[0.65rem] text-brand-foreground">
-              Aguardando
+            <Badge className="ml-0.5 h-4 bg-brand px-1.5 text-[0.65rem] text-brand-foreground">
+              {openConversationLabel}
             </Badge>
           )}
         </span>

@@ -33,7 +33,7 @@ Run `bun run doctor` and prepare a local development environment as described in
 and messages to exercise scrolling and pagination.
 
 1. At 320px and 390px widths, open `/painel/conversas`. Search by name or phone,
-   choose **Aguardando equipe**, and open a Conversation. Check that the list,
+   choose **Em aberto**, and open a Conversation. Check that the list,
    Conversation, and long names/messages produce no horizontal page scroll.
 2. Check **Assumir**, **Devolver ao Bot**, and **Resolvida**. Verify that the
    ownership/waiting indicators update and the controls remain reachable.

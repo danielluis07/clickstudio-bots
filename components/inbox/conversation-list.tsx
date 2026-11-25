@@ -33,7 +33,7 @@ export function ConversationList({ search, waiting, selectedId, onSelect }: Conv
         {search
           ? "Nenhuma conversa encontrada."
           : waiting
-            ? "Nenhuma conversa aguardando a equipe."
+            ? "Nenhuma conversa em aberto."
             : "Nenhuma conversa ainda."}
       </InboxNotice>
     );

@@ -18,7 +18,10 @@ export const conversationAnswererLabels = {
   team: "Equipe atendendo",
 } as const;
 
-// Under the Contact's name: who answers now and, for the team, why.
+// On the waiting list: a Handoff no Member has marked "Resolvida" yet.
+export const openConversationLabel = "Em aberto";
+
+// Who answers now and, for the team, why: the list's owner icon names it.
 export const conversationStatusLine = (conversation: {
   owner: keyof typeof conversationAnswererLabels;
   handoffReason: ConversationHandoffReason | null;
@@ -31,7 +34,8 @@ export const conversationStatusLine = (conversation: {
 // The inbox's list filters, as kept in the URL.
 export const conversationFilters = [
   { value: "", label: "Todas" },
-  { value: "aguardando", label: "Aguardando equipe" },
+  { value: "abertas", label: openConversationLabel },
 ] as const;
 
-export const isWaitingFilter = (filter: string) => filter === "aguardando";
+// "aguardando" was the filter's value before it was renamed; old links keep working.
+export const isWaitingFilter = (filter: string) => filter === "abertas" || filter === "aguardando";

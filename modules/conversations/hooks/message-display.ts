@@ -33,6 +33,17 @@ const mediaLabels: Record<Exclude<MessageType, "text">, string> = {
 
 export const mediaLabel = (type: Exclude<MessageType, "text">) => mediaLabels[type];
 
+// A message in one short line, for the bell and the Conversation list: its
+// text or caption, else its media kind; null when there is nothing to show.
+export const messagePreviewText = (
+  preview: { type: MessageType; text: string | null; revoked: boolean } | null,
+) => {
+  if (!preview) return null;
+  if (preview.revoked) return "Mensagem apagada";
+  if (preview.text) return preview.text;
+  return preview.type === "text" ? null : mediaLabels[preview.type];
+};
+
 export const messagePlaceholder = (message: {
   revokedAt: Date | null;
   type?: InboundMessage["type"];

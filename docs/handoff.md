@@ -23,10 +23,14 @@ migration rewrites the stored `conversation.handoff_reason` and
 
 ## What Members see
 
-Each Conversation in the list and in its header shows its owner, **Bot** or
-**Equipe**, an **Aguardando** badge while it is on the waiting list, and the
-pt-BR reason of the latest Handoff. **Aguardando equipe** above the list (URL
-`?filtro=aguardando`) shows only waiting Conversations.
+Each Conversation in the list shows a small owner icon (a bot, or a headset
+for the team), its latest message cut to one line, and an **Em aberto** badge
+while it is on the waiting list. The icon's name, read aloud and shown on
+hover, is "Bot respondendo" or, for the team, the pt-BR reason of the latest
+Handoff. The header shows the owner, **Bot** or **Equipe**, and
+**Em aberto** while waiting. The **Em aberto** filter above the list (URL
+`?filtro=abertas`; the old `?filtro=aguardando` still works) shows only
+waiting Conversations.
 
 | Reason | Shown as | Cause |
 | --- | --- | --- |

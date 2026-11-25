@@ -1,5 +1,4 @@
 import type { AlertKind } from "@/modules/conversations/alerts";
-import { mediaLabel, type MessageType } from "@/modules/conversations/hooks/message-display";
 
 // What happened, with how many events the Alert merged.
 export const alertKindLabel = ({ kind, count }: { kind: AlertKind; count: number }) => {
@@ -8,16 +7,6 @@ export const alertKindLabel = ({ kind, count }: { kind: AlertKind; count: number
   if (kind === "team_message")
     return count > 1 ? `${count} novas mensagens na equipe` : "Nova mensagem na equipe";
   return count > 1 ? `${count} novas mensagens` : "Nova mensagem";
-};
-
-// The latest Contact message, short; null when the Contact has not written.
-export const alertPreviewText = (
-  preview: { type: MessageType; text: string | null; revoked: boolean } | null,
-) => {
-  if (!preview) return null;
-  if (preview.revoked) return "Mensagem apagada";
-  if (preview.text) return preview.text;
-  return preview.type === "text" ? null : mediaLabel(preview.type);
 };
 
 // The bell's count, kept short.

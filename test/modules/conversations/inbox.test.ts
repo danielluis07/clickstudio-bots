@@ -15,6 +15,7 @@ import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels
 import {
   createConversationRepository,
   recordInboundTextMessage,
+  recordMessageChange,
   updateContactDetails,
 } from "@/modules/conversations";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
@@ -118,6 +119,7 @@ describe("Inbox Conversation list", () => {
           name: null,
         },
         lastMessageAt: new Date("2026-10-20T11:00:00Z"),
+        lastMessage: { type: "text", text: "Ainda estão abertos?", revoked: false },
       },
       {
         id: expect.any(String),
@@ -133,8 +135,49 @@ describe("Inbox Conversation list", () => {
           name: null,
         },
         lastMessageAt: new Date("2026-10-20T10:00:00Z"),
+        lastMessage: { type: "text", text: "Olá", revoked: false },
       },
     ]);
+  });
+
+  test("previews each Conversation's latest message as last edited, or as deleted", async () => {
+    await receive(channelA, "5511900000001", "Bom dia", "2026-10-20T09:00:00Z", "Ana");
+    await receive(channelA, "5511900000001", "Qual o horário?", "2026-10-20T10:00:00Z", "Ana");
+    const latest = `wamid.${sequence}`;
+    await receive(channelA, "5511900000002", "Oi", "2026-10-20T08:00:00Z", "Bruno");
+    const inbox = inboxOf(tenantA);
+    const previewOf = async (phone: string) =>
+      (await inbox.listConversations()).conversations.find((found) => found.contact.phone === phone)
+        ?.lastMessage;
+    const change = { phone: "5511900000001", originalWamid: latest, direction: "inbound" as const };
+
+    expect(await previewOf("5511900000001")).toEqual({
+      type: "text",
+      text: "Qual o horário?",
+      revoked: false,
+    });
+    expect(await previewOf("5511900000002")).toEqual({ type: "text", text: "Oi", revoked: false });
+
+    await recordMessageChange(db, channelA, {
+      ...change,
+      wamid: `wamid.edit.${++sequence}`,
+      kind: "edit",
+      text: "Qual o horário de sábado?",
+      changedAt: new Date("2026-10-20T10:01:00Z"),
+    });
+    expect(await previewOf("5511900000001")).toEqual({
+      type: "text",
+      text: "Qual o horário de sábado?",
+      revoked: false,
+    });
+
+    await recordMessageChange(db, channelA, {
+      ...change,
+      wamid: `wamid.revoke.${++sequence}`,
+      kind: "revoke",
+      changedAt: new Date("2026-10-20T10:02:00Z"),
+    });
+    expect(await previewOf("5511900000001")).toEqual({ type: "text", text: null, revoked: true });
   });
 
   test("search narrows the list by Contact name or phone", async () => {

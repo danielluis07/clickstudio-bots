@@ -4,9 +4,9 @@ import { cn } from "@/lib/utils";
 import {
   alertChannelLabels,
   alertKindLabel,
-  alertPreviewText,
   contactDisplayName,
   formatTimeAgo,
+  messagePreviewText,
 } from "@/modules/conversations/hooks";
 import type { RouterOutput } from "@/trpc/routers/_app";
 
@@ -22,7 +22,7 @@ export function AlertListItem({
   now: Date;
   onOpen: () => void;
 }) {
-  const preview = alertPreviewText(alert.preview);
+  const preview = messagePreviewText(alert.preview);
   return (
     <Link
       href={`/painel/conversas?conversa=${encodeURIComponent(alert.conversationId)}`}

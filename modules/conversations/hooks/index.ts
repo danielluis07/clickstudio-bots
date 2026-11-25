@@ -4,7 +4,6 @@ export {
   alertCountLabel,
   alertKindLabel,
   alertPreferenceOptions,
-  alertPreviewText,
 } from "@/modules/conversations/hooks/alert-display";
 export {
   alertTabTitle,
@@ -31,6 +30,7 @@ export {
   conversationStatusLine,
   handoffReasonLabels,
   isWaitingFilter,
+  openConversationLabel,
 } from "@/modules/conversations/hooks/handoff-display";
 export { useHandoffControls } from "@/modules/conversations/hooks/use-handoff-controls";
 export { useBulkReturnToBot } from "@/modules/conversations/hooks/use-bulk-return-to-bot";
@@ -41,6 +41,7 @@ export {
   messageDisplayText,
   messageFailureReason,
   messagePlaceholder,
+  messagePreviewText,
   messageStatusLabels,
   type MessageAuthorKind,
 } from "@/modules/conversations/hooks/message-display";
