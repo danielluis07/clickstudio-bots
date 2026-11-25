@@ -1,5 +1,6 @@
 // The Bot core: one turn decides a grounded answer or a Handoff, behind the
 // Model and repository ports. Live turns record their outcome and tokens.
+export { botOwnerOnlyMessages } from "@/modules/bot/owner-only-messages";
 export { createBotActivation, type BotActivation } from "@/modules/bot/activation";
 export { readBotConfiguration, type BotConfiguration } from "@/modules/bot/configuration";
 export {

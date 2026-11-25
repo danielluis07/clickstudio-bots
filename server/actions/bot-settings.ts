@@ -1,6 +1,5 @@
 "use server";
 
-import { refresh } from "next/cache";
 import {
   botSettingsLimits,
   linkSettingsLimits,
@@ -10,6 +9,7 @@ import {
   type CaptureMode,
 } from "@/modules/bot";
 import { formText, type FormState } from "@/server/actions/form-state";
+import { toFormState } from "@/server/actions/to-form-state";
 import { requireTenantScope } from "@/server/auth/guards";
 import { botSettingsEditor, captureSettingsEditor, linkSettingsEditor } from "@/server/services";
 
@@ -56,9 +56,7 @@ export async function saveBusinessProfileAction(
     address: formText(formData, "address"),
     hours: formHours(formData),
   });
-  if (!result.ok) return { status: "error", message: profileErrorMessages[result.error] };
-  refresh();
-  return { status: "success", message: savedMessage };
+  return toFormState(result, profileErrorMessages, savedMessage);
 }
 
 export async function saveBehaviourSettingsAction(
@@ -76,14 +74,17 @@ export async function saveBehaviourSettingsAction(
     handoffTopics: formTopics(formData, "handoffTopics"),
     schedule: formText(formData, "schedule") as BehaviourSettings["schedule"],
   });
-  if (!result.ok) return { status: "error", message: behaviourErrorMessages[result.error] };
-  refresh();
-  return { status: "success", message: savedMessage };
+  return toFormState(result, behaviourErrorMessages, savedMessage);
 }
 
 const captureErrorMessages = {
   forbidden: "Apenas o responsável pelo negócio pode alterar a captura de dados.",
   invalid: "Escolha ao menos um dado para capturar, ou desative a captura.",
+} as const;
+
+const linkErrorMessages = {
+  forbidden: "Apenas o responsável pelo negócio pode alterar os links do Bot.",
+  invalid: `Cadastre até ${linkSettingsLimits.links} links com nome de até ${linkSettingsLimits.label} caracteres e endereço http:// ou https:// de até ${linkSettingsLimits.url} caracteres, sem usuário ou senha. Para ativar, cadastre ao menos um link.`,
 } as const;
 
 export async function saveLinkSettingsAction(
@@ -104,16 +105,11 @@ export async function saveLinkSettingsAction(
       url: string;
     }[],
   });
-  if (!result.ok)
-    return {
-      status: "error",
-      message:
-        result.error === "forbidden"
-          ? "Apenas o responsável pelo negócio pode alterar os links do Bot."
-          : `Cadastre até ${linkSettingsLimits.links} links com nome de até ${linkSettingsLimits.label} caracteres e endereço http:// ou https:// de até ${linkSettingsLimits.url} caracteres, sem usuário ou senha. Para ativar, cadastre ao menos um link.`,
-    };
-  refresh();
-  return { status: "success", message: "Salvo. O Bot já usa estes links na próxima resposta." };
+  return toFormState(
+    result,
+    linkErrorMessages,
+    "Salvo. O Bot já usa estes links na próxima resposta.",
+  );
 }
 
 // The module refuses any mode other than off, optional or required.
@@ -134,10 +130,9 @@ export async function saveCaptureSettingsAction(
       need: formCaptureMode(formData, "need"),
     },
   });
-  if (!result.ok) return { status: "error", message: captureErrorMessages[result.error] };
-  refresh();
-  return {
-    status: "success",
-    message: "Salvo. O Bot já usa esta captura na próxima resposta.",
-  };
+  return toFormState(
+    result,
+    captureErrorMessages,
+    "Salvo. O Bot já usa esta captura na próxima resposta.",
+  );
 }
