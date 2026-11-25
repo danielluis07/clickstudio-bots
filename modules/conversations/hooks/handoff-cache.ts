@@ -1,10 +1,12 @@
-import type { InfiniteData, QueryClient, QueryKey } from "@tanstack/react-query";
-import type { inferOutput } from "@trpc/tanstack-react-query";
-import type { useTRPC } from "@/trpc/client";
+import type { QueryClient } from "@tanstack/react-query";
+import {
+  patchConversationCaches,
+  rollback,
+  type Conversation,
+  type Snapshot,
+  type Trpc,
+} from "@/modules/conversations/hooks/conversation-cache";
 
-type Trpc = ReturnType<typeof useTRPC>;
-type Conversation = inferOutput<Trpc["conversations"]["get"]>;
-type ConversationList = InfiniteData<inferOutput<Trpc["conversations"]["list"]>>;
 type Ownership = Pick<Conversation, "owner" | "handoffReason" | "waiting">;
 type HandoffInput = { conversationId: string } | { conversationIds: string[] };
 
@@ -13,7 +15,11 @@ const changes = {
   takeOver: (found: Ownership): Ownership =>
     found.owner === "bot" ? { owner: "team", handoffReason: "claimed", waiting: true } : found,
   returnToBot: (found: Ownership): Ownership => ({ ...found, owner: "bot" }),
-  resolve: (): Ownership => ({ owner: "bot", handoffReason: null, waiting: false }),
+  resolve: (): Ownership => ({
+    owner: "bot",
+    handoffReason: null,
+    waiting: false,
+  }),
 };
 
 const conversationIdsOf = (input: HandoffInput) =>
@@ -34,40 +40,21 @@ export const handoffMutationOptions = (
   ];
 
   return {
-    onMutate: async (input: HandoffInput) => {
-      const filters = affected(input);
+    onMutate: (input: HandoffInput) => {
       const ids = new Set(conversationIdsOf(input));
-      await Promise.all(filters.map((filter) => queryClient.cancelQueries(filter)));
-      const previous = filters.flatMap((filter) => queryClient.getQueriesData(filter));
       const change = <T extends Ownership & { id: string }>(found: T): T =>
         ids.has(found.id) ? { ...found, ...changes[command](found) } : found;
 
-      for (const conversationId of ids) {
-        queryClient.setQueriesData<Conversation>(
+      return patchConversationCaches(queryClient, trpc, {
+        filters: [...ids].map((conversationId) =>
           trpc.conversations.get.queryFilter({ conversationId }),
-          (found) => found && change(found),
-        );
-      }
-      queryClient.setQueriesData<ConversationList>(
-        trpc.conversations.list.pathFilter(),
-        (list) =>
-          list && {
-            ...list,
-            pages: list.pages.map((page) => ({
-              ...page,
-              conversations: page.conversations.map(change),
-            })),
-          },
-      );
-      return { previous };
+        ),
+        patch: change,
+        patchRow: change,
+      });
     },
-    onError: (
-      _error: unknown,
-      _input: unknown,
-      context: { previous: [QueryKey, unknown][] } | undefined,
-    ) => {
-      context?.previous.forEach(([queryKey, data]) => queryClient.setQueryData(queryKey, data));
-    },
+    onError: (_error: unknown, _input: unknown, context: { previous: Snapshot } | undefined) =>
+      rollback(queryClient, context?.previous),
     // "Assumir" records a Handoff, so the thread's dividers refetch too.
     onSettled: (_data: unknown, _error: unknown, input: HandoffInput) =>
       Promise.all(
