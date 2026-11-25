@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import type { ChannelSignup } from "@/modules/channels";
 import type { FormState } from "@/server/actions/form-state";
+import { toFormState } from "@/server/actions/to-form-state";
 import { requireTenantScope } from "@/server/auth/guards";
 import { channelService } from "@/server/services";
 
@@ -21,14 +22,13 @@ const connectErrors = {
 export async function connectWhatsAppAction(input: ChannelSignup): Promise<FormState> {
   const scope = await requireTenantScope();
   const result = await channelService.connect(scope, input);
-  if (!result.ok) return { status: "error", message: connectErrors[result.error] };
-  refresh();
-  return {
-    status: "success",
-    message: result.reconnected
+  return toFormState(
+    result,
+    connectErrors,
+    result.ok && result.reconnected
       ? "Canal reconectado. O Bot volta a responder se estiver ligado."
       : "Canal conectado. O Bot continua desligado.",
-  };
+  );
 }
 
 export async function retryWhatsAppSubscriptionAction(): Promise<FormState> {

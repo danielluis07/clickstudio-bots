@@ -10,7 +10,6 @@ export type SandboxChatMessage = SandboxMessage & { id: string; handoff?: boolea
 
 const errorMessages: Record<string, string> = {
   UNAUTHORIZED: "Sua sessão expirou. Entre novamente para continuar.",
-  FORBIDDEN: "Apenas o responsável pelo negócio pode testar o Bot.",
   BAD_REQUEST: "Não foi possível enviar o teste. Escreva uma mensagem de até 4.096 caracteres.",
   PRECONDITION_FAILED: "O teste do Bot está indisponível no momento. Tente novamente mais tarde.",
 };
@@ -84,8 +83,10 @@ export const useBotSandbox = () => {
     submit();
   };
 
+  // A refusal for a Member who is not the owner already carries the server's message.
   const error = send.error
     ? (errorMessages[send.error.data?.code ?? ""] ??
+      (send.error.data?.code === "FORBIDDEN" ? send.error.message : null) ??
       "Não foi possível testar o Bot. Tente novamente.")
     : null;
 

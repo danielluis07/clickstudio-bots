@@ -1,10 +1,11 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { botOwnerOnlyMessages } from "@/modules/bot";
 import { unwrap } from "@/trpc/errors";
 import { createTRPCRouter, tenantProcedure } from "@/trpc/init";
 
 const failures = {
-  forbidden: { code: "FORBIDDEN", message: "Apenas o responsável pelo negócio pode ativar o Bot." },
+  forbidden: { code: "FORBIDDEN", message: botOwnerOnlyMessages.activate },
   incomplete: {
     code: "PRECONDITION_FAILED",
     message:

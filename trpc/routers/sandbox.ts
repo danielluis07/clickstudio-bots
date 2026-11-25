@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { sandboxInputSchema } from "@/modules/bot";
+import { botOwnerOnlyMessages, sandboxInputSchema } from "@/modules/bot";
 import { unwrap } from "@/trpc/errors";
 import { createTRPCRouter, tenantProcedure } from "@/trpc/init";
 
 const failures = {
-  forbidden: { code: "FORBIDDEN", message: "Apenas o responsável pelo negócio pode testar o Bot." },
+  forbidden: { code: "FORBIDDEN", message: botOwnerOnlyMessages.sandbox },
   invalid: { code: "BAD_REQUEST", message: "Escreva uma mensagem de até 4.096 caracteres." },
   unavailable: {
     code: "PRECONDITION_FAILED",
