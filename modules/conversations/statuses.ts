@@ -5,6 +5,7 @@ import type { ChannelRoute } from "@/modules/channels";
 import { findMessageConversation } from "@/modules/conversations/message-conversation";
 import { lockWamid } from "@/modules/conversations/wamid-lock";
 import type { Clock } from "@/platform/clock";
+import { dayMs } from "@/platform/time";
 
 export type MessageStatusUpdate = {
   wamid: string;
@@ -15,7 +16,6 @@ export type MessageStatusUpdate = {
 
 // Meta answers a send within seconds, so an early status still unmatched after
 // this long is for a message the platform never stores.
-const earlyStatusRetentionMs = 24 * 60 * 60 * 1000;
 
 // Meta may deliver statuses out of order, so a message's status only moves
 // forward along this progression.
@@ -96,9 +96,7 @@ export const recordMessageStatus = (
 export const pruneEarlyMessageStatuses = async (db: Database, clock: Clock) => {
   const pruned = await db
     .delete(earlyMessageStatus)
-    .where(
-      lt(earlyMessageStatus.receivedAt, new Date(clock.now().getTime() - earlyStatusRetentionMs)),
-    )
+    .where(lt(earlyMessageStatus.receivedAt, new Date(clock.now().getTime() - dayMs)))
     .returning({ wamid: earlyMessageStatus.wamid });
   return pruned.length;
 };

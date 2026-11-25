@@ -3,7 +3,7 @@ import { FormRow } from "@/components/forms/form-row";
 import { FormSection } from "@/components/forms/form-section";
 import { OptionSelect } from "@/components/forms/option-select";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCount } from "@/lib/format";
+import { formatCount } from "@/platform/format";
 import type { BehaviourSettings, BotSettingsLimits } from "@/modules/bot";
 import { toneOptions } from "@/modules/bot/hooks";
 

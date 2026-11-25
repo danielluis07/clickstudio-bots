@@ -1,5 +1,5 @@
 import { CancelInvitationButton } from "@/components/dashboard/cancel-invitation-button";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime } from "@/platform/format";
 
 type PendingInvitationListProps = {
   invitations: { id: string; email: string; expiresAt: Date }[];

@@ -5,11 +5,12 @@ import { channel, organization } from "@/db/schema";
 import type { WhatsAppGateway } from "@/modules/channels";
 import { isPlatformAdmin } from "@/modules/identity";
 import type { Clock } from "@/platform/clock";
+import { dayMs } from "@/platform/time";
 import { tenantOperationLeaseMs, tenantRecoveryDays } from "@/modules/tenancy/lifecycle-policy";
 
 // Privileged operations: unlike Member repositories, these require a current
 // platform administrator and never turn a supplied Tenant id into a TenantScope.
-const recoveryMs = tenantRecoveryDays * 24 * 60 * 60 * 1000;
+const recoveryMs = tenantRecoveryDays * dayMs;
 
 export const createTenantLifecycle = ({
   db,

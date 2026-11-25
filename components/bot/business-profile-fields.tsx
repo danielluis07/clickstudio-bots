@@ -2,7 +2,7 @@ import { FormRow } from "@/components/forms/form-row";
 import { FormSection } from "@/components/forms/form-section";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCount } from "@/lib/format";
+import { formatCount } from "@/platform/format";
 import type { BotSettingsLimits } from "@/modules/bot";
 import type { BusinessProfileDraft } from "@/modules/bot/hooks";
 

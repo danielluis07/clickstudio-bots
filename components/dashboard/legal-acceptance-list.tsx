@@ -1,4 +1,4 @@
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime } from "@/platform/format";
 
 type LegalAcceptanceListProps = {
   acceptances: { memberName: string; termsVersion: string; acceptedAt: Date }[];

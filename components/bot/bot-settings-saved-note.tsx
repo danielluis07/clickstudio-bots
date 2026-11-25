@@ -1,4 +1,4 @@
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime } from "@/platform/format";
 import { settingsEditorLabel } from "@/modules/bot/hooks";
 
 type BotSettingsSavedNoteProps = {

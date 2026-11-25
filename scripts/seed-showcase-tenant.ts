@@ -22,6 +22,13 @@ import { createUserRepository } from "@/modules/identity";
 import { weekdays } from "@/modules/bot";
 import { env } from "@/platform/env";
 import {
+  dayMs as day,
+  hourMs as hour,
+  minuteMs as minute,
+  localDay,
+  startOfLocalDay,
+} from "@/platform/time";
+import {
   botBehaviour,
   botProfile,
   businessHours,
@@ -52,19 +59,14 @@ const password = process.env.SEED_PASSWORD ?? "senha-teste-123";
 const random = createRandom(20261123);
 const newPerson = createPeople(random);
 const now = Date.now();
-const minute = 60 * 1000;
-const hour = 60 * minute;
-const day = 24 * hour;
 // Longer than the 90-day period, so even it has Contacts who wrote before.
 const historyDays = 120;
 const uuid = (at: number) => Bun.randomUUIDv7("hex", at);
 
 // São Paulo has had no daylight saving time since 2019: always UTC-3.
 const saoPauloOffset = 3 * hour;
-const saoPauloToday = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(
-  now,
-);
-const todayStart = Date.parse(`${saoPauloToday}T00:00:00Z`) + saoPauloOffset;
+const saoPauloToday = localDay(new Date(now));
+const todayStart = startOfLocalDay(new Date(now)).getTime();
 const saoPauloHour = (at: number) => new Date(at - saoPauloOffset).getUTCHours();
 
 // --- Reset -------------------------------------------------------------------

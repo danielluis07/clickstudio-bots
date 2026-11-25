@@ -12,12 +12,13 @@ import {
 } from "@/db/schema";
 import { tenantRecoveryDays } from "@/modules/tenancy/lifecycle-policy";
 import type { Clock } from "@/platform/clock";
+import { daysBefore } from "@/platform/time";
 
 // System-only maintenance, called by the authenticated daily task. Recheck
 // eligibility under the same row lock as cancellation and reactivation.
 export const pruneCanceledTenants = async (db: Database, clock: Clock) => {
   const now = clock.now();
-  const cutoff = new Date(now.getTime() - tenantRecoveryDays * 24 * 60 * 60 * 1000);
+  const cutoff = daysBefore(now, tenantRecoveryDays);
   const expired = and(
     lte(organization.canceledAt, cutoff),
     or(isNull(organization.lifecycleLeaseUntil), lte(organization.lifecycleLeaseUntil, now)),

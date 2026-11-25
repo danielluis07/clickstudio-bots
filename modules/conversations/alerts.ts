@@ -13,6 +13,7 @@ import { defaultAlertPreferences } from "@/modules/conversations/alert-preferenc
 import { currentText, revokedAt } from "@/modules/conversations/message-text";
 import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
+import { daysBefore } from "@/platform/time";
 import type { AlertPing } from "@/platform/notifier";
 
 export type AlertKind = (typeof alertKinds)[number];
@@ -212,6 +213,6 @@ export type MemberAlerts = ReturnType<typeof createMemberAlerts>;
 // Run by the daily cron: Alerts whose latest event is older than the
 // retention period, across every Tenant.
 export const pruneAlerts = async (db: Database, clock: Clock) => {
-  const cutoff = new Date(clock.now().getTime() - alertRetentionDays * 24 * 60 * 60 * 1000);
+  const cutoff = daysBefore(clock.now(), alertRetentionDays);
   await db.delete(alert).where(lt(alert.raisedAt, cutoff));
 };

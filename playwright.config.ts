@@ -1,3 +1,4 @@
+import { businessTimeZone } from "./platform/time";
 import { defineConfig, devices } from "@playwright/test";
 import {
   appPort,
@@ -25,7 +26,7 @@ export default defineConfig({
   use: {
     baseURL: appUrl,
     locale: "pt-BR",
-    timezoneId: "America/Sao_Paulo",
+    timezoneId: businessTimeZone,
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

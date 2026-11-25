@@ -3,11 +3,11 @@ import type { Database, Transaction } from "@/db/database";
 import { botReplyUsage } from "@/db/schema";
 import type { BotTurn } from "@/modules/bot/repository";
 import { ReservationRaceError } from "@/modules/bot/reservation-race";
-import { botTimeZone } from "@/modules/bot/schedule";
 import { countPendingBotReplies } from "@/modules/conversations";
 import { findTenantOwnerEmail, type TenantScope, isOwner } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 import type { Mailer } from "@/platform/mailer";
+import { localMonth } from "@/platform/time";
 
 export const monthlyReplyLimit = 5000;
 export const replyWarningThreshold = 4000;
@@ -31,14 +31,7 @@ export const recordBotReplyUsage = async (
     });
 };
 
-const periodAt = (at: Date) => {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: botTimeZone,
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(at);
-  return `${parts.find(({ type }) => type === "year")!.value}-${parts.find(({ type }) => type === "month")!.value}-01`;
-};
+const periodAt = (at: Date) => `${localMonth(at)}-01`;
 
 export const createBotAllowance = ({
   db,

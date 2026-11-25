@@ -1,5 +1,5 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime } from "@/platform/format";
 import type { ChannelSummary } from "@/modules/channels";
 
 const reconnectStep = {

@@ -57,7 +57,6 @@ export type {
 } from "@/modules/bot/repository";
 export {
   botSchedules,
-  botTimeZone,
   scheduleAllows,
   weekdays,
   type BotSchedule,

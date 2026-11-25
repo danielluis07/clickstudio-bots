@@ -2,7 +2,7 @@ import { ConversationListAvatar } from "@/components/inbox/conversation-list-ava
 import { ConversationListPreview } from "@/components/inbox/conversation-list-preview";
 import { ConversationOwnerIcon } from "@/components/inbox/conversation-owner-icon";
 import { Badge } from "@/components/ui/badge";
-import { formatListTime } from "@/lib/format";
+import { formatListTime } from "@/platform/format";
 import { cn } from "@/lib/utils";
 import { contactDisplayName, openConversationLabel } from "@/modules/conversations/hooks";
 import type { RouterOutput } from "@/trpc/routers/_app";

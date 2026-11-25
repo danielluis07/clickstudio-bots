@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import { DashboardRailSection } from "@/components/dashboard/dashboard-rail-section";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatCount } from "@/lib/format";
+import { formatCount } from "@/platform/format";
 
 // "Testes hoje": the owner's sandbox messages today against the daily limit.
 // No allowance is still loading.

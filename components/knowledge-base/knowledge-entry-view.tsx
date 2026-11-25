@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime } from "@/platform/format";
 import { entryEditorLabel } from "@/modules/knowledge-base/hooks";
 
 type KnowledgeEntryViewProps = {
