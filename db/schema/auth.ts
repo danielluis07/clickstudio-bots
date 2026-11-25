@@ -24,8 +24,29 @@ export const user = pgTable("user", {
   banned: boolean("banned").notNull().default(false),
   banReason: text("ban_reason"),
   banExpires: timestamp("ban_expires", { withTimezone: true }),
+  // Set by Better Auth's two-factor plugin once a TOTP code confirms enrollment.
+  twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
   ...timestamps(),
 });
+
+// The two-factor plugin's per-user TOTP secret and backup codes, both
+// encrypted with BETTER_AUTH_SECRET. Only platform administrators enroll (#149).
+export const twoFactor = pgTable(
+  "two_factor",
+  {
+    id: id(),
+    secret: text("secret").notNull(),
+    backupCodes: text("backup_codes").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // False between /two-factor/enable and the first valid code.
+    verified: boolean("verified").notNull().default(true),
+    failedVerificationCount: integer("failed_verification_count").notNull().default(0),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("two_factor_user_id_unique").on(t.userId)],
+);
 
 export const session = pgTable(
   "session",

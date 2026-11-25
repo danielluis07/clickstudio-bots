@@ -9,6 +9,8 @@ real browser and that Cache Components serve the protected segments.
 | --- | --- |
 | Sign in and land on the Painel; a wrong password shows the pt-BR error | `test/e2e/sign-in.e2e.ts` |
 | Signed-out and forged-cookie visits to `/painel` and `/admin` reach `/entrar` | `test/e2e/guards.e2e.ts` |
+| The administrator sets up the second factor before reaching `/admin`, then needs a code after the password; an owner gets a 404 on the setup page | `test/e2e/admin-second-factor.e2e.ts` |
+| Pages carry the CSP, framing, referrer and nosniff headers; another origin cannot frame them; sign-in runs with no CSP violation | `test/e2e/security-headers.e2e.ts` |
 | Accept an owner invitation, Terms checkbox included | `test/e2e/invitation.e2e.ts` |
 | Open a Conversation and send a reply through the fake Meta | `test/e2e/inbox.e2e.ts` |
 | A Member cannot open another Tenant's Conversation by id | `test/e2e/inbox.e2e.ts` |

@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
-import { createPlatformAdmin, createUserRepository } from "@/modules/identity";
+import {
+  createPlatformAdmin,
+  createUserRepository,
+  resetPlatformAdminSecondFactor,
+} from "@/modules/identity";
 import {
   createMemberManagement,
   createTenantOnboarding,
@@ -13,6 +17,7 @@ import { createAuth } from "@/server/auth/create-auth";
 import { signInAlreadyCounted } from "@/server/auth/sign-in-limit";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestMailer } from "@/test/support/mailer";
+import { totpCode, totpSecretOf } from "@/test/support/totp";
 
 const baseURL = "http://localhost:3000";
 
@@ -64,6 +69,14 @@ const signIn = async (email: string, password: string) => {
     .map((c) => c.split(";")[0])
     .join("; ");
 };
+
+// The cookies a response sets, minus the ones it clears.
+const cookiesOf = (response: Response) =>
+  response.headers
+    .getSetCookie()
+    .map((c) => c.split(";")[0]!)
+    .filter((c) => !c.endsWith("="))
+    .join("; ");
 
 const sessionUser = async (cookie: string) => {
   const response = await auth.handler(
@@ -331,5 +344,103 @@ describe("removing a Member", () => {
     expect(await signIn("caio@sorriso.example", "senha-segura-123")).toContain(
       "better-auth.session_token=",
     );
+  });
+});
+
+describe("the administrator's second factor", () => {
+  const email = "segunda@clickstudio.example";
+  const password = "admin-password-456";
+  let setupKey = "";
+  let backupCodes: string[] = [];
+
+  const enroll = async () => {
+    const cookie = await signIn(email, password);
+    const headers = new Headers({ cookie });
+    const enrollment = await auth.api.enableTwoFactor({ body: { password }, headers });
+    if (enrollment.method !== "totp") throw new Error("expected a TOTP enrollment");
+    setupKey = totpSecretOf(enrollment.totpURI);
+    backupCodes = enrollment.backupCodes;
+    await auth.api.verifyTOTP({ body: { code: totpCode(setupKey) }, headers });
+  };
+
+  // A sign-in held by the plugin: its challenge cookie, and no session.
+  const startChallenge = async () => {
+    const response = await post("/sign-in/email", { email, password });
+    expect(await response.json()).toMatchObject({ twoFactorRedirect: true });
+    const cookie = cookiesOf(response);
+    expect(cookie).not.toContain("better-auth.session_token=");
+    expect(cookie).toContain("better-auth.two_factor=");
+    return new Headers({ cookie });
+  };
+
+  beforeAll(async () => {
+    await createPlatformAdmin(db, { name: "Segunda Admin", email, password });
+  });
+
+  test("its routes are not reachable over HTTP, so no one else can enroll", async () => {
+    const cookie = await signIn("dona@sorriso.example", "senha-segura-123");
+
+    for (const [path, body] of [
+      ["/two-factor/enable", { password: "senha-segura-123" }],
+      ["/two-factor/disable", { password: "senha-segura-123" }],
+      ["/two-factor/verify-totp", { code: "123456" }],
+      ["/two-factor/verify-backup-code", { code: "abcde-fghij" }],
+      ["/two-factor/generate-backup-codes", { password: "senha-segura-123" }],
+    ] as const) {
+      const response = await post(path, body, cookie);
+      expect({ path, status: response.status }).toEqual({ path, status: 404 });
+    }
+  });
+
+  test("once enrolled, the password alone opens no session; the app's code does", async () => {
+    await enroll();
+    expect(await createUserRepository(db).findByEmail(email)).toMatchObject({
+      twoFactorEnabled: true,
+    });
+    const challenge = await startChallenge();
+
+    const wrong = await auth.api
+      .verifyTOTP({ body: { code: "000000" }, headers: challenge })
+      .catch((error: unknown) => error);
+    const verified = await auth.api.verifyTOTP({
+      body: { code: totpCode(setupKey) },
+      headers: challenge,
+      asResponse: true,
+    });
+
+    expect(isAPIError(wrong) && wrong.body?.code).toBe("INVALID_CODE");
+    expect(verified.status).toBe(200);
+    expect(await sessionUser(cookiesOf(verified))).toMatchObject({ email, role: "admin" });
+  });
+
+  test("a backup code replaces the app once", async () => {
+    const [code] = backupCodes;
+    const first = await auth.api.verifyBackupCode({
+      body: { code: code! },
+      headers: await startChallenge(),
+      asResponse: true,
+    });
+    const reused = await auth.api
+      .verifyBackupCode({ body: { code: code! }, headers: await startChallenge() })
+      .catch((error: unknown) => error);
+
+    expect(await sessionUser(cookiesOf(first))).toMatchObject({ email });
+    expect(isAPIError(reused) && reused.body?.code).toBe("INVALID_BACKUP_CODE");
+  });
+
+  test("a reset from the CLI drops the factor and every session", async () => {
+    const verified = await auth.api.verifyTOTP({
+      body: { code: totpCode(setupKey) },
+      headers: await startChallenge(),
+      asResponse: true,
+    });
+    const cookie = cookiesOf(verified);
+
+    expect(await resetPlatformAdminSecondFactor(db, " Segunda@ClickStudio.example ")).toBe(true);
+    expect(await resetPlatformAdminSecondFactor(db, "dona@sorriso.example")).toBe(false);
+
+    expect(await sessionUser(cookie)).toBeNull();
+    const user = await sessionUser(await signIn(email, password));
+    expect(user).toMatchObject({ email, twoFactorEnabled: false });
   });
 });

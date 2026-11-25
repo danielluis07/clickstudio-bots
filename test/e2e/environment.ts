@@ -64,6 +64,8 @@ export type E2eTenant = {
 // What scripts/seed-e2e.ts prints and the tests read.
 export type E2eFixtures = {
   password: string;
+  // The platform administrator, seeded without a second factor.
+  adminEmail: string;
   alfa: E2eTenant;
   beta: E2eTenant;
   invitation: { id: string; tenantName: string; email: string };

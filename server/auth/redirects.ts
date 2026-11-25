@@ -1,12 +1,17 @@
 export const signInPath = "/entrar";
 export const signedInHomePath = "/painel";
 export const returnToParam = "voltar";
+export const adminHomePath = "/admin";
+// The administrator's second factor (#149): the code asked after the password,
+// and the setup an administrator without one goes through first.
+export const secondFactorChallengePath = "/entrar/verificacao";
+export const secondFactorEnrollmentPath = "/entrar/segundo-fator";
 
 const parseBase = "http://app.invalid";
 
 // Only same-origin paths survive, so the parameter cannot become an open redirect.
 export const safeReturnPath = (value: string | null | undefined, role?: string | null) => {
-  const homePath = role === "admin" ? "/admin" : signedInHomePath;
+  const homePath = role === "admin" ? adminHomePath : signedInHomePath;
   if (!value?.startsWith("/")) return homePath;
   const url = new URL(value, parseBase);
   if (url.origin !== parseBase) return homePath;

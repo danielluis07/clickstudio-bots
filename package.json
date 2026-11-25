@@ -23,6 +23,7 @@
     "db:seed": "bun scripts/seed-demo-tenant.ts",
     "db:seed:showcase": "bun scripts/seed-showcase-tenant.ts",
     "admin:create": "bun scripts/create-platform-admin.ts",
+    "admin:reset-second-factor": "bun scripts/reset-admin-second-factor.ts",
     "sweep:schedule": "bun scripts/schedule-sweep.ts",
     "tenant:cancel": "bun scripts/tenant-administration.ts cancel",
     "tenant:reactivate": "bun scripts/tenant-administration.ts reactivate",

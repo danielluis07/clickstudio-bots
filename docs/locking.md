@@ -149,6 +149,14 @@ other's upsert and nothing else, which is what makes the count exact. The daily
 prune deletes only rows whose window has ended. `acceptInvitation` counts its
 attempt before its transaction opens, so it adds no rank.
 
+### Administrator second factor reset
+
+`resetPlatformAdminSecondFactor` (`modules/identity/platform-admin.ts`; #149),
+run only from the `admin:reset-second-factor` CLI, updates one administrator's
+User row and then deletes that User's `two_factor` and `session` rows. That is
+rank 4 from owner to owned, and nothing else in it waits on a lock. Better
+Auth's own two-factor writes are single statements outside any transaction.
+
 ## Every lock
 
 ### Advisory locks

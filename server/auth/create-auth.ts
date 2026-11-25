@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
-import { organization } from "better-auth/plugins";
+import { organization, twoFactor } from "better-auth/plugins";
 import type { Database } from "@/db/database";
 import * as schema from "@/db/schema";
 import { createSignInThrottle } from "@/modules/identity";
@@ -22,6 +22,12 @@ const tenantOrganizations = organization({
   allowUserToCreateOrganization: false,
 });
 
+// A second factor for the platform administrator (#149): TOTP from an
+// authenticator app, with backup codes. Its HTTP routes stay off: enrollment and
+// the sign-in challenge run through Server Actions behind the admin guards, so
+// nobody else can enroll and no route can drop the factor from a browser.
+const secondFactor = twoFactor({ issuer: "ClickStudio Bots" });
+
 // Invite-only onboarding: nobody signs up on their own. Members reach Tenant
 // data only through the Tenant-scoped repository, so the plugin's HTTP routes
 // stay off; Members are invited and removed through the tenancy module.
@@ -30,8 +36,8 @@ const disabledAuthPaths = [
   "/sign-up/email",
   "/request-password-reset",
   "/reset-password",
-  ...Object.values(tenantOrganizations.endpoints).flatMap((endpoint) =>
-    endpoint.path ? [endpoint.path] : [],
+  ...[tenantOrganizations, secondFactor].flatMap((plugin) =>
+    Object.values(plugin.endpoints).flatMap((endpoint) => (endpoint.path ? [endpoint.path] : [])),
   ),
 ];
 
@@ -74,5 +80,5 @@ export const createAuth = ({ db, baseURL, secret, clock, runInBackground }: Auth
         backgroundTasks: { handler: runInBackground },
       }),
     },
-    plugins: [tenantOrganizations, nextCookies()],
+    plugins: [tenantOrganizations, secondFactor, nextCookies()],
   });

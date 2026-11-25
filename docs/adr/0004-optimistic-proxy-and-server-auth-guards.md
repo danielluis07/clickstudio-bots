@@ -5,7 +5,7 @@
 Authorization lives in the guards in `server/auth/guards.ts`:
 
 - `requireAuth` validates the session with Better Auth.
-- `requireAdmin` also checks `session.user.role`. It is a Better Auth field with `input: false`, so users cannot change it through `/update-user`. The platform has a single administrator, provisioned with `bun run admin:create`.
+- `requireAdmin` also checks `session.user.role`. It is a Better Auth field with `input: false`, so users cannot change it through `/update-user`. The platform has a single administrator, provisioned with `bun run admin:create`. An administrator without a second factor is sent to `/entrar/segundo-fator`, whose page and actions use `requireAdminWithoutSecondFactor` (#149).
 - `requireTenantScope` also resolves the Tenant from authorized membership.
 
 Every protected `page.tsx` calls one on its first line, and every Server Action calls one before doing anything. With Cache Components a session read must sit inside a Suspense boundary, so each protected segment has a `loading.tsx`, which wraps the page in one. Domain modules check again where they own the rule. For example, `createTenant` refuses a non-admin actor.

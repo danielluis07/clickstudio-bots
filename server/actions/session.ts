@@ -12,6 +12,8 @@ import {
 import {
   returnToParam,
   safeReturnPath,
+  secondFactorChallengePath,
+  secondFactorEnrollmentPath,
   signedInHomePath,
   signInPath,
 } from "@/server/auth/redirects";
@@ -19,14 +21,23 @@ import {
 export async function signInAction(_previous: FormState, formData: FormData): Promise<FormState> {
   let destination = signedInHomePath;
   try {
-    const { user } = await auth.api.signInEmail({
+    const result = await auth.api.signInEmail({
       body: {
         email: formText(formData, "email").trim(),
         password: formText(formData, "password"),
       },
       headers: await headers(),
     });
-    destination = safeReturnPath(formText(formData, returnToParam), user.role);
+    const returnTo = formText(formData, returnToParam);
+    if ("twoFactorRedirect" in result) {
+      // No session yet: the two-factor plugin holds the sign-in until a code.
+      const challenge = new URLSearchParams(returnTo ? { [returnToParam]: returnTo } : {});
+      destination = `${secondFactorChallengePath}${challenge.size ? `?${challenge}` : ""}`;
+    } else if (result.user.role === "admin" && !result.user.twoFactorEnabled) {
+      destination = secondFactorEnrollmentPath;
+    } else {
+      destination = safeReturnPath(returnTo, result.user.role);
+    }
   } catch (error) {
     if (isAPIError(error) && error.body?.code === tooManySignInAttemptsCode) {
       return { status: "error", message: tooManySignInAttemptsMessage };

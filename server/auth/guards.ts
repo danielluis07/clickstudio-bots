@@ -4,7 +4,12 @@ import { cache } from "react";
 import { db } from "@/db";
 import { resolveTenantScope } from "@/modules/tenancy";
 import { auth } from "@/server/auth/auth";
-import { safeReturnPath, signInPath } from "@/server/auth/redirects";
+import {
+  adminHomePath,
+  safeReturnPath,
+  secondFactorEnrollmentPath,
+  signInPath,
+} from "@/server/auth/redirects";
 
 // The authoritative checks behind `proxy.ts`, which only looks for a cookie.
 // Call one at the top of every protected page (its segment needs a
@@ -29,10 +34,21 @@ export const redirectIfSignedIn = async (returnTo?: string | null) => {
   if (session) redirect(safeReturnPath(returnTo, session.user.role));
 };
 
-// Non-admins get a 404 so the surface is not advertised.
+// Non-admins get a 404 so the surface is not advertised. An administrator
+// without a second factor sets one up before reaching anything else (#149).
 export const requireAdmin = async () => {
   const session = await requireAuth();
   if (session.user.role !== "admin") notFound();
+  if (!session.user.twoFactorEnabled) redirect(secondFactorEnrollmentPath);
+  return session;
+};
+
+// Only for the second factor's setup page and actions: an administrator who
+// has none yet.
+export const requireAdminWithoutSecondFactor = async () => {
+  const session = await requireAuth();
+  if (session.user.role !== "admin") notFound();
+  if (session.user.twoFactorEnabled) redirect(adminHomePath);
   return session;
 };
 

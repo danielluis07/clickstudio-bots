@@ -19,7 +19,7 @@ Create `.env` with:
 - `DATABASE_URL`: Neon **pooled** connection string of the **dev branch**, for the **application role** (see [Database roles](#database-roles)). Production's URL lives only in Vercel's environment variables, never in `.env`. The app keeps one global `pg` pool and registers it with `attachDatabasePool`.
 - `DATABASE_MIGRATION_URL`: **direct** connection string of the same branch, for the **schema owner** role. Only `bun run db:migrate` and `bun run db:roles` read it; the app never does.
   Use `sslmode=verify-full` in both pooled and direct connection strings to preserve certificate and hostname verification and avoid the `pg` warning about changing SSL mode semantics.
-- `BETTER_AUTH_SECRET`
+- `BETTER_AUTH_SECRET`: at least 32 characters, e.g. `openssl rand -base64 32`. The app refuses to start with a shorter one. It signs sessions and encrypts the administrator's TOTP secret, so changing it invalidates both.
 - `APP_URL`: e.g. `http://localhost:3000`
 - `RESEND_API_KEY`: Resend API key used for invitation emails.
 - `EMAIL_FROM`: verified Resend sender, e.g. `ClickStudio Bots <convites@example.com>`.
@@ -74,6 +74,7 @@ which is pending legal review before go-live.
 | `bun run db:migrate`  | Apply pending migrations to `DATABASE_MIGRATION_URL` (or `DATABASE_URL`) |
 | `bun run db:roles`    | Create or update the application role ([Database roles](#database-roles)) |
 | `bun run admin:create` | Create a platform administrator (see below)                    |
+| `bun run admin:reset-second-factor` | Remove an administrator's lost second factor (see below) |
 | `bun run sweep:schedule` | Create or update the QStash schedule for the sweep ([guide](docs/inbox-operations.md#the-sweep)) |
 | `bun run db:seed`     | Recreate the demo Tenant on the dev database (see below)        |
 | `bun run db:seed:showcase` | Recreate the showcase Tenant for screenshots and sales demos (see below) |
@@ -106,6 +107,12 @@ Public sign-up is disabled. Create the first platform administrator from the CLI
 
 ```bash
 ADMIN_PASSWORD="<at least 8 characters>" bun run admin:create admin@example.com "Nome do Admin"
+```
+
+At the first sign-in the administrator is sent to `/entrar/segundo-fator` and cannot reach `/admin` until a second factor is set up: an authenticator app (TOTP) plus ten single-use backup codes, through Better Auth's two-factor plugin (#149). Confirming the setup ends the administrator's other sessions. From then on, `/entrar` asks for the app's code (or a backup code) at `/entrar/verificacao` after the password. Only administrators enroll; the plugin's HTTP routes are disabled and its steps run through Server Actions behind the admin guards. An administrator who loses both the phone and the backup codes is reset from the CLI, which also ends their sessions:
+
+```bash
+bun run admin:reset-second-factor admin@example.com
 ```
 
 The administrator signs in at `/entrar` and creates each Tenant at `/admin`, which emails the owner an invitation (pt-BR, via Resend). The owner opens `/convite/<id>`, accepts the Terms and DPA, sets a password and lands on `/painel`. A Tenant is a Better Auth organization. Public sign-up and the organization plugin's HTTP routes are disabled in `server/auth/create-auth.ts`, so nobody can create a Tenant or join one outside that flow.

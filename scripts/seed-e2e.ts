@@ -119,6 +119,7 @@ const pending = await createTenant("E2E Clínica Convite", invitationEmail);
 
 const fixtures: E2eFixtures = {
   password,
+  adminEmail: admin.email,
   alfa,
   beta,
   invitation: {

@@ -17,5 +17,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/painel/:path*"],
+  matcher: ["/admin/:path*", "/painel/:path*", "/entrar/segundo-fator"],
 };

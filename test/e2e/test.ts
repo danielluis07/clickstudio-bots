@@ -24,6 +24,22 @@ export const test = base.extend<{ fixtures: E2eFixtures }>({
 
 export { expect };
 
+// The administrator starts every test without a second factor, also on a
+// retry after a test that set one up.
+export const resetAdminSecondFactor = async (email: string) => {
+  const client = new Client({ connectionString: e2eDatabaseUrl() });
+  await client.connect();
+  try {
+    await client.query(
+      `delete from two_factor where user_id = (select id from "user" where email = $1)`,
+      [email],
+    );
+    await client.query(`update "user" set two_factor_enabled = false where email = $1`, [email]);
+  } finally {
+    await client.end();
+  }
+};
+
 // Each test signs in on its own, so the sign-in attempt limit (#77) never
 // carries over from earlier tests or retries in the same run.
 const resetSignInAttempts = async () => {

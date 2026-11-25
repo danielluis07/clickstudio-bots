@@ -10,7 +10,7 @@ jobs:
     env:
       # Placeholders so env validation passes; no job connects to a database.
       DATABASE_URL: postgres://ci:ci@localhost:5432/ci
-      BETTER_AUTH_SECRET: ci-secret
+      BETTER_AUTH_SECRET: ci-better-auth-secret-not-for-production
       APP_URL: http://localhost:3000
       RESEND_API_KEY: ci-resend-key
       EMAIL_FROM: ci@example.com
@@ -94,7 +94,7 @@ jobs:
         run: bun run db:migrate
         env:
           DATABASE_URL: ${{ env.E2E_DATABASE_URL }}
-          BETTER_AUTH_SECRET: ci-secret
+          BETTER_AUTH_SECRET: ci-better-auth-secret-not-for-production
           APP_URL: http://localhost:3100
           RESEND_API_KEY: ci-resend-key
           EMAIL_FROM: ci@example.com
@@ -173,7 +173,7 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_DIRECT_URL }}
       # Placeholders so env validation passes; drizzle-kit reads only DATABASE_URL.
-      BETTER_AUTH_SECRET: ci-secret
+      BETTER_AUTH_SECRET: ci-better-auth-secret-not-for-production
       APP_URL: http://localhost:3000
       RESEND_API_KEY: ci-resend-key
       EMAIL_FROM: ci@example.com
