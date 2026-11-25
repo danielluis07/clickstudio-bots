@@ -1,12 +1,15 @@
 "use server";
 
-import { getIP } from "@better-auth/core/utils/ip";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { formText, type FormState } from "@/server/actions/form-state";
 import { passwordConfirmationError } from "@/modules/tenancy";
 import { auth } from "@/server/auth/auth";
-import { signInAlreadyCounted, tooManySignInAttemptsMessage } from "@/server/auth/create-auth";
+import {
+  signInAlreadyCounted,
+  signInClientIp,
+  tooManySignInAttemptsMessage,
+} from "@/server/auth/sign-in-limit";
 import { tenantOnboarding } from "@/server/services";
 
 const errorMessages = {
@@ -34,7 +37,7 @@ export async function acceptInvitationAction(
     acceptedTerms: formData.get("acceptedTerms") === "on",
     name: formText(formData, "name"),
     password,
-    clientIp: getIP(requestHeaders, auth.options),
+    clientIp: signInClientIp(requestHeaders, auth.options),
   });
   if (!result.ok) {
     return { status: "error", message: errorMessages[result.error] };

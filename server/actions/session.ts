@@ -5,7 +5,10 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { formText, type FormState } from "@/server/actions/form-state";
 import { auth } from "@/server/auth/auth";
-import { tooManySignInAttemptsCode, tooManySignInAttemptsMessage } from "@/server/auth/create-auth";
+import {
+  tooManySignInAttemptsCode,
+  tooManySignInAttemptsMessage,
+} from "@/server/auth/sign-in-limit";
 import {
   returnToParam,
   safeReturnPath,

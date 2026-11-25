@@ -9,7 +9,8 @@ import {
 } from "@/modules/tenancy";
 import { systemClock } from "@/platform/clock";
 import { isAPIError } from "better-auth/api";
-import { createAuth, signInAlreadyCounted } from "@/server/auth/create-auth";
+import { createAuth } from "@/server/auth/create-auth";
+import { signInAlreadyCounted } from "@/server/auth/sign-in-limit";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestMailer } from "@/test/support/mailer";
 

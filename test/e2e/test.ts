@@ -1,5 +1,6 @@
 import { expect, test as base, type Page } from "@playwright/test";
-import { appUrl, fakeGraphUrl, type E2eFixtures } from "./environment";
+import { Client } from "pg";
+import { appUrl, e2eDatabaseUrl, fakeGraphUrl, type E2eFixtures } from "./environment";
 
 const appOrigin = new URL(appUrl).origin;
 
@@ -23,7 +24,20 @@ export const test = base.extend<{ fixtures: E2eFixtures }>({
 
 export { expect };
 
+// Each test signs in on its own, so the sign-in attempt limit (#77) never
+// carries over from earlier tests or retries in the same run.
+const resetSignInAttempts = async () => {
+  const client = new Client({ connectionString: e2eDatabaseUrl() });
+  await client.connect();
+  try {
+    await client.query("delete from sign_in_attempt");
+  } finally {
+    await client.end();
+  }
+};
+
 export const signIn = async (page: Page, email: string, password: string) => {
+  await resetSignInAttempts();
   await page.goto("/entrar");
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Senha").fill(password);

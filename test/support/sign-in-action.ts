@@ -59,7 +59,7 @@ for (const scenario of cases) {
 console.log(`${cases.length} sign-in destinations passed`);
 
 const { tooManySignInAttemptsCode, tooManySignInAttemptsMessage } =
-  await import("@/server/auth/create-auth");
+  await import("@/server/auth/sign-in-limit");
 const refusals = [
   {
     error: new APIError("UNAUTHORIZED", { message: "Invalid email or password" }),
