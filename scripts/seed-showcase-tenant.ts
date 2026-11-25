@@ -1,5 +1,4 @@
-import { hashPassword } from "better-auth/crypto";
-import { eq, inArray, like } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import { db } from "@/db";
 import {
   botActivation,
@@ -13,12 +12,10 @@ import {
   handoffEvent,
   knowledgeBaseEntry,
   member,
-  memberActivity,
   message,
   organization,
   user,
 } from "@/db/schema";
-import { createUserRepository } from "@/modules/identity";
 import { weekdays } from "@/modules/bot";
 import { env } from "@/platform/env";
 import {
@@ -41,6 +38,11 @@ import {
 import { createPeople, type Person } from "@/scripts/showcase/people";
 import { createRandom } from "@/scripts/showcase/random";
 import { drawScenario, type ScenarioContext, type Step } from "@/scripts/showcase/scenarios";
+import {
+  createUserFactory,
+  deleteSeededTenants,
+  refuseNonLocalSeed,
+} from "@/scripts/support/seed-tenant";
 
 // Usage: bun run db:seed:showcase
 // Recreates "Odonto Alameda", a made-up dental clinic with 120 days of
@@ -50,10 +52,7 @@ import { drawScenario, type ScenarioContext, type Step } from "@/scripts/showcas
 // team, and the newest of them still waiting for an answer.
 // The same seed builds the same Tenant; every time is relative to now, so
 // re-run it before a demo to bring the history up to date.
-if (!["localhost", "127.0.0.1", "[::1]"].includes(new URL(env.APP_URL).hostname)) {
-  console.error(`Refusing to seed: APP_URL (${env.APP_URL}) is not local.`);
-  process.exit(1);
-}
+refuseNonLocalSeed();
 
 const password = process.env.SEED_PASSWORD ?? "senha-teste-123";
 const random = createRandom(20261123);
@@ -71,17 +70,10 @@ const saoPauloHour = (at: number) => new Date(at - saoPauloOffset).getUTCHours()
 
 // --- Reset -------------------------------------------------------------------
 
-const stale = await db
-  .select({ id: organization.id })
-  .from(organization)
-  .where(eq(organization.slug, clinic.slug));
-if (stale.length > 0) {
-  const staleIds = stale.map(({ id }) => id);
-  await db.delete(organization).where(inArray(organization.id, staleIds));
-  // Allowed by the append-only trigger now that the Tenant is gone.
-  await db.delete(memberActivity).where(inArray(memberActivity.tenantId, staleIds));
-}
-await db.delete(user).where(like(user.email, `%@${clinic.emailDomain}`));
+await deleteSeededTenants(db, {
+  tenantWhere: eq(organization.slug, clinic.slug),
+  userWhere: like(user.email, `%@${clinic.emailDomain}`),
+});
 
 // --- Tenant, team and Bot configuration ---------------------------------------
 
@@ -91,15 +83,9 @@ const knowledgeSavedAt = new Date(savedAt.getTime() + day);
 const testedAt = new Date(knowledgeSavedAt.getTime() + day);
 const activatedAt = new Date(testedAt.getTime() + hour);
 
-const users = createUserRepository(db);
-const passwordHash = await hashPassword(password);
+const createUser = await createUserFactory(db, password);
 const createMemberUser = (name: string, local: string) =>
-  users.createWithPassword({
-    name,
-    email: `${local}@${clinic.emailDomain}`,
-    emailVerified: true,
-    passwordHash,
-  });
+  createUser({ name, email: `${local}@${clinic.emailDomain}` });
 const ownerUser = await createMemberUser(team.owner.name, team.owner.local);
 const otherUsers = await Promise.all(
   team.others.map(({ name, local }) => createMemberUser(name, local)),
