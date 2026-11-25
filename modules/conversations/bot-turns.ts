@@ -18,7 +18,7 @@ import {
 import type { Database, Transaction } from "@/db/database";
 import { channel, contact, conversation, message, organization } from "@/db/schema";
 import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
-import { botEligible } from "@/modules/conversations/bot-replying";
+import { botEligible } from "@/modules/conversations/bot-eligibility";
 import type { TenantScope } from "@/modules/tenancy";
 import { recordSentWamid, resolveUnresolvedEchoes } from "@/modules/conversations/echoes";
 import {
@@ -578,6 +578,8 @@ export const runBotTurn = async <T>(
       async consume() {
         await repository.consume(conversationId, token, ids, clock.now());
         followUp = true;
+        // The inbox stops showing the Bot replying.
+        await notify();
       },
       async skip() {
         if (await repository.markSkipped(conversationId, token, clock.now())) await notify();

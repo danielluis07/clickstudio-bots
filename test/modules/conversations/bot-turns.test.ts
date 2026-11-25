@@ -2,7 +2,11 @@ import { afterEach, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import { channel } from "@/db/schema";
-import { recordInboundTextMessage, runBotTurn } from "@/modules/conversations";
+import {
+  createConversationRepository,
+  recordInboundTextMessage,
+  runBotTurn,
+} from "@/modules/conversations";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { seedLiveBot } from "@/test/support/live-bot";
 import { createTestNotifier } from "@/test/support/notifier";
@@ -97,4 +101,13 @@ test("a Bot reply left pending without a wamid is never resent", async () => {
   expect(outcome).toBe("handoff");
   expect(responded).toBe(false);
   expect(notifier.pings.at(-1)).toEqual({ tenantId: route.tenantId, ping: { conversationId } });
+});
+
+test("a turn that leaves its messages answered without a reply stops the inbox showing the Bot replying", async () => {
+  const { dependencies, conversationId, route, notifier } = await setup();
+  const repository = createConversationRepository(db, route);
+  expect((await repository.getConversation(conversationId))!.botReplyingUntil).not.toBeNull();
+  await runBotTurn(dependencies, conversationId, (turn) => turn.consume());
+  expect((await repository.getConversation(conversationId))!.botReplyingUntil).toBeNull();
+  expect(notifier.pings).toContainEqual({ tenantId: route.tenantId, ping: { conversationId } });
 });

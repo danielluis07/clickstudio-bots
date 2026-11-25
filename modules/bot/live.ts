@@ -179,12 +179,12 @@ export const createLiveBot = ({
     timing: ModelTiming,
   ): Promise<Ended> => {
     const { scope, conversationId } = turn;
-    // Every Handoff the gate decides is fenced by this turn's lease.
     // Leaves the Contact's messages unanswered on purpose, for now.
     const skip = async (tokens?: TurnTokens): Promise<Ended> => {
       await turn.skip();
       return { result: "skipped", tokens };
     };
+    // Every Handoff the gate decides is fenced by this turn's lease.
     const settle = async (
       decision: Exclude<ReplyDecision, { kind: "reply" }>,
       tokens?: TurnTokens,
