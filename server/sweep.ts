@@ -1,11 +1,12 @@
 import type { Database } from "@/db/database";
 import { sweepRun } from "@/db/schema";
 import type { Clock } from "@/platform/clock";
+import { sweepIntervalMs } from "@/platform/qstash";
 import { reportError, type Diagnostics } from "@/platform/diagnostics";
 import { runMaintenanceTasks, type MaintenanceTask } from "@/server/maintenance-tasks";
 
-// Six missed five-minute runs: long enough to ignore one slow or refused run.
-export const staleSweepAfterMs = 30 * 60 * 1000;
+// Three missed runs: long enough to ignore one slow or refused run.
+export const staleSweepAfterMs = 3 * sweepIntervalMs;
 
 // The sweep's last task (#182): records that this run reached its end, even
 // when an earlier task failed, since those alert on their own.
@@ -18,7 +19,7 @@ export const recordSweepRun = async ({ db, clock }: { db: Database; clock: Clock
 };
 
 // A daily task, run by Vercel independently of QStash: alerts `sweep_stale`
-// when no sweep finished in the last 30 minutes. With no run ever recorded,
+// when no sweep finished within `staleSweepAfterMs`. With no run ever recorded,
 // it alerts without an age. Returns the age in seconds it alerted with.
 export const alertStaleSweep = async ({
   db,

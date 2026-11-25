@@ -1,6 +1,6 @@
 # Recover stuck work with a sweep triggered by a QStash schedule
 
-A sweep runs every five minutes and puts stuck work back on the queue (#134). A QStash schedule with the fixed id `sweep` calls `POST /api/jobs/sweep`. The route runs only for a QStash signature bound to that exact URL, verified the same way as the job routes. Each run does three things:
+A sweep runs every five minutes and puts stuck work back on the queue (#134). Since 2026-11-25 it runs every 30 minutes; see the update at the end. A QStash schedule with the fixed id `sweep` calls `POST /api/jobs/sweep`. The route runs only for a QStash signature bound to that exact URL, verified the same way as the job routes. Each run does three things:
 
 - It re-enqueues `pending` inbox events received at least five minutes earlier, or, for an event whose job already failed, at least 35 minutes after the last failure.
 - It replays failed inbox events automatically, up to three times with backoff, before they alert and wait for an administrator (#135).
@@ -32,3 +32,12 @@ Each scan handles at most 100 rows, and every step stays idempotent (ADR 0002). 
 - The Schedule and the reply allowance belong to the Tenant. When the gate skips one of a Tenant's Conversations, the sweep leaves that Tenant's other Conversations and scans up to three pages, so one quiet Tenant cannot fill every batch.
 - Duplicate jobs are possible and harmless. A run can re-enqueue work whose job was only slow, and two runs before the jobs execute enqueue them twice. Each duplicate costs one idempotent delivery. Every job type sets its retry count explicitly instead of relying on the plan's default.
 - Partial indexes keep the three cross-Tenant scans from reading whole tables: expired leases, Bot replies stuck without a wamid, and unanswered Contact messages.
+
+## Update, 2026-11-25: every 30 minutes
+
+The five-minute sweep kept production's Neon compute from ever suspending. Neon suspends a compute after five minutes without queries, so a run every five minutes held it running around the clock and used up the Free plan's monthly compute allowance. The sweep now runs every 30 minutes (`sweepIntervalMinutes` in `platform/qstash.ts`), and the compute sleeps for most of each interval when nobody is writing.
+
+- Recovery is slower. A lost inbox job or Bot job waits for the next run, up to 30 minutes, instead of up to five. QStash's own retries still handle most failures within minutes, and the sweep only covers what they miss.
+- The thresholds that assumed a five-minute cadence follow the interval: `inbox_queue_stale` fires after five minutes plus two intervals (65 minutes), and `sweep_stale` after three intervals (90 minutes).
+- The one-hour limit for stranded Contact messages still holds: the window from two to 60 minutes is longer than one interval, so every such message is seen by at least one run.
+- On a paid Neon plan, a shorter interval can come back. Change the constant and run `bun run sweep:schedule` for each environment.

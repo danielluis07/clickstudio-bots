@@ -249,15 +249,16 @@ failure. Scheduled invocations run only in production.
 Issue: [#134](https://github.com/danielluis07/clickstudio-bots/issues/134).
 Decision: [ADR 0007](adr/0007-periodic-sweep-on-a-qstash-schedule.md).
 
-A QStash schedule calls `POST /api/jobs/sweep` every five minutes. The route
+A QStash schedule calls `POST /api/jobs/sweep` every 30 minutes
+(`sweepIntervalMinutes` in `platform/qstash.ts`). The route
 verifies the QStash signature against its own URL and returns 401 otherwise, or
 503 without the QStash signing keys. Each run has 60 seconds. The alerts run
 first: after a large incident the recovery tasks can use the whole time, and
 the alerts matter most then. Each run:
 
 1. Alerts `inbox_queue_stale` with its age in seconds while the oldest
-   `pending` inbox event that never failed was received more than 15 minutes
-   ago, past two requeues. Failed events alert on their own, after their last
+   `pending` inbox event that never failed was received more than 65 minutes
+   ago (five minutes plus two sweep intervals), past two requeues. Failed events alert on their own, after their last
    automatic replay.
 2. Alerts `bot_handoff_spike` with counts for each Tenant whose
    [turn records](live-bot.md#turn-records) in the last hour show at least
@@ -301,10 +302,10 @@ idempotent and their second delivery changes nothing.
 
 QStash retries each job with an explicit count: three for
 `process-inbox-event` and `run-bot-turn`. The sweep itself is not retried; the
-next run comes five minutes later.
+next run comes 30 minutes later.
 
 Create or update the QStash schedule after the first deploy of an environment,
-and again whenever `APP_URL` or `QSTASH_URL` changes. Run it with that
+and again whenever `APP_URL`, `QSTASH_URL` or `sweepIntervalMinutes` changes. Run it with that
 environment's public `APP_URL` and its QStash credentials, not the local
 `.env`: QStash cannot call `localhost`, and the script refuses a local
 `APP_URL`. Variables set in the shell take precedence over `.env`:
@@ -334,7 +335,7 @@ report nothing. Two checks sit outside it:
   `record-sweep-run`, writes the time to the one row of `sweep_run`. It runs
   even when an earlier task failed, since those alert on their own.
 - **The daily cron alerts `sweep_stale`** when no sweep finished in the last
-  30 minutes (six missed runs), with the time since the last one as
+  90 minutes (three missed runs), with the time since the last one as
   `ageSeconds`, or without an age when no run was ever recorded. Vercel calls
   the daily cron independently of QStash, so it fires when the schedule is
   missing, paused, deleted, calls an old URL, or is refused after a signing-key
@@ -357,7 +358,7 @@ When `sweep_stale` alerts:
    `APP_URL` is the URL QStash calls. A 503 means the signing keys are not set.
    A timeout or 5xx points at the deployment or the database; look for
    `sweep_task_failed` and the function logs.
-3. After a fix, the next run comes within five minutes. Confirm a new
+3. After a fix, the next run comes within 30 minutes. Confirm a new
    `finished_at` in `sweep_run`. Work stuck in the meantime is picked up by the
    normal scans, except messages older than the sweep's one-hour limit.
 
