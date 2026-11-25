@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { LiveBot } from "@/modules/bot";
 import { reportError, type Diagnostics } from "@/platform/diagnostics";
+import { readVerifiedBody, type QStashVerifier } from "@/server/qstash-verification";
 
 const jobSchema = z.strictObject({ conversationId: z.string().min(1).max(64) });
 
@@ -15,9 +16,7 @@ export const createBotJobRoute = (
   config: {
     bot: LiveBot;
     url: string;
-    verifier: {
-      verify(input: { signature: string | null; body: string; url: string }): Promise<boolean>;
-    };
+    verifier: QStashVerifier;
   } | null,
   diagnostics?: Diagnostics,
 ) => ({
@@ -25,15 +24,8 @@ export const createBotJobRoute = (
     if (!config) return new Response(null, { status: 503 });
     let conversationId: string | undefined;
     try {
-      const body = await request.text();
-      if (
-        !(await config.verifier.verify({
-          body,
-          signature: request.headers.get("upstash-signature"),
-          url: config.url,
-        }))
-      )
-        return new Response(null, { status: 401 });
+      const body = await readVerifiedBody(request, config);
+      if (body === null) return new Response(null, { status: 401 });
       let input: unknown;
       try {
         input = JSON.parse(body);

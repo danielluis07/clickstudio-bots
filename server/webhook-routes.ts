@@ -5,10 +5,7 @@ import {
   type WebhookInbox,
 } from "@/modules/webhook-inbox";
 import { logError, reportError } from "@/platform/diagnostics";
-
-type JobVerifier = {
-  verify(request: { signature: string | null; body: string; url: string }): Promise<boolean>;
-};
+import { readVerifiedBody, type QStashVerifier } from "@/server/qstash-verification";
 
 const empty = (status: number) => new Response(null, { status });
 
@@ -76,16 +73,15 @@ const parseJson = (body: string): unknown => {
 };
 
 export const createInboxJobRoute = (
-  config: { inbox: WebhookInbox; verifier: JobVerifier; url: string } | null,
+  config: { inbox: WebhookInbox; verifier: QStashVerifier; url: string } | null,
   diagnostics?: Pick<InboxDiagnostics, "log">,
 ) => ({
   async POST(request: Request) {
     if (!config) return empty(503);
     let inboxEventId: string | undefined;
     try {
-      const body = await request.text();
-      const signature = request.headers.get("upstash-signature");
-      if (!(await config.verifier.verify({ signature, body, url: config.url }))) return empty(401);
+      const body = await readVerifiedBody(request, config);
+      if (body === null) return empty(401);
       const job = inboxJobSchema.safeParse(parseJson(body));
       if (!job.success) return empty(400);
       inboxEventId = job.data.inboxEventId;
@@ -109,21 +105,14 @@ const failureSchema = z.object({
 });
 
 export const createInboxFailureRoute = (
-  config: { inbox: WebhookInbox; verifier: JobVerifier; url: string; sourceUrl: string } | null,
+  config: { inbox: WebhookInbox; verifier: QStashVerifier; url: string; sourceUrl: string } | null,
   diagnostics?: InboxDiagnostics,
 ) => ({
   async POST(request: Request) {
     if (!config) return empty(503);
     try {
-      const body = await request.text();
-      if (
-        !(await config.verifier.verify({
-          signature: request.headers.get("upstash-signature"),
-          body,
-          url: config.url,
-        }))
-      )
-        return empty(401);
+      const body = await readVerifiedBody(request, config);
+      if (body === null) return empty(401);
       const callback = failureSchema.safeParse(parseJson(body));
       if (!callback.success || callback.data.url !== config.sourceUrl) return empty(400);
       const job = inboxJobSchema.safeParse(
