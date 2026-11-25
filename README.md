@@ -139,7 +139,7 @@ After migrating a branch, create or update its application role, connected as th
 APP_DATABASE_PASSWORD='<at least 16 random characters>' bun run db:roles --role clickstudio_app
 ```
 
-Let the script create the role: roles made in the Neon console join `neon_superuser`, which the script cannot undo. The script is idempotent. It reads the password only when it creates the role, and never prints it. It refuses a role that is, or inherits from, the schema owner, and removes `CREATEDB`/`CREATEROLE` from an existing one. It grants row access on every existing table and, through default privileges, on every table a later migration creates. It also sets these timeouts on the role, because PgBouncer's transaction mode refuses session `SET` ([ADR 0003](docs/adr/0003-node-postgres-global-pool-on-neon.md)):
+Let the script create the role: roles made in the Neon console join `neon_superuser`, which the script cannot undo. The script is idempotent. It reads the password only when it creates the role, and never prints it. The password must be at least 16 printable ASCII characters with no spaces. Postgres receives only its SCRAM-SHA-256 verifier, never the password, so it can't end up in a server log. It refuses a role that is, or inherits from, the schema owner, and removes `CREATEDB`/`CREATEROLE` from an existing one. It grants row access on every existing table and, through default privileges, on every table a later migration creates. It also sets these timeouts on the role, because PgBouncer's transaction mode refuses session `SET` ([ADR 0003](docs/adr/0003-node-postgres-global-pool-on-neon.md)):
 
 | Setting | Value | Why |
 | --- | --- | --- |

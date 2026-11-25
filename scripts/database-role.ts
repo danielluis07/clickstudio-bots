@@ -48,7 +48,8 @@ if (import.meta.main)
   await main().catch((error: unknown) => {
     const refusals = {
       invalid_role_name: "Nome de papel inválido: use letras minúsculas, números e _.",
-      password_required: "Papel novo: defina APP_DATABASE_PASSWORD com pelo menos 16 caracteres.",
+      password_required:
+        "Papel novo: defina APP_DATABASE_PASSWORD com pelo menos 16 caracteres ASCII, sem espaços.",
       role_can_change_schema:
         "Esse papel é o dono do esquema, pertence a ele ou é superusuário. Escolha outro nome para o papel da aplicação.",
     };

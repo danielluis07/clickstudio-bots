@@ -96,3 +96,37 @@ test("a role that is, or inherits from, the schema owner is refused", async () =
       { reason: "role_can_change_schema" },
     );
 });
+
+test("the new role's password reaches Postgres only as a SCRAM verifier", async () => {
+  const statements: string[] = [];
+  await configureAppRole(
+    async (statement) => {
+      statements.push(statement);
+      return query(statement);
+    },
+    { role: "clickstudio_app", password: "a-long-test-password" },
+  );
+  expect(statements.join("\n")).not.toContain("a-long-test-password");
+  const [{ rolpassword }] = await query(
+    "select rolpassword from pg_authid where rolname = 'clickstudio_app'",
+  );
+  expect(String(rolpassword)).toStartWith("SCRAM-SHA-256$4096:");
+});
+
+test("a password with spaces or non-ASCII characters is refused", async () => {
+  for (const password of ["senha com espaços longa", "sénha-çom-acentos-longa"])
+    await expect(
+      configureAppRole(query, { role: "clickstudio_app", password }),
+    ).rejects.toMatchObject({ reason: "password_required" });
+});
+
+test("a rollback that fails does not hide why the setup failed", async () => {
+  const failing = async (statement: string) => {
+    if (statement === "ROLLBACK") throw new Error("connection lost");
+    return query(statement);
+  };
+  await expect(configureAppRole(failing, { role: "clickstudio_app" })).rejects.toMatchObject({
+    reason: "password_required",
+  });
+  await query("ROLLBACK");
+});

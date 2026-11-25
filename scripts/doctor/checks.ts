@@ -26,7 +26,8 @@ export type DatabaseReadiness = {
     lockTimeout: string;
     idleInTransactionSessionTimeout: string;
   };
-  // A superuser, a table owner, or a role allowed to create objects.
+  // A superuser, a member of a table owner (directly or by SET ROLE), or a
+  // role allowed to create objects.
   canChangeSchema: boolean;
 };
 

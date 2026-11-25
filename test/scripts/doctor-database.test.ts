@@ -91,3 +91,21 @@ test("a role that inherits a table owner's rights can change the schema", async 
   await query("reset role");
   expect(report.canChangeSchema).toBe(true);
 });
+
+test("a member that does not inherit the table owner's rights can still SET ROLE to it", async () => {
+  await query("revoke create on schema public from public");
+  await query("create role table_owner");
+  await query("alter table organization owner to table_owner");
+  await query("create role switches_to_owner noinherit");
+  await query("grant table_owner to switches_to_owner");
+  await query("grant select on all tables in schema public to switches_to_owner");
+  await query("grant usage on schema drizzle to switches_to_owner");
+  await query("grant select on all tables in schema drizzle to switches_to_owner");
+  await query("set role switches_to_owner");
+  const report = await inspect().catch(async (error) => {
+    await query("reset role");
+    throw error;
+  });
+  await query("reset role");
+  expect(report.canChangeSchema).toBe(true);
+});

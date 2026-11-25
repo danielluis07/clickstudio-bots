@@ -1,4 +1,5 @@
 import { escapeIdentifier, escapeLiteral } from "pg";
+import { scramSha256Verifier } from "@/scripts/database-role/scram";
 
 type Query = (statement: string) => Promise<Record<string, unknown>[]>;
 
@@ -45,8 +46,12 @@ export const configureAppRole = async (
       current_database() as database`);
     if (inherits_owner) throw new AppRoleSetupError("role_can_change_schema");
     if (!exists) {
-      if (!password || password.length < 16) throw new AppRoleSetupError("password_required");
-      await query(`create role ${app} with login password ${escapeLiteral(password)}`);
+      // Printable ASCII, so the verifier needs no SASLprep.
+      if (!password || !/^[!-~]{16,}$/.test(password))
+        throw new AppRoleSetupError("password_required");
+      await query(
+        `create role ${app} with login password ${escapeLiteral(scramSha256Verifier(password))}`,
+      );
     }
     if (extra_rights) await query(`alter role ${app} nocreatedb nocreaterole`);
     for (const [setting, value] of Object.entries(appRoleTimeouts))
@@ -73,7 +78,8 @@ export const configureAppRole = async (
     }
     await query("COMMIT");
   } catch (error) {
-    await query("ROLLBACK");
+    // A failed rollback (say, a lost connection) must not hide the cause.
+    await query("ROLLBACK").catch(() => undefined);
     throw error;
   }
 };

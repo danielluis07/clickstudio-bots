@@ -30,7 +30,7 @@ export const inspectDatabaseReadiness = async (
         or has_database_privilege(current_database(), 'CREATE')
         or has_schema_privilege('public', 'CREATE')
         or exists(select 1 from pg_tables
-          where schemaname = 'public' and pg_has_role(tableowner, 'USAGE')) as can_change_schema`);
+          where schemaname = 'public' and pg_has_role(tableowner, 'MEMBER')) as can_change_schema`);
     const applied = tables.has_migrations
       ? await query("select name from drizzle.__drizzle_migrations")
       : null;

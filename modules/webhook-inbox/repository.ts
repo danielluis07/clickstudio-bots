@@ -4,6 +4,9 @@ import { inboxEvent } from "@/db/schema";
 import type { InboxEventInput } from "@/modules/webhook-inbox/deliveries";
 import type { ErrorClass } from "@/platform/diagnostics";
 
+// Expired raw events deleted per statement.
+const pruneBatchSize = 1_000;
+
 export const createInboxRepository = (db: Database) => ({
   async insert(events: InboxEventInput[], receivedAt: Date) {
     await db
@@ -184,12 +187,23 @@ export const createInboxRepository = (db: Database) => ({
     await db.update(inboxEvent).set({ alertedAt }).where(eq(inboxEvent.id, id));
   },
 
+  // In batches, so no statement outlasts the role's statement timeout
+  // however large the backlog grows (#148).
   async pruneBefore(cutoff: Date) {
-    const deleted = await db
-      .delete(inboxEvent)
-      .where(lt(inboxEvent.receivedAt, cutoff))
-      .returning({ id: inboxEvent.id });
-    return deleted.length;
+    let total = 0;
+    for (;;) {
+      const batch = db
+        .select({ id: inboxEvent.id })
+        .from(inboxEvent)
+        .where(lt(inboxEvent.receivedAt, cutoff))
+        .limit(pruneBatchSize);
+      const deleted = await db
+        .delete(inboxEvent)
+        .where(inArray(inboxEvent.id, batch))
+        .returning({ id: inboxEvent.id });
+      total += deleted.length;
+      if (deleted.length < pruneBatchSize) return total;
+    }
   },
 
   async settle(
