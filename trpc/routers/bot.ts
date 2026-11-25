@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { unwrap } from "@/trpc/errors";
 import { createTRPCRouter, tenantProcedure } from "@/trpc/init";
 
 const failures = {
@@ -24,16 +25,12 @@ export const botRouter = createTRPCRouter({
     return usage;
   }),
   status: tenantProcedure.input(z.void()).query(({ ctx }) => ctx.activation.status(ctx.scope)),
-  activate: tenantProcedure.input(z.void()).mutation(async ({ ctx }) => {
-    const result = await ctx.activation.activate(ctx.scope);
-    if (!result.ok) throw new TRPCError(failures[result.error]);
-    return result;
-  }),
+  activate: tenantProcedure
+    .input(z.void())
+    .mutation(async ({ ctx }) => unwrap(await ctx.activation.activate(ctx.scope), failures)),
   setPaused: tenantProcedure
     .input(z.strictObject({ paused: z.boolean() }))
-    .mutation(async ({ ctx, input }) => {
-      const result = await ctx.activation.setPaused(ctx.scope, input.paused);
-      if (!result.ok) throw new TRPCError(failures[result.error]);
-      return result;
-    }),
+    .mutation(async ({ ctx, input }) =>
+      unwrap(await ctx.activation.setPaused(ctx.scope, input.paused), failures),
+    ),
 });

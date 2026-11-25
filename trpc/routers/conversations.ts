@@ -1,4 +1,3 @@
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   contactDetailLimits,
@@ -6,12 +5,8 @@ import {
   updateContactDetails,
   type HandoffControls,
 } from "@/modules/conversations";
+import { orNotFound, unwrap } from "@/trpc/errors";
 import { createTRPCRouter, tenantProcedure } from "@/trpc/init";
-
-const orNotFound = <T>(value: T | null): T => {
-  if (value === null) throw new TRPCError({ code: "NOT_FOUND" });
-  return value;
-};
 
 export const conversationsRouter = createTRPCRouter({
   list: tenantProcedure
@@ -58,22 +53,21 @@ export const conversationsRouter = createTRPCRouter({
     .query(({ ctx, input }) => ctx.conversationStats.read(ctx.scope, input.period)),
 });
 
-// Each refusal of the reply service as the browser sees it.
-const replyErrors = {
-  invalid: "BAD_REQUEST",
-  not_found: "NOT_FOUND",
-  window_closed: "PRECONDITION_FAILED",
-  channel_unavailable: "PRECONDITION_FAILED",
-  send_failed: "BAD_GATEWAY",
+// Each refusal of the reply service as the browser sees it. The message is
+// the error name, which the Reply composer reads.
+const replyFailures = {
+  invalid: { code: "BAD_REQUEST", message: "invalid" },
+  not_found: { code: "NOT_FOUND", message: "not_found" },
+  window_closed: { code: "PRECONDITION_FAILED", message: "window_closed" },
+  channel_unavailable: { code: "PRECONDITION_FAILED", message: "channel_unavailable" },
+  send_failed: { code: "BAD_GATEWAY", message: "send_failed" },
 } as const;
 
 export const repliesRouter = createTRPCRouter({
   send: tenantProcedure
     .input(z.object({ conversationId: z.string(), text: z.string().max(4096) }))
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.replies.sendReply(ctx.scope, input);
-      if (!result.ok)
-        throw new TRPCError({ code: replyErrors[result.error], message: result.error });
+      unwrap(await ctx.replies.sendReply(ctx.scope, input), replyFailures);
     }),
 });
 
@@ -81,9 +75,10 @@ export const contactsRouter = createTRPCRouter({
   delete: tenantProcedure
     .input(z.object({ contactId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.deleteContact(ctx.scope, input.contactId);
-      if (!result.ok)
-        throw new TRPCError({ code: result.error === "forbidden" ? "FORBIDDEN" : "NOT_FOUND" });
+      unwrap(await ctx.deleteContact(ctx.scope, input.contactId), {
+        forbidden: "FORBIDDEN",
+        not_found: "NOT_FOUND",
+      });
     }),
 
   // Every detail at once, as the Contact panel shows them. The module checks
@@ -100,15 +95,16 @@ export const contactsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input: { contactId, ...details } }) => {
-      const result = await updateContactDetails({
-        db: ctx.db,
-        scope: ctx.scope,
-        notifier: ctx.notifier,
-        contactId,
-        details,
-      });
-      if (!result.ok)
-        throw new TRPCError({ code: result.error === "invalid" ? "BAD_REQUEST" : "NOT_FOUND" });
+      const result = unwrap(
+        await updateContactDetails({
+          db: ctx.db,
+          scope: ctx.scope,
+          notifier: ctx.notifier,
+          contactId,
+          details,
+        }),
+        { invalid: "BAD_REQUEST", not_found: "NOT_FOUND" },
+      );
       return result.contact;
     }),
 });
@@ -117,8 +113,9 @@ const handoffProcedure = (command: Exclude<keyof HandoffControls, "bulkReturnToB
   tenantProcedure
     .input(z.object({ conversationId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.handoff[command](ctx.scope, input.conversationId);
-      if (!result.ok) throw new TRPCError({ code: "NOT_FOUND" });
+      unwrap(await ctx.handoff[command](ctx.scope, input.conversationId), {
+        not_found: "NOT_FOUND",
+      });
     });
 
 // Any Member, whoever took the Conversation over.
@@ -128,8 +125,9 @@ export const handoffRouter = createTRPCRouter({
   bulkReturnToBot: tenantProcedure
     .input(z.strictObject({ conversationIds: z.array(z.string().min(1)).min(1).max(100) }))
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.handoff.bulkReturnToBot(ctx.scope, input.conversationIds);
-      if (!result.ok) throw new TRPCError({ code: "NOT_FOUND" });
+      unwrap(await ctx.handoff.bulkReturnToBot(ctx.scope, input.conversationIds), {
+        not_found: "NOT_FOUND",
+      });
     }),
   resolve: handoffProcedure("resolve"),
 });
