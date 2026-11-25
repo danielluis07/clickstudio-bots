@@ -206,6 +206,12 @@ Model, the Meta Graph API, the mailer, QStash or the inbox notifier:
 A lease may span external calls. The expiry bounds it, and an expired holder's
 token no longer matches, so its later writes change nothing.
 
+The application's database role bounds the rest ([Database roles](../README.md#database-roles)):
+a statement that waits more than 5s for a lock fails (`lock_timeout`), and a
+transaction left idle for 15s is ended (`idle_in_transaction_session_timeout`).
+A job whose statement fails returns HTTP 500 and QStash retries it; a daily
+task that fails alerts and runs again the next day.
+
 ## Every path that takes more than one lock
 
 Ranks are those of the [ordering rule](#the-ordering-rule).

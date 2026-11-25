@@ -16,7 +16,8 @@ bun install
 
 Create `.env` with:
 
-- `DATABASE_URL`: Neon **pooled** connection string of the **dev branch**. Production's URL lives only in Vercel's environment variables, never in `.env`. The app keeps one global `pg` pool and registers it with `attachDatabasePool`.
+- `DATABASE_URL`: Neon **pooled** connection string of the **dev branch**, for the **application role** (see [Database roles](#database-roles)). Production's URL lives only in Vercel's environment variables, never in `.env`. The app keeps one global `pg` pool and registers it with `attachDatabasePool`.
+- `DATABASE_MIGRATION_URL`: **direct** connection string of the same branch, for the **schema owner** role. Only `bun run db:migrate` and `bun run db:roles` read it; the app never does.
   Use `sslmode=verify-full` in both pooled and direct connection strings to preserve certificate and hostname verification and avoid the `pg` warning about changing SSL mode semantics.
 - `BETTER_AUTH_SECRET`
 - `APP_URL`: e.g. `http://localhost:3000`
@@ -31,7 +32,7 @@ bun run db:seed
 bun run dev
 ```
 
-Neon recommends the **direct** (unpooled) connection string for migrations. Never migrate production by hand: CI applies production migrations on merge to `main` (see [Database migrations](#database-migrations)).
+Neon recommends the **direct** (unpooled) connection string for migrations, so `db:migrate` reads `DATABASE_MIGRATION_URL` (falling back to `DATABASE_URL` when it is unset). Never migrate production by hand: CI applies production migrations on merge to `main` (see [Database migrations](#database-migrations)).
 
 See [ADR 0003](docs/adr/0003-node-postgres-global-pool-on-neon.md) for why the app connects this way.
 
@@ -70,7 +71,8 @@ which is pending legal review before go-live.
 | `bun run test`        | Bun test runner (PGlite suites included)                        |
 | `bun run evaluate:provider --help` | Manual provider evaluation and offline human scoring ([guide](docs/evaluation/README.md)) |
 | `bun run db:generate` | Generate a migration in `drizzle/` from `db/schema`             |
-| `bun run db:migrate`  | Apply pending migrations to `DATABASE_URL`                      |
+| `bun run db:migrate`  | Apply pending migrations to `DATABASE_MIGRATION_URL` (or `DATABASE_URL`) |
+| `bun run db:roles`    | Create or update the application role ([Database roles](#database-roles)) |
 | `bun run admin:create` | Create a platform administrator (see below)                    |
 | `bun run sweep:schedule` | Create or update the QStash schedule for the sweep ([guide](docs/inbox-operations.md#the-sweep)) |
 | `bun run db:seed`     | Recreate the demo Tenant on the dev database (see below)        |
@@ -121,6 +123,41 @@ CI fails if `db/schema` and `drizzle/` disagree. It also fails when a migration 
 On every push to `main`, the `Migrate production` CI job applies pending migrations to production after `check`, `Browser tests` and `Real Postgres Bot turns` pass. Vercel's Deployment Checks hold the new deployment off the production domains until that job succeeds, so a failed migration leaves the previous deployment serving. The direct connection string exists only as the `PRODUCTION_DATABASE_DIRECT_URL` secret of the `production-database` GitHub environment. Every migration must work with the code already in production; removing or renaming a column takes two deployments. See [ADR 0009](docs/adr/0009-production-migrations-gate-the-vercel-promotion.md) for the rules and what to do when a migration fails.
 
 A database created earlier with `drizzle-kit push` already has the auth tables, so the initial migration fails on it. Use a fresh database (e.g. a new Neon branch) and run `bun run db:migrate`.
+
+## Database roles
+
+Each Neon branch has two roles:
+
+| Role | Rights | Connection string | Used by |
+| --- | --- | --- | --- |
+| Schema owner (e.g. `neondb_owner`) | Owns the schema; creates and alters tables | **Direct**: `DATABASE_MIGRATION_URL` locally, the `PRODUCTION_DATABASE_DIRECT_URL` secret in CI | `bun run db:migrate`, `bun run db:roles`, the `Migrate production` CI job |
+| Application (e.g. `clickstudio_app`) | Reads and writes rows; cannot create, alter or drop tables | **Pooled**: `DATABASE_URL` in `.env` and in Vercel | The app, the seeds, `bun run doctor` |
+
+After migrating a branch, create or update its application role, connected as the schema owner:
+
+```bash
+APP_DATABASE_PASSWORD='<at least 16 random characters>' bun run db:roles --role clickstudio_app
+```
+
+Let the script create the role: roles made in the Neon console join `neon_superuser`, which the script cannot undo. The script is idempotent. It reads the password only when it creates the role, and never prints it. The password must be at least 16 printable ASCII characters with no spaces. Postgres receives only its SCRAM-SHA-256 verifier, never the password, so it can't end up in a server log. It refuses a role that is, or inherits from, the schema owner, and removes `CREATEDB`/`CREATEROLE` from an existing one. It grants row access on every existing table and, through default privileges, on every table a later migration creates. It also sets these timeouts on the role, because PgBouncer's transaction mode refuses session `SET` ([ADR 0003](docs/adr/0003-node-postgres-global-pool-on-neon.md)):
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| `statement_timeout` | 30s | No request statement runs that long. Tenant deletion raises it to 120s for its own transaction with `SET LOCAL`. |
+| `lock_timeout` | 5s | Locks are held for a few short statements ([Locks and leases](docs/locking.md)). A job that times out fails with HTTP 500 and QStash retries it. |
+| `idle_in_transaction_session_timeout` | 15s | No transaction waits on an external call, so an idle one is stuck. |
+
+The pool itself gives up waiting for a connection after 5 seconds. When the database closes a connection the pool was keeping idle, the pool logs `database_connection_lost` instead of crashing (`db/pool.ts`).
+
+Then copy the role's **pooled** connection string (Neon console → Connect, pick the role) into `DATABASE_URL`. `bun run doctor` fails while `DATABASE_URL` connects with a role that can change the schema or has no timeouts. Neon copies roles into a branch only when the branch is created, so a branch made before the role existed needs its own `bun run db:roles`.
+
+For production, run the script once with production's direct string, then replace `DATABASE_URL` in Vercel's production environment with the application role's pooled string and redeploy.
+
+### Scale to zero
+
+Production's Neon plan does not allow turning off scale to zero. The compute suspends after 5 minutes without queries, and the next connection wakes it, usually in well under a second. Only the pool's 5-second connection timeout covers that wait; the role's timeouts start once a session is open. A wake-up slower than that fails its request with HTTP 500: Meta redelivers webhooks, QStash retries jobs, the sweep runs again 5 minutes later, and a failed daily task alerts and runs again the next day. A person loading the dashboard sees the error and reloads.
+
+The sweep runs every 5 minutes and queries the database, so in practice the compute rarely stays suspended. Watch the plan's monthly compute usage in the Neon console: a compute that uses up its allowance is suspended until the next cycle.
 
 ## Demo Tenant
 

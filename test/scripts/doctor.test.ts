@@ -15,11 +15,17 @@ const environment: DoctorEnvironment = {
   ANTHROPIC_API_KEY: "secret-anthropic",
 };
 
+const appRole = {
+  timeouts: { statementTimeout: "30s", lockTimeout: "5s", idleInTransactionSessionTimeout: "15s" },
+  canChangeSchema: false,
+};
+
 const ready = (overrides: Partial<DoctorDependencies> = {}): DoctorDependencies => ({
   migrationNames: ["first", "second"],
   inspectDatabase: async () => ({
     appliedMigrationNames: ["first", "second"],
     ownerAvailable: true,
+    ...appRole,
   }),
   checkServer: async () => true,
   readSweepSchedule: async () => {
@@ -71,7 +77,11 @@ test("pending migrations and missing owner are reported without applying or crea
   const report = await runDoctor({
     environment,
     dependencies: ready({
-      inspectDatabase: async () => ({ appliedMigrationNames: ["first"], ownerAvailable: false }),
+      inspectDatabase: async () => ({
+        appliedMigrationNames: ["first"],
+        ownerAvailable: false,
+        ...appRole,
+      }),
     }),
   });
   expect(report.ok).toBe(false);
@@ -89,6 +99,7 @@ test("migrations from another branch cannot be mistaken for local readiness", as
       inspectDatabase: async () => ({
         appliedMigrationNames: ["first", "second", "future"],
         ownerAvailable: true,
+        ...appRole,
       }),
     }),
   });
@@ -103,7 +114,11 @@ test("a missing migration history and a stopped server remain visible in the rep
   const report = await runDoctor({
     environment,
     dependencies: ready({
-      inspectDatabase: async () => ({ appliedMigrationNames: null, ownerAvailable: false }),
+      inspectDatabase: async () => ({
+        appliedMigrationNames: null,
+        ownerAvailable: false,
+        ...appRole,
+      }),
       checkServer: async () => false,
     }),
   });
@@ -348,4 +363,61 @@ test("the sweep check is skipped without a QStash token or for a local APP_URL",
     status: "skip",
     message: expect.stringContaining("local"),
   });
+});
+
+test("a database role without timeouts fails readiness and names the missing ones", async () => {
+  const report = await runDoctor({
+    environment,
+    dependencies: ready({
+      inspectDatabase: async () => ({
+        appliedMigrationNames: ["first", "second"],
+        ownerAvailable: true,
+        timeouts: {
+          statementTimeout: "30s",
+          lockTimeout: "0",
+          idleInTransactionSessionTimeout: "0",
+        },
+        canChangeSchema: false,
+      }),
+    }),
+  });
+  expect(report.ok).toBe(false);
+  expect(report.checks.find(({ name }) => name === "database_timeouts")).toMatchObject({
+    status: "fail",
+    message: expect.stringContaining(": lock_timeout, idle_in_transaction_session_timeout."),
+  });
+  expect(report.checks.find(({ name }) => name === "database_privileges")?.status).toBe("pass");
+});
+
+test("connecting with a role that can change the schema fails readiness", async () => {
+  const report = await runDoctor({
+    environment,
+    dependencies: ready({
+      inspectDatabase: async () => ({
+        appliedMigrationNames: ["first", "second"],
+        ownerAvailable: true,
+        ...appRole,
+        canChangeSchema: true,
+      }),
+    }),
+  });
+  expect(report.ok).toBe(false);
+  expect(report.checks.find(({ name }) => name === "database_privileges")).toMatchObject({
+    status: "fail",
+    message: expect.stringContaining("bun run db:roles"),
+  });
+  expect(report.checks.find(({ name }) => name === "database_timeouts")?.status).toBe("pass");
+});
+
+test("the role checks are skipped when the database cannot be inspected", async () => {
+  const report = await runDoctor({
+    environment,
+    dependencies: ready({
+      inspectDatabase: async () => {
+        throw new Error("unreachable");
+      },
+    }),
+  });
+  for (const name of ["database_timeouts", "database_privileges"])
+    expect(report.checks.find((check) => check.name === name)?.status).toBe("skip");
 });

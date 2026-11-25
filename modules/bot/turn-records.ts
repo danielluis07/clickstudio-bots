@@ -32,17 +32,28 @@ export const recordBotTurn = async (db: Database, scope: ChannelRoute, record: B
 };
 
 const retentionMonths = 13;
+const pruneBatchSize = 1_000;
 
 // Daily: deletes records older than 13 months, enough to compare a month's
-// cost with the same month a year before.
+// cost with the same month a year before. In batches, so no statement
+// outlasts the role's statement timeout however large the backlog (#148).
 export const pruneBotTurnRecords = async (db: Database, clock: Clock) => {
   const cutoff = new Date(clock.now());
   cutoff.setUTCMonth(cutoff.getUTCMonth() - retentionMonths);
-  const deleted = await db
-    .delete(botTurnRecord)
-    .where(lt(botTurnRecord.at, cutoff))
-    .returning({ id: botTurnRecord.id });
-  return deleted.length;
+  let total = 0;
+  for (;;) {
+    const batch = db
+      .select({ id: botTurnRecord.id })
+      .from(botTurnRecord)
+      .where(lt(botTurnRecord.at, cutoff))
+      .limit(pruneBatchSize);
+    const deleted = await db
+      .delete(botTurnRecord)
+      .where(inArray(botTurnRecord.id, batch))
+      .returning({ id: botTurnRecord.id });
+    total += deleted.length;
+    if (deleted.length < pruneBatchSize) return total;
+  }
 };
 
 // A Tenant's "Bot indisponível" Handoffs jump when, in the last hour, there

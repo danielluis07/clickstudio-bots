@@ -149,3 +149,25 @@ test("a valid job retries a held lease and acknowledges a missing Conversation",
   }
   expect((await createBotJobRoute(null).POST(request("{}"))).status).toBe(503);
 });
+
+// The app's database role sets lock_timeout (#148). A turn stuck behind
+// another transaction's lock must fail its delivery so QStash retries it.
+test("a statement that times out waiting for a lock fails the job so QStash retries it", async () => {
+  const lockTimeout = Object.assign(new Error("canceling statement due to lock timeout"), {
+    code: "55P03",
+  });
+  const stuck = createBotJobRoute(
+    {
+      bot: {
+        run: async () => {
+          throw lockTimeout;
+        },
+      } as unknown as LiveBot,
+      url,
+      verifier: createQStashJobVerifier(qstashSigningKeys),
+    },
+    createTestDiagnostics(),
+  );
+  const body = JSON.stringify({ conversationId });
+  expect((await stuck.POST(request(body, signQStashRequest({ url, body })))).status).toBe(500);
+});

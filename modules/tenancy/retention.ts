@@ -30,6 +30,9 @@ export const pruneCanceledTenants = async (db: Database, clock: Clock) => {
   let deleted = 0;
   for (const { id: tenantId } of candidates) {
     const removed = await db.transaction(async (tx) => {
+      // The longest legitimate statements: the cascade from the Tenant and the
+      // scan of raw inbox events. Requests keep the role's shorter limit (#148).
+      await tx.execute(sql`set local statement_timeout = '120s'`);
       const [tenant] = await tx
         .select({ id: organization.id })
         .from(organization)

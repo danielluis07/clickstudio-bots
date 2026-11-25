@@ -245,6 +245,24 @@ test("the daily task deletes records older than 13 months", async () => {
   expect(await records()).toMatchObject([{ outcome: "skipped" }]);
 });
 
+// Held to the role's statement timeout, the task deletes in batches, and one
+// run still clears a backlog larger than a batch.
+test("the daily task clears a backlog of old records larger than one batch", async () => {
+  db = await createTestDatabase();
+  const tenantId = crypto.randomUUID();
+  await db.insert(organization).values({ id: tenantId, name: "Barbearia", slug: tenantId });
+  await insertRecords(
+    tenantId,
+    new Date("2025-01-01T00:00:00Z"),
+    Array.from({ length: 2_500 }, () => ({ outcome: "sent" as const })),
+  );
+  await insertRecords(tenantId, new Date("2026-11-01T00:00:00Z"), [{ outcome: "skipped" }]);
+  const clock = { now: () => new Date("2026-11-10T00:00:00Z") };
+
+  expect(await pruneBotTurnRecords(db, clock)).toBe(2_500);
+  expect(await records()).toMatchObject([{ outcome: "skipped" }]);
+});
+
 const unavailable = { outcome: "handoff", handoffReason: "bot_unavailable" } as const;
 
 const spikeSetup = async () => {
