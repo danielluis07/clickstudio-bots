@@ -4,6 +4,7 @@ import { cn } from "cn";
 import { DashboardRailSection } from "@/components/dashboard/dashboard-rail-section";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { botOwnerOnlyMessages } from "@/modules/bot";
 import { useBotActivation } from "@/modules/bot/hooks";
 
 // The top of the Ativação rail: whether the Bot answers, the owner's
@@ -64,9 +65,7 @@ export function BotActivationStatus({ canActivate }: { canActivate: boolean }) {
               </p>
             </>
           ) : (
-            <p className="text-xs text-muted-foreground">
-              Apenas o responsável pelo negócio pode ativar o Bot.
-            </p>
+            <p className="text-xs text-muted-foreground">{botOwnerOnlyMessages.activate}</p>
           )}
         </>
       )}

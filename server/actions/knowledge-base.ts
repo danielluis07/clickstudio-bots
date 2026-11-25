@@ -8,6 +8,7 @@ import {
 } from "@/modules/knowledge-base";
 import { formatCount } from "@/platform/format";
 import { formText, type FormState } from "@/server/actions/form-state";
+import { toFormState } from "@/server/actions/to-form-state";
 import { requireTenantScope } from "@/server/auth/guards";
 import { knowledgeBaseEditor } from "@/server/services";
 
@@ -59,7 +60,5 @@ export async function saveKnowledgeEntryAction(
 export async function deleteKnowledgeEntryAction(entryId: string): Promise<FormState> {
   const scope = await requireTenantScope();
   const result = await knowledgeBaseEditor.deleteEntry(scope, entryId);
-  if (!result.ok) return { status: "error", message: saveErrorMessages[result.error] };
-  refresh();
-  return { status: "success", message: "Item excluído da base de conhecimento." };
+  return toFormState(result, saveErrorMessages, "Item excluído da base de conhecimento.");
 }
