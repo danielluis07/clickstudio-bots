@@ -63,14 +63,18 @@ const strandedPerSweep = 100;
 const strandedPages = 3;
 
 // Deliveries of one Bot job that may meet a transient Model failure. Each
-// earlier one fails the job, so the queue delivers it again, about 12 s and
-// then 2.5 min later; the last hands off. A Contact waits about three minutes
-// at most. The queue must allow at least this many deliveries.
+// earlier one fails the job, so the queue delivers it again, 2 s and then
+// 30 s later; the last hands off. A Contact waits about a minute at most,
+// counting each attempt's Model timeout. The queue must allow at least this
+// many deliveries.
 export const botTurnAttempts = 3;
 
 // Waits before resending a reply Meta refused, within the turn's lease and
 // its job's time limit. A send that fails after the last one hands off.
 const sendRetryDelaysMs = [1_000, 3_000];
+
+// Milliseconds a turn waited on the Model; unset until its first call.
+type ModelTiming = { modelMs?: number };
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -144,7 +148,24 @@ export const createLiveBot = ({
     return null;
   };
 
-  const decide = async (turn: LiveBotTurn, retryTransient: boolean): Promise<Ended> => {
+  // Adds each Model call's wait to the turn's `timing`, including a call that
+  // times out, so a turn record shows how much of its duration was the Model.
+  const timed = (model: Model, timing: ModelTiming): Model => ({
+    async generate(request) {
+      const startedAt = clock.now().getTime();
+      try {
+        return await model.generate(request);
+      } finally {
+        timing.modelMs = (timing.modelMs ?? 0) + clock.now().getTime() - startedAt;
+      }
+    },
+  });
+
+  const decide = async (
+    turn: LiveBotTurn,
+    retryTransient: boolean,
+    timing: ModelTiming,
+  ): Promise<Ended> => {
     const { scope, conversationId } = turn;
     // Every Handoff the gate decides is fenced by this turn's lease.
     const settle = async (
@@ -164,7 +185,7 @@ export const createLiveBot = ({
     if (beforeModel.kind !== "reply") return settle(beforeModel);
     if (!model) return { result: "skipped" };
     const core = createBotCore({
-      model,
+      model: timed(model, timing),
       clock,
       repository: {
         getConfiguration: () => readBotConfiguration(db, scope),
@@ -222,6 +243,7 @@ export const createLiveBot = ({
   // completes.
   const respond = async (turn: LiveBotTurn, retryTransient: boolean) => {
     const startedAt = clock.now();
+    const timing: ModelTiming = {};
     const record = async (
       outcome: BotTurnRecord["outcome"],
       { handoffReason, tokens }: Pick<Ended, "handoffReason" | "tokens">,
@@ -233,6 +255,7 @@ export const createLiveBot = ({
         handoffReason,
         tokens,
         durationMs: at.getTime() - startedAt.getTime(),
+        modelDurationMs: timing.modelMs,
       }).catch((error: unknown) =>
         // A lost record must not fail a turn whose reply was already sent.
         logError("bot_turn_record_failed", error, {
@@ -241,7 +264,7 @@ export const createLiveBot = ({
         }),
       );
     };
-    const ended = await decide(turn, retryTransient).catch(async (error: unknown) => {
+    const ended = await decide(turn, retryTransient, timing).catch(async (error: unknown) => {
       if (error instanceof RetryableTurnError) await record("retried", { tokens: error.tokens });
       throw error;
     });

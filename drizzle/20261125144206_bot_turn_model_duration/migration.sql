@@ -1,0 +1,1 @@
+ALTER TABLE "bot_turn_record" ADD COLUMN "model_duration_ms" integer;
