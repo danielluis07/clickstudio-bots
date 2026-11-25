@@ -1,6 +1,7 @@
 import type { ModelMessage } from "@/modules/bot/model";
 import type { ContextMessage, ContextWindow } from "@/modules/bot/repository";
 import type { BotTurnMessage, BotTurnSnapshot } from "@/modules/conversations";
+import { daysBefore } from "@/platform/time";
 
 // A caption is text context, never evidence of what an attachment contains.
 const messageText = (row: BotTurnMessage) => {
@@ -47,13 +48,11 @@ export type ContextLimits = {
 
 export const defaultContextLimits: ContextLimits = { maxMessages: 20, maxAgeDays: 7 };
 
-const dayMs = 24 * 60 * 60 * 1000;
-
 // Marks a Member's reply, so the model tells it apart from its own.
 export const memberLabel = "[Team member]";
 
 export const contextWindow = (now: Date, limits: ContextLimits): ContextWindow => ({
-  since: new Date(now.getTime() - limits.maxAgeDays * dayMs),
+  since: daysBefore(now, limits.maxAgeDays),
   limit: limits.maxMessages,
 });
 

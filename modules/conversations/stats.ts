@@ -17,6 +17,7 @@ import { contact, conversation, handoffEvent, message } from "@/db/schema";
 import type { ConversationHandoffReason } from "@/modules/conversations/handoff";
 import type { TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
+import { businessTimeZone, dayMs, localDay as localDate } from "@/platform/time";
 
 // The home page's periods, in São Paulo days ending today.
 export const statsPeriods = [7, 30, 90] as const;
@@ -69,15 +70,12 @@ export type ConversationStats = {
   latestHandoffs: RecentHandoff[];
 };
 
-const zone = "America/Sao_Paulo";
 // A literal, not a parameter, so a grouped expression matches its select.
-const zoneLiteral = sql.raw(`'${zone}'`);
-const dayMs = 24 * 60 * 60 * 1000;
-const saoPauloDate = new Intl.DateTimeFormat("en-CA", { timeZone: zone });
+const zoneLiteral = sql.raw(`'${businessTimeZone}'`);
 
 // Every São Paulo day of the period, oldest first, ending with today.
 const periodDays = (period: StatsPeriod, now: Date) => {
-  const today = Date.parse(`${saoPauloDate.format(now)}T00:00:00Z`);
+  const today = Date.parse(`${localDate(now)}T00:00:00Z`);
   return Array.from({ length: period }, (_, index) =>
     new Date(today - (period - 1 - index) * dayMs).toISOString().slice(0, 10),
   );

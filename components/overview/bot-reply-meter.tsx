@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { DashboardRailSection } from "@/components/dashboard/dashboard-rail-section";
-import { formatCount } from "@/lib/format";
+import { formatCount } from "@/platform/format";
 import type { ReplyUsage } from "@/modules/bot";
 
 // "Respostas do Bot": this calendar month's Bot replies against the limit.

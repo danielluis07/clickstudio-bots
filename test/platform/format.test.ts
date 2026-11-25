@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatListTime } from "@/lib/format";
+import { formatListTime } from "@/platform/format";
 
 // 14:30 on 24 Nov 2026 in São Paulo (UTC-3).
 const now = new Date("2026-11-24T17:30:00Z");

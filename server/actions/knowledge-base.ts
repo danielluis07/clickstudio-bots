@@ -6,7 +6,7 @@ import {
   knowledgeBaseCharacterCap,
   type KnowledgeEntryKind,
 } from "@/modules/knowledge-base";
-import { formatCount } from "@/lib/format";
+import { formatCount } from "@/platform/format";
 import { formText, type FormState } from "@/server/actions/form-state";
 import { requireTenantScope } from "@/server/auth/guards";
 import { knowledgeBaseEditor } from "@/server/services";

@@ -6,6 +6,7 @@ import { createChannelRepository, resolveChannelPhoneNumber } from "@/modules/ch
 import type { WhatsAppGateway } from "@/modules/channels/whatsapp-gateway";
 import { isOwner, forbidden, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
+import { dayMs } from "@/platform/time";
 import { whatsAppWebhookFields } from "@/platform/whatsapp";
 
 const signupSchema = z.object({
@@ -19,7 +20,6 @@ const signupSchema = z.object({
 
 export type ChannelSignup = z.input<typeof signupSchema>;
 // Meta accepts the contacts and history requests within 24 hours of onboarding.
-const syncWindowMs = 24 * 60 * 60 * 1000;
 
 const isReconnectable = (health: ChannelHealth) =>
   (reconnectableHealth as readonly ChannelHealth[]).includes(health);
@@ -40,7 +40,7 @@ export const createChannelService = ({
   getWhatsApp: () => WhatsAppGateway;
 }) => {
   // Channels onboarded before this can no longer ask Meta for a sync.
-  const syncWindowOpenedAfter = () => new Date(clock.now().getTime() - syncWindowMs);
+  const syncWindowOpenedAfter = () => new Date(clock.now().getTime() - dayMs);
 
   // Asks once for the app's contacts and history. A refused request is final:
   // Meta allows no second attempt without onboarding again.

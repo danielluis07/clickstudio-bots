@@ -1,5 +1,5 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { formatCount } from "@/lib/format";
+import { formatCount } from "@/platform/format";
 import type { ReplyUsage } from "@/modules/bot";
 
 // What happens near and at the monthly Bot reply limit. Nothing below it.

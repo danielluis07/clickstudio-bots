@@ -5,7 +5,7 @@ import { OverviewCharts } from "@/components/overview/overview-charts";
 import { OverviewError } from "@/components/overview/overview-error";
 import { StatTile } from "@/components/overview/stat-tile";
 import { useSearchParam } from "@/hooks/use-search-param";
-import { formatCount } from "@/lib/format";
+import { formatCount } from "@/platform/format";
 import {
   botOnlyShare,
   parseStatsPeriod,

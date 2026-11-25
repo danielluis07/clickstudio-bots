@@ -7,7 +7,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCount } from "@/lib/format";
+import { formatCount } from "@/platform/format";
 import type { KnowledgeEntryKind } from "@/modules/knowledge-base";
 import {
   knowledgeEntryLabels,

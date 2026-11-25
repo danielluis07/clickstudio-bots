@@ -5,7 +5,6 @@ import { botSandboxUsage } from "@/db/schema";
 import type { BotActivation } from "@/modules/bot/activation";
 import { readBotConfiguration } from "@/modules/bot/configuration";
 import type { Model } from "@/modules/bot/model";
-import { botTimeZone } from "@/modules/bot/schedule";
 import { createBotCore, splitTokens } from "@/modules/bot/turn";
 import {
   contactDetailSchemas,
@@ -14,6 +13,7 @@ import {
 } from "@/modules/conversations";
 import { isOwner, forbidden, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
+import { localDay } from "@/platform/time";
 
 export const sandboxDailyCap = 50;
 
@@ -41,8 +41,6 @@ export const sandboxInputSchema = z.strictObject({
 export type SandboxMessage = z.infer<typeof sandboxMessageSchema>;
 export type SandboxContact = z.infer<typeof sandboxContactSchema>;
 
-const dayFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: botTimeZone });
-
 export const createBotSandbox = ({
   db,
   clock,
@@ -60,7 +58,7 @@ export const createBotSandbox = ({
       .from(botSandboxUsage)
       .where(eq(botSandboxUsage.tenantId, scope.tenantId));
     return {
-      used: usage?.day === dayFormatter.format(clock.now()) ? usage.turns : 0,
+      used: usage?.day === localDay(clock.now()) ? usage.turns : 0,
       limit: sandboxDailyCap,
     };
   };
@@ -78,7 +76,7 @@ export const createBotSandbox = ({
       if (!model) return { ok: false as const, error: "unavailable" as const };
 
       const now = clock.now();
-      const day = dayFormatter.format(now);
+      const day = localDay(now);
       // Reserve before the Model call, without holding a transaction across it.
       // A delayed prior-day request counts toward the persisted later day; it
       // must never roll that day backward or erase its usage. Failures count too.

@@ -1,5 +1,5 @@
 import { UsersRound } from "lucide-react";
-import { formatShortDateTime } from "@/lib/format";
+import { formatShortDateTime } from "@/platform/format";
 import { handoffDividerLabel, type ThreadHandoff } from "@/modules/conversations/hooks";
 
 // A rule across the thread where the Conversation passed to the team.

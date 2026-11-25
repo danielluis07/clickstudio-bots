@@ -2,7 +2,7 @@ import { MessageAuthor } from "@/components/inbox/message-author";
 import { MessageStatus } from "@/components/inbox/message-status";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Message, MessageContent, MessageFooter } from "@/components/ui/message";
-import { formatShortDateTime } from "@/lib/format";
+import { formatShortDateTime } from "@/platform/format";
 import { cn } from "@/lib/utils";
 import {
   messageAuthorKind,

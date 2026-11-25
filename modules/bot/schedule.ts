@@ -1,6 +1,6 @@
 // When the Bot may reply. Business hours and the schedule are read in São
 // Paulo time for every Tenant, as are the reply allowance's months.
-export const botTimeZone = "America/Sao_Paulo";
+import { localClock, localParts } from "@/platform/time";
 
 export const weekdays = [
   "monday",
@@ -27,21 +27,10 @@ export const botSchedules = ["always", "outside_business_hours"] as const;
 
 export type BotSchedule = (typeof botSchedules)[number];
 
-const localTime = new Intl.DateTimeFormat("en-US", {
-  timeZone: botTimeZone,
-  weekday: "long",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-
 const isOpen = (hours: BusinessHours, at: Date) => {
-  const parts = Object.fromEntries(
-    localTime.formatToParts(at).map(({ type, value }) => [type, value]),
-  );
-  const today = hours[parts.weekday.toLowerCase() as Weekday];
+  const today = hours[localParts(at).weekday as Weekday];
   if (!today) return false;
-  const now = `${parts.hour}:${parts.minute}`;
+  const now = localClock(at);
   // Open from the opening minute until, not including, the closing minute.
   return now >= today.opens && now < today.closes;
 };

@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { DashboardRailSection } from "@/components/dashboard/dashboard-rail-section";
-import { formatCount } from "@/lib/format";
+import { formatCount } from "@/platform/format";
 
 // "Espaço usado": the base's characters against its cap.
 export function KnowledgeBaseAllowance({ used, cap }: { used: number; cap: number }) {
