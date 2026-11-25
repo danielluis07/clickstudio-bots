@@ -15,7 +15,7 @@ Every `/painel` page wraps its content in `DashboardPage` (`components/dashboard
 - `width="full"` (default) is for lists, tables and dashboards. `width="form"` caps the width (`max-w-3xl`) for settings forms and other reading-width content.
 - `rail` (with `railLabel`, its accessible name) adds a right-hand column for what sits beside the work: the Bot's state, the reply allowance, a live preview. The page becomes two full-height panes. Split the rail into `DashboardRailSection`s.
 
-Conversas is the one exception: its two-pane inbox fills the viewport height, so `Inbox` lays out its own `h1` with the same styles.
+Conversas is the one exception: its inbox fills the content area edge to edge, like a messaging app, so `Inbox` lays out its own `h1` with the same styles atop the conversation list (chosen over two other layouts in the `prototype/conversas-layout` branch). List rows carry the Contact's initials (WhatsApp's Cloud API sends no profile pictures), the thread header holds the Handoff actions on one line, and the Contact's details open beside the thread on demand.
 
 ### Page design: the workspace
 

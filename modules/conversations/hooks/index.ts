@@ -21,11 +21,14 @@ export {
 } from "@/modules/conversations/hooks/use-alerts";
 export {
   contactDisplayName,
+  contactInitials,
+  type ContactNames,
   formatContactPhone,
 } from "@/modules/conversations/hooks/contact-display";
 export {
+  conversationAnswererLabels,
   conversationFilters,
-  conversationOwnerLabels,
+  conversationStatusLine,
   handoffReasonLabels,
   isWaitingFilter,
 } from "@/modules/conversations/hooks/handoff-display";

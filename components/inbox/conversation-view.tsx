@@ -11,11 +11,16 @@ import { useConversation, useReadConversationAlerts } from "@/modules/conversati
 export function ConversationView({
   conversationId,
   canDeleteContacts,
-  onDeleted,
+  onClose,
+  detailsOpen,
+  onToggleDetails,
 }: {
   conversationId: string;
   canDeleteContacts: boolean;
-  onDeleted: () => void;
+  // Back to the list, also once the Contact is deleted.
+  onClose: () => void;
+  detailsOpen: boolean;
+  onToggleDetails: () => void;
 }) {
   const { data: conversation, isPending, isError } = useConversation(conversationId);
   useReadConversationAlerts(conversationId);
@@ -30,26 +35,37 @@ export function ConversationView({
     );
 
   return (
-    <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_15rem]">
-      <section aria-labelledby="conversa" className="flex min-h-0 min-w-0 flex-col overflow-y-auto">
+    <div className="flex min-h-0 min-w-0">
+      <section
+        aria-labelledby="conversa"
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
+      >
         <ConversationHeader
           conversation={conversation}
           canDeleteContacts={canDeleteContacts}
-          onDeleted={onDeleted}
+          onDeleted={onClose}
+          onBack={onClose}
+          detailsOpen={detailsOpen}
+          onToggleDetails={onToggleDetails}
         />
-        <MessageList conversationId={conversationId} />
-        <ReplyComposer
-          conversationId={conversationId}
-          serviceWindowClosesAt={conversation.serviceWindowClosesAt}
-        />
+        {/* A faint dotted backdrop sets the thread apart from the list. */}
+        <div className="flex min-h-0 flex-1 flex-col bg-muted/40 bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[18px_18px]">
+          <MessageList conversationId={conversationId} />
+          <ReplyComposer
+            conversationId={conversationId}
+            serviceWindowClosesAt={conversation.serviceWindowClosesAt}
+          />
+        </div>
       </section>
-      <div className="hidden min-h-0 min-w-0 xl:flex">
-        <ContactPanel
-          contact={conversation.contact}
-          canDeleteContacts={canDeleteContacts}
-          onDeleted={onDeleted}
-        />
-      </div>
+      {detailsOpen && (
+        <div className="hidden min-h-0 w-80 shrink-0 lg:flex">
+          <ContactPanel
+            contact={conversation.contact}
+            canDeleteContacts={canDeleteContacts}
+            onDeleted={onClose}
+          />
+        </div>
+      )}
     </div>
   );
 }

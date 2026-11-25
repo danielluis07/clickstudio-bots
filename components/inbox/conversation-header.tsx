@@ -1,37 +1,78 @@
+import { ArrowLeft, Info } from "lucide-react";
+import { ContactAvatar } from "@/components/inbox/contact-avatar";
 import { ContactDetailsSheet } from "@/components/inbox/contact-details-sheet";
-import { ConversationOwnership } from "@/components/inbox/conversation-ownership";
 import { HandoffControls } from "@/components/inbox/handoff-controls";
-import { contactDisplayName, formatContactPhone } from "@/modules/conversations/hooks";
+import { Button } from "@/components/ui/button";
+import {
+  contactDisplayName,
+  conversationAnswererLabels,
+  formatContactPhone,
+} from "@/modules/conversations/hooks";
 import type { RouterOutput } from "@/trpc/routers/_app";
 
+// One line: back (small screens), who, the Handoff actions and the Contact's
+// details, which open beside the thread on wide screens and in a sheet below.
 export function ConversationHeader({
   conversation,
   canDeleteContacts,
   onDeleted,
+  onBack,
+  detailsOpen,
+  onToggleDetails,
 }: {
   conversation: RouterOutput["conversations"]["get"];
   canDeleteContacts: boolean;
   onDeleted: () => void;
+  onBack: () => void;
+  detailsOpen: boolean;
+  onToggleDetails: () => void;
 }) {
   return (
-    <header className="flex shrink-0 flex-col gap-3 border-b border-border p-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <h2 id="conversa" className="truncate font-semibold">
+    <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-3 py-3 sm:px-4">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="-mr-1 lg:hidden"
+        aria-label="Voltar às conversas"
+        onClick={onBack}
+      >
+        <ArrowLeft />
+      </Button>
+      <ContactAvatar
+        contact={conversation.contact}
+        team={conversation.owner === "team"}
+        className="size-9"
+      />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <h2 id="conversa" className="truncate leading-tight font-semibold">
           {contactDisplayName(conversation.contact)}
         </h2>
-        <p className="text-sm text-muted-foreground">
-          {formatContactPhone(conversation.contact.phone)}
+        <p className="truncate text-xs text-muted-foreground">
+          {formatContactPhone(conversation.contact.phone)} ·{" "}
+          {conversationAnswererLabels[conversation.owner]}
+          {conversation.waiting && " · Aguardando"}
         </p>
-        <ConversationOwnership conversation={conversation} />
       </div>
-      <div className="flex flex-wrap items-start gap-2">
+      <div className="order-last basis-full sm:order-none sm:basis-auto">
         <HandoffControls conversation={conversation} />
-        <ContactDetailsSheet
-          contact={conversation.contact}
-          canDeleteContacts={canDeleteContacts}
-          onDeleted={onDeleted}
-        />
       </div>
+      <ContactDetailsSheet
+        contact={conversation.contact}
+        canDeleteContacts={canDeleteContacts}
+        onDeleted={onDeleted}
+      />
+      <Button
+        type="button"
+        variant={detailsOpen ? "secondary" : "ghost"}
+        size="icon"
+        className="hidden lg:inline-flex"
+        aria-label="Dados do contato"
+        aria-pressed={detailsOpen}
+        onClick={onToggleDetails}
+      >
+        <Info />
+      </Button>
     </header>
   );
 }

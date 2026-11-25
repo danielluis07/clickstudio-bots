@@ -19,6 +19,7 @@ export function ConversationList({ search, waiting, selectedId, onSelect }: Conv
   const { conversations, isPending, isError, hasMore, loadMore, isLoadingMore } =
     useConversationList(search, waiting);
   const bulk = useBulkReturnToBot(conversations);
+  const selecting = bulk.selected.size > 0;
 
   if (isPending)
     return <Skeleton className="m-3 h-16" aria-busy="true" aria-label="Carregando conversas" />;
@@ -38,27 +39,20 @@ export function ConversationList({ search, waiting, selectedId, onSelect }: Conv
     );
   }
 
+  const now = new Date();
   return (
     <>
-      {(bulk.hasHandoffs || bulk.pending || bulk.failed || bulk.succeeded) && (
-        <BulkHandoffControls
-          count={bulk.selected.size}
-          pending={bulk.pending}
-          failed={bulk.failed}
-          succeeded={bulk.succeeded}
-          atLimit={bulk.atLimit}
-          onReturn={bulk.returnToBot}
-        />
-      )}
       <ScrollArea className="min-h-0 flex-1">
-        <nav aria-label="Conversas">
-          <ul className="divide-y divide-border">
+        <nav aria-label="Conversas" className="px-2 pb-2">
+          <ul className="flex flex-col gap-0.5">
             {conversations.map((conversation) => (
               <li key={conversation.id}>
                 <ConversationListItem
                   conversation={conversation}
+                  now={now}
                   selected={conversation.id === selectedId}
                   onSelect={onSelect}
+                  selecting={selecting}
                   checked={bulk.selected.has(conversation.id)}
                   selectionDisabled={
                     bulk.pending || (bulk.atLimit && !bulk.selected.has(conversation.id))
@@ -69,9 +63,9 @@ export function ConversationList({ search, waiting, selectedId, onSelect }: Conv
             ))}
           </ul>
           {hasMore && (
-            <div className="p-3">
+            <div className="pt-1">
               <Button
-                variant="outline"
+                variant="ghost"
                 className="w-full"
                 onClick={loadMore}
                 disabled={isLoadingMore}
@@ -82,6 +76,17 @@ export function ConversationList({ search, waiting, selectedId, onSelect }: Conv
           )}
         </nav>
       </ScrollArea>
+      {/* Below the list, so rows stay put when the first one is ticked. */}
+      {(selecting || bulk.pending || bulk.failed || bulk.succeeded) && (
+        <BulkHandoffControls
+          count={bulk.selected.size}
+          pending={bulk.pending}
+          failed={bulk.failed}
+          succeeded={bulk.succeeded}
+          atLimit={bulk.atLimit}
+          onReturn={bulk.returnToBot}
+        />
+      )}
     </>
   );
 }
