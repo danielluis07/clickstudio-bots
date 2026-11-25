@@ -167,6 +167,7 @@ export const createLiveBot = ({
         saveContactDetails: (_turn, details) =>
           saveCapturedContactDetails({ db, route: scope, notifier, conversationId, details }),
         listRecentMessages: async () => context,
+        getPendingHandoff: async () => turn.snapshot.pendingHandoff,
       },
     });
     const outcome = await core.respond(turn, { retryTransient });
@@ -185,6 +186,8 @@ export const createLiveBot = ({
     const handoffReason = outcome.kind === "handoff" ? outcome.reason : undefined;
     const messageId = await turn.reserve(outcome.reply, {
       handoffReason,
+      // Stored with the request, so the Contact's next message completes it.
+      pendingHandoff: outcome.kind === "answer" ? outcome.pendingHandoff : undefined,
       beforeReserve: async (tx) => {
         await allowance.reserve(tx, turn);
         await reserveContactReply(tx, turn, clock.now());

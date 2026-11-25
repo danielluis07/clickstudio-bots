@@ -488,10 +488,45 @@ test("sandbox captures return to the browser and never reach production Contacts
     outcome: {
       kind: "answer",
       reply: "Antes de chamar a equipe, me informe seu e-mail, por favor.",
+      pendingHandoff: "contact_request",
     },
     contact: { name: "Bia" },
   });
+
+  // The page sends back the put-off Handoff, which the next turn completes
+  // even though the model only replies.
+  model.script({ text: "Anotado!" });
+  const third = await sandbox.respond(owner, {
+    text: "Prefiro não informar",
+    history: [],
+    contact: second.ok ? second.contact : undefined,
+    pendingHandoff:
+      second.ok && second.outcome.kind === "answer" ? second.outcome.pendingHandoff : null,
+  });
+
+  expect(third).toMatchObject({
+    ok: true,
+    outcome: { kind: "handoff", reason: "contact_request" },
+  });
   expect(await contacts()).toEqual(savedContacts);
+});
+
+test("the sandbox refuses a put-off Handoff the model could not have given", async () => {
+  const sandbox = createBotSandbox({
+    activation: createBotActivation({ db, clock }),
+    db,
+    clock,
+    model,
+  });
+
+  expect(
+    await sandbox.respond(owner, {
+      text: "Oi",
+      history: [],
+      pendingHandoff: "claimed",
+    } as unknown as Parameters<typeof sandbox.respond>[1]),
+  ).toEqual({ ok: false, error: "invalid" });
+  expect(model.requests).toHaveLength(0);
 });
 
 test("the sandbox refuses test Contact details outside the catalog or bounds", async () => {

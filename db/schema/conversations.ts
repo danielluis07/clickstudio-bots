@@ -70,6 +70,13 @@ export const handoffReasons = [
   "app_reply",
 ] as const;
 
+// The reasons the Bot's model may give for a Handoff.
+export const modelHandoffReasons = [
+  "no_answer",
+  "contact_request",
+  "handoff_topic",
+] as const satisfies readonly (typeof handoffReasons)[number][];
+
 export const conversation = pgTable(
   "conversation",
   {
@@ -100,6 +107,11 @@ export const conversation = pgTable(
     // acted since. A turn that would send it again hands off without it, so a
     // long Model outage tells the Contact once.
     unavailableNoticeSent: boolean("unavailable_notice_sent").notNull().default(false),
+    // The model's Handoff that the Bot's latest reply put off to ask for
+    // missing required Contact details (#105). The next Bot turn completes it.
+    // Any other Bot reply, any Handoff, "Resolvida" and "Devolver ao Bot"
+    // clear it.
+    pendingHandoffReason: text("pending_handoff_reason", { enum: modelHandoffReasons }),
     // When a Member last returned the Conversation to the Bot. The daily reply
     // cap per Contact counts only Bot replies sent after it.
     returnedByMemberAt: timestamp("returned_by_member_at", { withTimezone: true }),

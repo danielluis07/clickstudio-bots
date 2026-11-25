@@ -71,7 +71,7 @@ export {
   readBotSettings,
   type BotSettingsLimits,
 } from "@/modules/bot/settings";
-export type { HandoffReason } from "@/modules/bot/tools";
+export type { HandoffReason, ModelHandoffReason } from "@/modules/bot/tools";
 export {
   createBotCore,
   splitTokens,

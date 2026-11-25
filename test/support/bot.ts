@@ -10,6 +10,7 @@ import {
   type ContextMessage,
   type KnowledgeBase,
   type LiveBot,
+  type ModelHandoffReason,
 } from "@/modules/bot";
 import type { ChannelRoute } from "@/modules/channels";
 import type { TenantScope } from "@/modules/tenancy";
@@ -92,6 +93,8 @@ export type TestBotRepository = BotRepository &
     // Every message of the Conversation, whatever the core asks for.
     messages: ContextMessage[];
     turns: BotTurn[];
+    // The Handoff the Bot's latest reply put off, as the caller stored it.
+    pendingHandoff: ModelHandoffReason | null;
   };
 
 // Hands the core one Conversation's saved settings, Knowledge base and
@@ -106,6 +109,7 @@ export const createTestBotRepository = (): TestBotRepository => {
     captured: [],
     messages: [],
     turns: [],
+    pendingHandoff: null,
     getConfiguration: async (turn) => {
       repository.turns.push(turn);
       const { behaviour, knowledgeBase, capture, links } = repository;
@@ -117,6 +121,7 @@ export const createTestBotRepository = (): TestBotRepository => {
       repository.contact = { ...repository.contact, ...details };
     },
     listRecentMessages: async () => repository.messages,
+    getPendingHandoff: async () => repository.pendingHandoff,
   };
   return repository;
 };

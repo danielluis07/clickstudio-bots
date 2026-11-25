@@ -936,7 +936,7 @@ describe("Contact capture", () => {
       repository.messages = [fromContact("Quanto custa o corte? Quero falar com alguém")];
     });
 
-    test("asks only for the missing required details instead of handing off", async () => {
+    test("asks only for the missing required details instead of handing off, keeping the Handoff pending", async () => {
       model.script({
         text: "O corte custa R$ 80.",
         toolCalls: [handoffCall("contact_request")],
@@ -945,15 +945,22 @@ describe("Contact capture", () => {
       expect(await core().respond(turn)).toEqual({
         kind: "answer",
         reply: `O corte custa R$ 80.\n\n${askNameAndEmail}`,
+        pendingHandoff: "contact_request",
       });
     });
 
-    test("hands off anyway when the Contact does not give them after the request", async () => {
+    // After the request, with its Handoff as the caller stored it.
+    const afterRequest = (contactReply: string) => {
+      repository.pendingHandoff = "contact_request";
       repository.messages = [
         fromContact("Quero falar com alguém", minutesAgo(3)),
         { author: "bot", text: askNameAndEmail, sentAt: minutesAgo(2) },
-        fromContact("Prefiro não informar"),
+        fromContact(contactReply),
       ];
+    };
+
+    test("hands off anyway when the Contact does not give them after the request", async () => {
+      afterRequest("Prefiro não informar");
       model.script({ toolCalls: [handoffCall("contact_request")] });
 
       expect(await core().respond(turn)).toEqual({
@@ -964,11 +971,7 @@ describe("Contact capture", () => {
     });
 
     test("hands off with what the Contact gave after the request, even if partial", async () => {
-      repository.messages = [
-        fromContact("Quero falar com alguém", minutesAgo(3)),
-        { author: "bot", text: askNameAndEmail, sentAt: minutesAgo(2) },
-        fromContact("Sou a Ana, e-mail não tenho"),
-      ];
+      afterRequest("Sou a Ana, e-mail não tenho");
       model.script({
         toolCalls: [captureCall({ name: "Ana" }), handoffCall("contact_request", {}, "call-2")],
       });
@@ -978,6 +981,58 @@ describe("Contact capture", () => {
         reason: "contact_request",
       });
       expect(repository.captured).toEqual([{ name: "Ana" }]);
+    });
+
+    test("completes the pending Handoff when the model only captures the details and replies", async () => {
+      afterRequest("Sou a Ana, ana@example.com");
+      model.script({
+        text: "Obrigado, Ana!",
+        toolCalls: [captureCall({ name: "Ana", email: "ana@example.com" })],
+      });
+
+      expect(await core().respond(turn)).toEqual({
+        kind: "handoff",
+        reason: "contact_request",
+        reply: "Obrigado, Ana!\n\nCerto, vou chamar alguém da equipe para continuar o atendimento.",
+      });
+      expect(repository.captured).toEqual([{ name: "Ana", email: "ana@example.com" }]);
+    });
+
+    test("completes the pending Handoff at once when the model captures without a reply", async () => {
+      afterRequest("Ana");
+      model.script({ toolCalls: [captureCall({ name: "Ana" })] });
+
+      expect(await core().respond(turn)).toEqual({
+        kind: "handoff",
+        reason: "contact_request",
+        reply: "Certo, vou chamar alguém da equipe para continuar o atendimento.",
+      });
+      expect(model.requests).toHaveLength(1);
+    });
+
+    test("completes the pending Handoff with its own reason when the model gives another", async () => {
+      afterRequest("Ana, ana@example.com. E vocês fazem luzes?");
+      model.script({
+        toolCalls: [
+          captureCall({ name: "Ana", email: "ana@example.com" }),
+          handoffCall("no_answer", {}, "call-2"),
+        ],
+      });
+
+      expect(await core().respond(turn)).toMatchObject({
+        kind: "handoff",
+        reason: "contact_request",
+      });
+    });
+
+    test("still hands off as unavailable when the Model fails after the request", async () => {
+      afterRequest("Ana");
+      model.script(new Error("529 overloaded"));
+
+      expect(await core().respond(turn)).toMatchObject({
+        kind: "handoff",
+        reason: "bot_unavailable",
+      });
     });
 
     test("asks again for a later Handoff once the Bot has replied to something else", async () => {
@@ -990,7 +1045,11 @@ describe("Contact capture", () => {
       ];
       model.script({ toolCalls: [handoffCall("contact_request")] });
 
-      expect(await core().respond(turn)).toEqual({ kind: "answer", reply: askNameAndEmail });
+      expect(await core().respond(turn)).toEqual({
+        kind: "answer",
+        reply: askNameAndEmail,
+        pendingHandoff: "contact_request",
+      });
     });
 
     test("hands off once the required details are saved, whether before or in the same response", async () => {

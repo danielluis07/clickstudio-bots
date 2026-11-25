@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { modelHandoffReasons } from "@/db/schema";
 import { captureInput, capturedFields, type CaptureSettings } from "@/modules/bot/capture";
 import {
   availableLinks,
@@ -13,16 +14,12 @@ export const captureToolName = "capture_contact_details";
 export const linkToolName = "send_configured_link";
 
 // Why the Bot stepped aside, among the reasons a Handoff stores. The model
-// chooses among these; "bot_unavailable" is the core's own, after a provider
-// or tool failure.
-const modelHandoffReasons = [
-  "no_answer",
-  "contact_request",
-  "handoff_topic",
-] as const satisfies readonly ConversationHandoffReason[];
+// chooses among `modelHandoffReasons`; "bot_unavailable" is the core's own,
+// after a provider or tool failure.
+export type ModelHandoffReason = (typeof modelHandoffReasons)[number];
 
 export type HandoffReason =
-  (typeof modelHandoffReasons)[number] | Extract<ConversationHandoffReason, "bot_unavailable">;
+  ModelHandoffReason | Extract<ConversationHandoffReason, "bot_unavailable">;
 
 // Every Handoff reply ends with one of these, so the Contact always learns
 // the team will reply, whatever the model wrote.

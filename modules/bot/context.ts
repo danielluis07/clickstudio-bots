@@ -13,7 +13,10 @@ const messageText = (row: BotTurnMessage) => {
 
 // What a live Bot turn replays, ending with the Contact's unanswered messages
 // as one Contact message, or null when none of them has text to answer.
-export const liveTurnContext = (snapshot: BotTurnSnapshot, now: Date): ContextMessage[] | null => {
+export const liveTurnContext = (
+  snapshot: Pick<BotTurnSnapshot, "current" | "history">,
+  now: Date,
+): ContextMessage[] | null => {
   // A burst is one Contact turn. Group every unanswered text so the core's
   // bounded historical replay cannot silently discard any current question.
   const currentText = snapshot.current
