@@ -1,0 +1,47 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "de600be2-c373-4e75-ac01-177544335c67",
+  "prevIds": [
+    "5b340765-42ae-4e54-8f56-dc29016f9a82"
+  ],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "conversation",
+        "bot_skipped_at"
+      ],
+      "writes": [
+        "s|col|public.conversation.bot_skipped_at",
+        "n|col|public.conversation.bot_skipped_at",
+        "e|col|public.conversation.bot_skipped_at"
+      ],
+      "reads": [
+        "n|tbl|public.conversation",
+        "n|sch|public"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "conversation",
+        "name": "bot_skipped_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 "use client";
 
+import { BotReplyingIndicator } from "@/components/inbox/bot-replying-indicator";
 import { ContactPanel } from "@/components/inbox/contact-panel";
 import { ConversationHeader } from "@/components/inbox/conversation-header";
 import { InboxNotice } from "@/components/inbox/inbox-notice";
@@ -51,6 +52,7 @@ export function ConversationView({
         {/* A faint dotted backdrop sets the thread apart from the list. */}
         <div className="flex min-h-0 flex-1 flex-col bg-muted/40 bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[18px_18px]">
           <MessageList conversationId={conversationId} />
+          <BotReplyingIndicator until={conversation.botReplyingUntil} />
           <ReplyComposer
             conversationId={conversationId}
             serviceWindowClosesAt={conversation.serviceWindowClosesAt}

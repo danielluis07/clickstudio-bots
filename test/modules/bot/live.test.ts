@@ -449,6 +449,108 @@ test("a live Contact message sends exactly once after activation, including dupl
   );
 });
 
+test("a Bot turn shows the Contact it is typing on their latest message before it answers", async () => {
+  const { scope, model, sender, activation, conversationId, worker, repository, phoneNumberId } =
+    await setup();
+  await activation.activate(scope);
+  const latest = (await repository.listMessages(conversationId))!.messages.at(-1)!;
+  let typingBeforeModel = 0;
+  model.script({ text: "O corte custa R$ 80." });
+  sender.beforeAnswering(async () => {
+    typingBeforeModel = sender.typing.length;
+  });
+  await worker.run(conversationId);
+  expect(sender.typing).toEqual([
+    expect.objectContaining({
+      tenantId: scope.tenantId,
+      phoneNumberId,
+      wamid: latest.wamid!,
+    }),
+  ]);
+  expect(typingBeforeModel).toBe(1);
+  expect(sender.sent).toHaveLength(1);
+});
+
+test("a typing indicator Meta refuses never stops the Bot reply", async () => {
+  const { scope, model, sender, activation, conversationId, worker } = await setup();
+  await activation.activate(scope);
+  sender.failTyping();
+  model.script({ text: "O corte custa R$ 80." });
+  expect(await worker.run(conversationId)).toBe("sent");
+  expect(sender.typing).toHaveLength(1);
+  expect(sender.sent.map(({ text }) => text)).toEqual(["O corte custa R$ 80."]);
+});
+
+test("a turn that skips or hands off before the Model shows no typing indicator", async () => {
+  const { scope, clock, sender, activation, conversationId, worker } = await setup();
+  // Not activated: the gate skips.
+  await worker.run(conversationId);
+  await activation.activate(scope);
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, {
+    ...testBotSettings,
+    schedule: "outside_business_hours",
+  });
+  await worker.run(conversationId);
+  expect(sender.typing).toEqual([]);
+});
+
+test("the inbox shows the Bot replying for at most a minute after a Contact message, until its reply", async () => {
+  const { scope, clock, model, activation, conversationId, worker, repository } = await setup();
+  const replying = async () => (await repository.getConversation(conversationId))!.botReplyingUntil;
+  // Not activated: the Bot will not answer.
+  expect(await replying()).toBeNull();
+  await activation.activate(scope);
+  const minuteAfterMessage = new Date(clock.now().getTime() + 60_000);
+  expect(await replying()).toEqual(minuteAfterMessage);
+  expect((await repository.listConversations()).conversations[0].botReplyingUntil).toEqual(
+    minuteAfterMessage,
+  );
+  model.script({ text: "O corte custa R$ 80." });
+  await worker.run(conversationId);
+  expect(await replying()).toBeNull();
+  expect((await repository.listConversations()).conversations[0].botReplyingUntil).toBeNull();
+});
+
+test("the inbox stops showing the Bot replying when its turn skips, until the Contact writes again", async () => {
+  const { scope, clock, route, activation, conversationId, worker, repository, dependencies } =
+    await setup();
+  const replying = async () => (await repository.getConversation(conversationId))!.botReplyingUntil;
+  await activation.activate(scope);
+  await saveTestSettings(createBotSettingsEditor({ db, clock }), scope, {
+    ...testBotSettings,
+    schedule: "outside_business_hours",
+  });
+  clock.advance(3_000);
+  await worker.run(conversationId);
+  expect(await replying()).toBeNull();
+  expect(dependencies.notifier.pings).toContainEqual({
+    tenantId: scope.tenantId,
+    ping: { conversationId },
+  });
+  clock.advance(1_000);
+  await recordInboundTextMessage(db, route, {
+    wamid: crypto.randomUUID(),
+    from: "5511999990001",
+    profileName: "Ana",
+    text: "Alguém aí?",
+    sentAt: clock.now(),
+  });
+  expect(await replying()).toEqual(new Date(clock.now().getTime() + 60_000));
+});
+
+test("the inbox stops showing the Bot replying when it hands off", async () => {
+  const { scope, model, activation, conversationId, worker, repository } = await setup();
+  await activation.activate(scope);
+  model.script({
+    toolCalls: [{ id: "handoff", name: "handoff", input: { reason: "contact_request" } }],
+  });
+  await worker.run(conversationId);
+  expect(await repository.getConversation(conversationId)).toMatchObject({
+    owner: "team",
+    botReplyingUntil: null,
+  });
+});
+
 test("the last allowed reply counts once; new messages hand off at the limit and remain with the team next month", async () => {
   const { scope, route, clock, model, sender, activation, conversationId, worker, repository } =
     await setup();

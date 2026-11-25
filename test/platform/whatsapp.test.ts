@@ -412,6 +412,45 @@ describe("WhatsApp adapter", () => {
     });
   });
 
+  test("a typing indicator marks the Contact's message read, and a refusal fails without vendor details", async () => {
+    const context = { tenantId: "tenant-a", wabaId: "200", phoneNumberId: "300" };
+    const credential = createWhatsAppTokenCipher(
+      options.activeKeyVersion,
+      options.encryptionKeys,
+    ).encrypt(accessToken, context);
+    const requests: { url: string; init?: RequestInit }[] = [];
+    let refuse = false;
+    const adapter = createWhatsAppAdapter({
+      ...options,
+      async fetch(url, init) {
+        requests.push({ url: String(url), init });
+        return refuse
+          ? Response.json({ error: { message: accessToken } }, { status: 400 })
+          : Response.json({ success: true });
+      },
+    });
+
+    await adapter.indicateTyping({ ...context, credential, wamid: "wamid.IN1" });
+    expect(requests[0].url).toBe("https://graph.facebook.com/v26.0/300/messages");
+    expect(requests[0].init).toMatchObject({
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    });
+    expect(JSON.parse(String(requests[0].init?.body))).toEqual({
+      messaging_product: "whatsapp",
+      status: "read",
+      message_id: "wamid.IN1",
+      typing_indicator: { type: "text" },
+    });
+
+    refuse = true;
+    const failure = await adapter
+      .indicateTyping({ ...context, credential, wamid: "wamid.IN1" })
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(String((failure as Error).message)).not.toContain(accessToken);
+  });
+
   test("a refused or malformed send fails without forwarding sensitive details, and a foreign credential sends nothing", async () => {
     const context = { tenantId: "tenant-a", wabaId: "200", phoneNumberId: "300" };
     const credential = createWhatsAppTokenCipher(

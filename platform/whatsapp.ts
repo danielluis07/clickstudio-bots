@@ -317,5 +317,27 @@ export const createWhatsAppAdapter = (options: Options) => {
         throw new Error("WhatsApp send failed", { cause: error });
       }
     },
+
+    // Meta shows "digitando…" until the next message, or for up to 25 s.
+    async indicateTyping(
+      input: WhatsAppCredentialContext & { credential: EncryptedWhatsAppToken; wamid: string },
+    ) {
+      try {
+        const token = cipher.decrypt(input.credential, input);
+        await request(`${input.phoneNumberId}/messages`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            status: "read",
+            message_id: input.wamid,
+            typing_indicator: { type: "text" },
+          }),
+        });
+      } catch (error) {
+        recordFailure("indicateTyping", error, input);
+        throw new Error("WhatsApp typing indicator failed", { cause: error });
+      }
+    },
   };
 };

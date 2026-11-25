@@ -19,4 +19,13 @@ export interface WhatsAppSender {
       text: string;
     },
   ): Promise<{ wamid: string }>;
+  // Marks the Contact's message read and shows them "digitando…" until the
+  // next message is sent, or for up to 25 s. Callers treat it as best effort.
+  indicateTyping(
+    input: WhatsAppCredentialContext & {
+      credential: EncryptedWhatsAppToken;
+      // The Contact message being answered.
+      wamid: string;
+    },
+  ): Promise<void>;
 }

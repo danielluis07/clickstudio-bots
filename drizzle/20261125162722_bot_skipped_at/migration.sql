@@ -1,0 +1,1 @@
+ALTER TABLE "conversation" ADD COLUMN "bot_skipped_at" timestamp with time zone;

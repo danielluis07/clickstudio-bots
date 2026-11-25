@@ -111,6 +111,7 @@ describe("Inbox Conversation list", () => {
         owner: "bot",
         handoffReason: null,
         waiting: false,
+        botReplyingUntil: null,
         contact: {
           id: expect.any(String),
           phone: "5511900000001",
@@ -127,6 +128,7 @@ describe("Inbox Conversation list", () => {
         owner: "bot",
         handoffReason: null,
         waiting: false,
+        botReplyingUntil: null,
         contact: {
           id: expect.any(String),
           phone: "5511900000002",
@@ -249,6 +251,7 @@ describe("Conversation view", () => {
       owner: "bot",
       handoffReason: null,
       waiting: false,
+      botReplyingUntil: null,
       contact: {
         id: expect.any(String),
         phone: "5511900000001",

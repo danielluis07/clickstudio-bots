@@ -161,6 +161,18 @@ export const createLiveBot = ({
     },
   });
 
+  // Shows the Contact "digitando…" on their latest message while the Model
+  // works (#229). Never awaited: a slow or failed indicator must not delay or
+  // fail the turn. The adapter logs a Meta failure; an unavailable sender
+  // hands off later, at the send.
+  const indicateTyping = (turn: LiveBotTurn) => {
+    const wamid = turn.snapshot.current.at(-1)?.wamid;
+    if (!wamid) return;
+    void Promise.resolve()
+      .then(() => getSender().indicateTyping({ ...turn.recipient, wamid }))
+      .catch(() => {});
+  };
+
   const decide = async (
     turn: LiveBotTurn,
     retryTransient: boolean,
@@ -168,11 +180,16 @@ export const createLiveBot = ({
   ): Promise<Ended> => {
     const { scope, conversationId } = turn;
     // Every Handoff the gate decides is fenced by this turn's lease.
+    // Leaves the Contact's messages unanswered on purpose, for now.
+    const skip = async (tokens?: TurnTokens): Promise<Ended> => {
+      await turn.skip();
+      return { result: "skipped", tokens };
+    };
     const settle = async (
       decision: Exclude<ReplyDecision, { kind: "reply" }>,
       tokens?: TurnTokens,
     ): Promise<Ended> => {
-      if (decision.kind === "skip") return { result: "skipped", tokens };
+      if (decision.kind === "skip") return skip(tokens);
       await turn.handOff(decision.reason);
       return { result: "handoff", handoffReason: decision.reason, tokens };
     };
@@ -183,7 +200,8 @@ export const createLiveBot = ({
     }
     const beforeModel = await gate.check(turn, "beforeModel", model !== null);
     if (beforeModel.kind !== "reply") return settle(beforeModel);
-    if (!model) return { result: "skipped" };
+    if (!model) return skip();
+    indicateTyping(turn);
     const core = createBotCore({
       model: timed(model, timing),
       clock,
@@ -209,7 +227,7 @@ export const createLiveBot = ({
     // Everything may have changed during the Model call.
     const beforeSend = await gate.check(turn, "beforeSend", sender !== null);
     if (beforeSend.kind !== "reply") return settle(beforeSend, tokens);
-    if (!sender) return { result: "skipped", tokens };
+    if (!sender) return skip(tokens);
     const handoffReason = outcome.kind === "handoff" ? outcome.reason : undefined;
     const messageId = await turn.reserve(outcome.reply, {
       handoffReason,
@@ -218,7 +236,7 @@ export const createLiveBot = ({
         await reserveContactReply(tx, turn, clock.now());
       },
     });
-    if (!messageId) return { result: "skipped", tokens };
+    if (!messageId) return skip(tokens);
     // The Contact already has the unavailability notice: handed off, unsent.
     if (typeof messageId !== "string")
       return { result: "handoff", handoffReason: "bot_unavailable", tokens };
