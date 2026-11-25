@@ -1,14 +1,19 @@
 // Run in a separate Bun process so these module mocks cannot affect other tests.
 import { mock } from "bun:test";
+import { APIError } from "better-auth/api";
 import { getURLFromRedirectError } from "next/dist/client/components/redirect";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 
 let role = "user";
+let refusal: APIError | null = null;
 mock.module("next/headers", () => ({ headers: async () => new Headers() }));
 mock.module("@/server/auth/auth", () => ({
   auth: {
     api: {
-      signInEmail: async () => ({ user: { id: "test-user", role } }),
+      signInEmail: async () => {
+        if (refusal) throw refusal;
+        return { user: { id: "test-user", role } };
+      },
     },
   },
 }));
@@ -52,3 +57,30 @@ for (const scenario of cases) {
 }
 
 console.log(`${cases.length} sign-in destinations passed`);
+
+const { tooManySignInAttemptsCode, tooManySignInAttemptsMessage } =
+  await import("@/server/auth/sign-in-limit");
+const refusals = [
+  {
+    error: new APIError("UNAUTHORIZED", { message: "Invalid email or password" }),
+    expected: "E-mail ou senha incorretos.",
+  },
+  {
+    error: new APIError("TOO_MANY_REQUESTS", { code: tooManySignInAttemptsCode }),
+    expected: tooManySignInAttemptsMessage,
+  },
+];
+for (const { error, expected } of refusals) {
+  refusal = error;
+  const formData = new FormData();
+  formData.set("email", "test@example.com");
+  formData.set("password", "test-only-password");
+  const state = await signInAction({ status: "idle" }, formData);
+  if (state.status !== "error" || state.message !== expected) {
+    throw new Error(
+      `sign-in refused with ${error.status}: expected "${expected}", received ${JSON.stringify(state)}`,
+    );
+  }
+}
+
+console.log(`${refusals.length} sign-in refusal messages passed`);

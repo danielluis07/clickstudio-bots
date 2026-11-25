@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { createTenantOnboarding } from "@/modules/tenancy";
-import { createPlatformAdmin } from "@/modules/identity";
+import { createPlatformAdmin, createSignInThrottle } from "@/modules/identity";
 import { createTestClock, type TestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestMailer, type TestMailer } from "@/test/support/mailer";
@@ -220,5 +220,49 @@ describe("accepting an owner invitation", () => {
       ok: true,
       tenantId: second.tenantId,
     });
+  });
+
+  test("password checks for an existing account share the sign-in attempt limit", async () => {
+    const first = await inviteOwner();
+    await onboarding.acceptInvitation(ownerAcceptance(first.invitationId));
+    const second = await inviteOwner();
+    const signIns = createSignInThrottle({ db, clock });
+    for (let i = 0; i < 5; i++) await signIns.attempt({ email: "dona@sorriso.example" });
+    for (let i = 0; i < 5; i++) {
+      expect(
+        await onboarding.acceptInvitation({
+          ...ownerAcceptance(second.invitationId),
+          password: `palpite-${i}-errado`,
+        }),
+      ).toEqual({ ok: false, error: "wrong_password" });
+    }
+
+    expect(await onboarding.acceptInvitation(ownerAcceptance(second.invitationId))).toEqual({
+      ok: false,
+      error: "too_many_attempts",
+    });
+
+    clock.advance(15 * 60_000);
+    expect(await onboarding.acceptInvitation(ownerAcceptance(second.invitationId))).toMatchObject({
+      ok: true,
+      tenantId: second.tenantId,
+    });
+  });
+
+  test("the client IP's attempts count toward its sign-in limit too", async () => {
+    const first = await inviteOwner();
+    await onboarding.acceptInvitation(ownerAcceptance(first.invitationId));
+    const second = await inviteOwner();
+    const signIns = createSignInThrottle({ db, clock });
+    for (let i = 0; i < 10; i++) {
+      await signIns.attempt({ ip: "203.0.113.9", email: `outra-${i}@sorriso.example` });
+    }
+
+    expect(
+      await onboarding.acceptInvitation({
+        ...ownerAcceptance(second.invitationId),
+        clientIp: "203.0.113.9",
+      }),
+    ).toEqual({ ok: false, error: "too_many_attempts" });
   });
 });

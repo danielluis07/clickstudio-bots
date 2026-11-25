@@ -1,6 +1,6 @@
 import { inArray, like } from "drizzle-orm";
 import { db } from "@/db";
-import { channel, memberActivity, organization, user } from "@/db/schema";
+import { channel, memberActivity, organization, signInAttempt, user } from "@/db/schema";
 import { resolveChannelPhoneNumber } from "@/modules/channels";
 import { recordInboundTextMessage } from "@/modules/conversations";
 import { createPlatformAdmin } from "@/modules/identity";
@@ -34,6 +34,8 @@ if (staleIds.length > 0) {
   await db.delete(memberActivity).where(inArray(memberActivity.tenantId, staleIds));
 }
 await db.delete(user).where(like(user.email, `%@${emailDomain}`));
+// A rerun within 15 minutes must not start near the sign-in attempt limit.
+await db.delete(signInAttempt);
 
 const admin = await createPlatformAdmin(db, {
   name: "Admin E2E",

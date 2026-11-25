@@ -4,11 +4,15 @@ import { nextCookies } from "better-auth/next-js";
 import { organization } from "better-auth/plugins";
 import type { Database } from "@/db/database";
 import * as schema from "@/db/schema";
+import { createSignInThrottle } from "@/modules/identity";
+import type { Clock } from "@/platform/clock";
+import { limitSignInAttempts } from "@/server/auth/sign-in-limit";
 
 type AuthOptions = {
   db: Database;
   baseURL: string;
   secret: string;
+  clock: Clock;
   // Lets Better Auth finish its background work after the response goes out.
   runInBackground?: (promise: Promise<unknown>) => void;
 };
@@ -31,7 +35,7 @@ const disabledAuthPaths = [
   ),
 ];
 
-export const createAuth = ({ db, baseURL, secret, runInBackground }: AuthOptions) =>
+export const createAuth = ({ db, baseURL, secret, clock, runInBackground }: AuthOptions) =>
   betterAuth({
     baseURL,
     secret,
@@ -58,6 +62,9 @@ export const createAuth = ({ db, baseURL, secret, runInBackground }: AuthOptions
       },
     },
     disabledPaths: disabledAuthPaths,
+    hooks: {
+      before: limitSignInAttempts(createSignInThrottle({ db, clock })),
+    },
     advanced: {
       database: {
         generateId: false,

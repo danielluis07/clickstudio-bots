@@ -3,7 +3,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
 import { account, invitation, legalAcceptance, member, organization, user } from "@/db/schema";
-import { createUserRepository, isPlatformAdmin } from "@/modules/identity";
+import { createSignInThrottle, createUserRepository, isPlatformAdmin } from "@/modules/identity";
 import { termsVersion } from "@/modules/legal";
 import { tenantOwnerInvitationEmail } from "@/modules/tenancy/invitation-email";
 import {
@@ -42,6 +42,8 @@ export type InvitationAcceptance = {
   // Ignored when the invited email already has an account.
   name?: string;
   password: string;
+  // Counts toward the IP's sign-in attempt limit; null when unknown.
+  clientIp?: string | null;
 };
 
 const findUserWithPassword = async (db: Database, email: string) => {
@@ -68,6 +70,7 @@ export const createTenantOnboarding = ({
   clock,
   appUrl,
 }: TenantOnboardingDependencies) => {
+  const signInThrottle = createSignInThrottle({ db, clock });
   const findInvitation = async (invitationId: string) => {
     const [found] = await db
       .select({
@@ -175,6 +178,11 @@ export const createTenantOnboarding = ({
       const existingUser = await findUserWithPassword(db, pending.email);
       let newUser: { name: string; passwordHash: string } | null = null;
       if (existingUser) {
+        // Checking an existing account's password is a sign-in attempt and
+        // shares its limit, so an invitation cannot be used to guess it (#77).
+        if (!(await signInThrottle.attempt({ ip: input.clientIp, email: pending.email }))) {
+          return { ok: false as const, error: "too_many_attempts" as const };
+        }
         const valid =
           existingUser.passwordHash !== null &&
           (await verifyPassword({ hash: existingUser.passwordHash, password }));

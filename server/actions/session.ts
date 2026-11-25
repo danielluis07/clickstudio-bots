@@ -6,6 +6,10 @@ import { redirect } from "next/navigation";
 import { formText, type FormState } from "@/server/actions/form-state";
 import { auth } from "@/server/auth/auth";
 import {
+  tooManySignInAttemptsCode,
+  tooManySignInAttemptsMessage,
+} from "@/server/auth/sign-in-limit";
+import {
   returnToParam,
   safeReturnPath,
   signedInHomePath,
@@ -24,6 +28,9 @@ export async function signInAction(_previous: FormState, formData: FormData): Pr
     });
     destination = safeReturnPath(formText(formData, returnToParam), user.role);
   } catch (error) {
+    if (isAPIError(error) && error.body?.code === tooManySignInAttemptsCode) {
+      return { status: "error", message: tooManySignInAttemptsMessage };
+    }
     if (isAPIError(error)) {
       return { status: "error", message: "E-mail ou senha incorretos." };
     }

@@ -8,7 +8,9 @@ import {
   type TenantScope,
 } from "@/modules/tenancy";
 import { systemClock } from "@/platform/clock";
+import { isAPIError } from "better-auth/api";
 import { createAuth } from "@/server/auth/create-auth";
+import { signInAlreadyCounted } from "@/server/auth/sign-in-limit";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestMailer } from "@/test/support/mailer";
 
@@ -22,18 +24,37 @@ let ownerScope: TenantScope;
 let otherOwnerScope: TenantScope;
 let pendingInvitationId: string;
 
-const post = (path: string, body: unknown, cookie?: string) =>
-  auth.handler(
+// Each request comes from its own client IP unless one is given, so the
+// sign-in attempt limit only trips in the tests about it.
+let nextClientIp = 1;
+const freshClientIp = () => `10.0.${Math.floor(nextClientIp / 250)}.${nextClientIp++ % 250}`;
+
+const post = (
+  path: string,
+  body: unknown,
+  cookie?: string,
+  { via = auth, ip = freshClientIp() }: { via?: typeof auth; ip?: string } = {},
+) =>
+  via.handler(
     new Request(`${baseURL}/api/auth${path}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         origin: baseURL,
+        "x-forwarded-for": ip,
         ...(cookie ? { cookie } : {}),
       },
       body: JSON.stringify(body),
     }),
   );
+
+const testAuth = () =>
+  createAuth({
+    db,
+    baseURL,
+    secret: "test-secret-with-enough-entropy-0123456789",
+    clock: systemClock,
+  });
 
 const signIn = async (email: string, password: string) => {
   const response = await post("/sign-in/email", { email, password });
@@ -74,11 +95,7 @@ afterAll(() => closeTestDatabase(db));
 
 beforeAll(async () => {
   db = await createTestDatabase();
-  auth = createAuth({
-    db,
-    baseURL,
-    secret: "test-secret-with-enough-entropy-0123456789",
-  });
+  auth = testAuth();
   onboarding = createTenantOnboarding({
     db,
     mailer: createTestMailer(),
@@ -203,6 +220,87 @@ describe("password reset", () => {
       const response = await post(path, body);
       expect({ path, status: response.status }).toEqual({ path, status: 404 });
     }
+  });
+});
+
+describe("sign-in attempt limits", () => {
+  test("an email gets 10 attempts in 15 minutes across every auth instance, then is refused", async () => {
+    await joinAsMember(ownerScope, "edu@sorriso.example");
+    const other = testAuth();
+    const statuses: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      const response = await post(
+        "/sign-in/email",
+        { email: "edu@sorriso.example", password: `palpite-${i}-errado` },
+        undefined,
+        { via: i % 2 === 0 ? auth : other },
+      );
+      statuses.push(response.status);
+    }
+
+    const refused = await post("/sign-in/email", {
+      email: "Edu@Sorriso.example",
+      password: "senha-segura-123",
+    });
+
+    expect(statuses.every((status) => status === 401)).toBe(true);
+    expect(refused.status).toBe(429);
+    expect(refused.headers.getSetCookie()).toEqual([]);
+  });
+
+  test("an IP gets 10 attempts a minute, counted on every auth instance and through auth.api", async () => {
+    const other = testAuth();
+    const ip = "203.0.113.50";
+    for (let i = 0; i < 10; i++) {
+      const response = await post(
+        "/sign-in/email",
+        { email: `palpite-${i}@sorriso.example`, password: "senha-errada-123" },
+        undefined,
+        { via: i % 2 === 0 ? auth : other, ip },
+      );
+      expect(response.status).toBe(401);
+    }
+
+    const refusal = await other.api
+      .signInEmail({
+        body: { email: "admin@clickstudio.example", password: "admin-password-123" },
+        headers: new Headers({ "x-forwarded-for": ip }),
+      })
+      .catch((error: unknown) => error);
+
+    expect(isAPIError(refusal) && refusal.statusCode).toBe(429);
+  });
+
+  test("a sign-in whose password check was already counted, as after accepting an invitation, is not counted again", async () => {
+    await joinAsMember(ownerScope, "flora@sorriso.example");
+    for (let i = 0; i < 10; i++) {
+      await post("/sign-in/email", {
+        email: "flora@sorriso.example",
+        password: `palpite-${i}-errado`,
+      });
+    }
+    const signInFlora = () =>
+      auth.api.signInEmail({
+        body: { email: "flora@sorriso.example", password: "senha-segura-123" },
+        headers: new Headers({ "x-forwarded-for": freshClientIp() }),
+      });
+
+    expect((await signInAlreadyCounted(signInFlora)).user.email).toBe("flora@sorriso.example");
+    const refusal = await signInFlora().catch((error: unknown) => error);
+    expect(isAPIError(refusal) && refusal.statusCode).toBe(429);
+  });
+
+  test("an unknown email gets the same answers as a known one", async () => {
+    const answers = async (email: string) => {
+      const seen: { status: number; body: unknown }[] = [];
+      for (let i = 0; i < 11; i++) {
+        const response = await post("/sign-in/email", { email, password: "senha-errada-123" });
+        seen.push({ status: response.status, body: await response.json() });
+      }
+      return seen;
+    };
+
+    expect(await answers("ninguem@sorriso.example")).toEqual(await answers("dono@vizinha.example"));
   });
 });
 
