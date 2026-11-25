@@ -12,7 +12,7 @@ This interval exists because of the Free plan's allowance, not because 30 minute
 
 - **Upgrade Neon now:** rejected for now. Production had no clients yet, so paying for an always-on compute bought nothing. It is the intended end state.
 - **Every 15 minutes:** rejected. With the compute awake about five minutes after each run, that is about a third of the day, roughly 65 CU-hours a month before any traffic. That leaves too little of the allowance for real conversations.
-- **Every 60 minutes or longer:** rejected. Stranded Contact messages are recovered only between two and 60 minutes old (`modules/bot/live.ts`). With an interval of 60 minutes or more, a message could fall between two runs and never be answered.
+- **Every 60 minutes or longer:** rejected. Stranded Contact messages are recovered only between two and 60 minutes old (`modules/bot/live-sweep.ts`). With an interval of 60 minutes or more, a message could fall between two runs and never be answered.
 - **Trigger the sweep only when work is in flight** (enqueue a delayed sweep with each job): rejected. ADR 0007 rejected self-rescheduling chains because one failed publish ends them silently. It would also need a new way to notice a missing sweep.
 - **Move the sweep to `pg_cron` or Vercel Cron:** rejected for the reasons in ADR 0007, and `pg_cron` would keep the compute awake just the same.
 

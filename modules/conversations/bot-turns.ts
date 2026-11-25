@@ -1,32 +1,16 @@
-import {
-  and,
-  asc,
-  count,
-  eq,
-  gt,
-  gte,
-  inArray,
-  isNull,
-  lte,
-  max,
-  min,
-  ne,
-  notInArray,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
-import { channel, contact, conversation, message, organization } from "@/db/schema";
-import { resolveChannelPhoneNumber, type ChannelRoute } from "@/modules/channels";
+import { channel, contact, conversation, message } from "@/db/schema";
+import type { ChannelRoute } from "@/modules/channels";
 import { botEligible } from "@/modules/conversations/bot-eligibility";
-import type { TenantScope } from "@/modules/tenancy";
-import { recordSentWamid, resolveUnresolvedEchoes } from "@/modules/conversations/echoes";
 import {
-  handOff,
-  handOffAndNotify,
-  unansweredContactMessages,
-  type ConversationHandoffReason,
-} from "@/modules/conversations/handoff";
+  botOwnership,
+  createBotLease,
+  resolveBotConversation,
+} from "@/modules/conversations/bot-lease";
+import { createBotReservation } from "@/modules/conversations/bot-reservation";
+import { recordSentWamid } from "@/modules/conversations/echoes";
+import { handOffAndNotify, type ConversationHandoffReason } from "@/modules/conversations/handoff";
 import {
   createConversationRepository,
   serviceWindowOpen,
@@ -35,179 +19,6 @@ import type { WhatsAppSender } from "@/modules/conversations/whatsapp-sender";
 import type { Clock } from "@/platform/clock";
 import { notifyAlerts, notifyInbox, type AlertPing, type Notifier } from "@/platform/notifier";
 
-export const botLeaseMs = 120_000;
-
-// Tenant-wide durable reservations that may still become acknowledged replies.
-// Read under the allowance counter's lock, in the send reservation transaction.
-export const countPendingBotReplies = async (
-  tx: Transaction,
-  scope: ChannelRoute | TenantScope,
-  now: Date,
-) => {
-  const [pending] = await tx
-    .select({ total: count() })
-    .from(message)
-    .where(
-      and(
-        eq(message.tenantId, scope.tenantId),
-        eq(message.origin, "bot"),
-        eq(message.direction, "outbound"),
-        eq(message.type, "text"),
-        eq(message.imported, false),
-        eq(message.status, "pending"),
-        isNull(message.wamid),
-        gt(message.createdAt, new Date(now.getTime() - botLeaseMs)),
-      ),
-    );
-  return pending!.total;
-};
-
-// Bot replies sent at or after `since` to the Contact of the Conversation,
-// across that Contact's Conversations, for the daily reply cap. Pending sends
-// count, since they may still reach the Contact; failed ones do not. A reply
-// before a Member last returned its Conversation to the Bot does not count.
-// Read in the reservation transaction, the Conversation's lease and row lock
-// make the count exact for that Conversation.
-export const countContactBotReplies = async (
-  db: Database | Transaction,
-  scope: ChannelRoute | TenantScope,
-  conversationId: string,
-  since: Date,
-) => {
-  const turnContact = db
-    .select({ contactId: conversation.contactId })
-    .from(conversation)
-    .where(and(eq(conversation.id, conversationId), eq(conversation.tenantId, scope.tenantId)));
-  const [replies] = await db
-    .select({ total: count() })
-    .from(message)
-    .innerJoin(conversation, eq(conversation.id, message.conversationId))
-    .where(
-      and(
-        eq(message.tenantId, scope.tenantId),
-        eq(conversation.tenantId, scope.tenantId),
-        inArray(conversation.contactId, turnContact),
-        eq(message.origin, "bot"),
-        eq(message.imported, false),
-        ne(message.status, "failed"),
-        gte(message.sentAt, since),
-        or(
-          isNull(conversation.returnedByMemberAt),
-          gt(message.sentAt, conversation.returnedByMemberAt),
-        ),
-      ),
-    );
-  return replies!.total;
-};
-
-// Only verified jobs and daily maintenance call this resolver. It derives
-// proof from the stored Channel phone-number-id, never a request's Tenant id.
-const resolveBotConversation = async (db: Database, conversationId: string) => {
-  const [found] = await db
-    .select({ phoneNumberId: channel.phoneNumberId })
-    .from(conversation)
-    .innerJoin(
-      channel,
-      and(eq(channel.id, conversation.channelId), eq(channel.tenantId, conversation.tenantId)),
-    )
-    .where(eq(conversation.id, conversationId));
-  return found ? resolveChannelPhoneNumber(db, found.phoneNumberId) : null;
-};
-
-// Bounds each recovery scan; the next sweep continues where it stopped.
-const recoveryBatch = 100;
-
-// A canceled Tenant resolves no ChannelRoute, so recovery could never clear
-// its leases; left in the scan, they would fill every batch.
-const tenantActive = (tenantId: typeof conversation.tenantId | typeof message.tenantId) =>
-  sql`not exists(select 1 from ${organization} where ${organization.id} = ${tenantId}
-    and ${organization.canceledAt} is not null)`;
-
-// A privileged global scan only, oldest first. Mutations use the resolved
-// ChannelRoute.
-const listBotRecoveryCandidates = async (db: Database, now: Date) => {
-  const expired = await db
-    .select({ id: conversation.id })
-    .from(conversation)
-    .where(and(lte(conversation.botLeaseUntil, now), tenantActive(conversation.tenantId)))
-    .orderBy(asc(conversation.botLeaseUntil))
-    .limit(recoveryBatch);
-  const stuck = await db
-    .select({ id: message.conversationId })
-    .from(message)
-    .where(
-      and(
-        eq(message.origin, "bot"),
-        eq(message.status, "pending"),
-        isNull(message.wamid),
-        lte(message.createdAt, new Date(now.getTime() - botLeaseMs)),
-        tenantActive(message.tenantId),
-      ),
-    )
-    .groupBy(message.conversationId)
-    .orderBy(asc(min(message.createdAt)))
-    .limit(recoveryBatch);
-  return [...new Set([...expired, ...stuck].map(({ id }) => id))];
-};
-
-// The sweep's privileged global scan for Contact messages whose Bot job never
-// ran: Bot-eligible Conversations with an open service window and no live
-// lease, whose newest unanswered Contact message was sent after `sentAfter`
-// and no later than `sentBy`, outside the Tenants and Conversations in
-// `except`. Oldest first, each with the ChannelRoute its turn resolves from
-// the stored Channel.
-export const listStrandedBotConversations = async (
-  db: Database,
-  now: Date,
-  {
-    sentAfter,
-    sentBy,
-    limit,
-    except = {},
-  }: {
-    sentAfter: Date;
-    sentBy: Date;
-    limit: number;
-    except?: { tenantIds?: string[]; conversationIds?: string[] };
-  },
-) => {
-  const found = await db
-    .select({ id: message.conversationId })
-    .from(message)
-    .innerJoin(
-      conversation,
-      and(eq(conversation.id, message.conversationId), eq(conversation.tenantId, message.tenantId)),
-    )
-    .where(
-      and(
-        eq(message.origin, "contact"),
-        eq(message.imported, false),
-        eq(message.botAnswered, false),
-        gt(message.sentAt, sentAfter),
-        except.tenantIds?.length ? notInArray(message.tenantId, except.tenantIds) : undefined,
-        except.conversationIds?.length
-          ? notInArray(message.conversationId, except.conversationIds)
-          : undefined,
-        or(isNull(conversation.botLeaseUntil), lte(conversation.botLeaseUntil, now)),
-        botEligible,
-        serviceWindowOpen(now),
-      ),
-    )
-    .groupBy(message.conversationId)
-    .having(lte(max(message.sentAt), sentBy))
-    .orderBy(asc(max(message.sentAt)))
-    .limit(limit);
-  const stranded: { scope: ChannelRoute; conversationId: string }[] = [];
-  for (const { id } of found) {
-    const scope = await resolveBotConversation(db, id);
-    if (scope) stranded.push({ scope, conversationId: id });
-  }
-  return stranded;
-};
-
-// A reservation that lost its race: its transaction rolls back, Handoff included.
-class ReservationConflict extends Error {}
-
 // Handoffs it writes add the Alerts they raise to `alerts` once their
 // transaction has committed, for the caller to announce.
 const createConversationBotRepository = (
@@ -215,30 +26,11 @@ const createConversationBotRepository = (
   scope: ChannelRoute,
   alerts?: AlertPing[],
 ) => {
-  const transactionRaising = async <T>(
-    work: (tx: Transaction, raised: AlertPing[]) => Promise<T>,
-  ) => {
-    const raised: AlertPing[] = [];
-    const result = await db.transaction((tx) => work(tx, raised));
-    alerts?.push(...raised);
-    return result;
-  };
-  const ownsConversation = (conversationId: string) =>
-    and(
-      eq(conversation.id, conversationId),
-      eq(conversation.tenantId, scope.tenantId),
-      eq(conversation.channelId, scope.channelId),
-    );
-  const ownsMessages = (conversationId: string) =>
-    and(
-      eq(message.tenantId, scope.tenantId),
-      eq(message.conversationId, conversationId),
-      sql`exists(select 1 from ${conversation} where ${ownsConversation(conversationId)})`,
-    );
-  const unanswered = (conversationId: string) =>
-    and(ownsMessages(conversationId), unansweredContactMessages(scope, conversationId));
+  const { ownsConversation, unanswered } = botOwnership(scope);
 
   return {
+    ...createBotLease(db, scope),
+    ...createBotReservation(db, scope, alerts),
     // Null for a Conversation outside this Channel.
     async eligibility(conversationId: string, now: Date) {
       const [found] = await db
@@ -250,192 +42,12 @@ const createConversationBotRepository = (
         .where(ownsConversation(conversationId));
       return found ?? null;
     },
-    async claim(conversationId: string, token: string, now: Date) {
-      const claimed = await db
-        .update(conversation)
-        .set({ botLeaseToken: token, botLeaseUntil: new Date(now.getTime() + botLeaseMs) })
-        .where(
-          and(
-            ownsConversation(conversationId),
-            or(isNull(conversation.botLeaseUntil), lte(conversation.botLeaseUntil, now)),
-          ),
-        )
-        .returning({ id: conversation.id });
-      return claimed.length > 0;
-    },
-    async release(conversationId: string, token: string) {
-      await db
-        .update(conversation)
-        .set({ botLeaseToken: null, botLeaseUntil: null })
-        .where(and(ownsConversation(conversationId), eq(conversation.botLeaseToken, token)));
-    },
     listUnanswered: (conversationId: string) =>
       db
         .select({ id: message.id })
         .from(message)
         .where(unanswered(conversationId))
         .orderBy(asc(message.createdAt), asc(message.id)),
-    async failPending(conversationId: string, now: Date, staleOnly = false) {
-      return transactionRaising(async (tx, raised) => {
-        // Serialize only these local writes with reservation and cleanup.
-        const locked = await tx
-          .select({ id: conversation.id })
-          .from(conversation)
-          .where(
-            and(
-              ownsConversation(conversationId),
-              staleOnly
-                ? or(isNull(conversation.botLeaseUntil), lte(conversation.botLeaseUntil, now))
-                : undefined,
-            ),
-          )
-          .for("update");
-        if (!locked.length) return false;
-        const failed = await tx
-          .update(message)
-          .set({ status: "failed" })
-          .where(
-            and(
-              ownsMessages(conversationId),
-              eq(message.origin, "bot"),
-              eq(message.status, "pending"),
-              isNull(message.wamid),
-              staleOnly ? lte(message.createdAt, new Date(now.getTime() - botLeaseMs)) : undefined,
-            ),
-          )
-          .returning({ id: message.id });
-        if (!failed.length) return false;
-        // A failed notice never reached the Contact; the next one is sent.
-        await tx
-          .update(conversation)
-          .set({ unavailableNoticeSent: false })
-          .where(ownsConversation(conversationId));
-        // A Member's earlier Handoff keeps its reason.
-        await handOff(tx, scope, conversationId, "bot_unavailable", { alerts: raised });
-        // Now with the team, whatever those echoes were.
-        await resolveUnresolvedEchoes(tx, scope.tenantId, conversationId, { handOff: false });
-        return true;
-      });
-    },
-    async reserve(
-      conversationId: string,
-      token: string,
-      ids: string[],
-      text: string,
-      now: Date,
-      handoffReason?: ConversationHandoffReason,
-      beforeReserve?: (tx: Transaction) => Promise<void>,
-    ) {
-      return transactionRaising(async (tx, raised) => {
-        // Fencing check and eligibility in one update; the lease is never a DB lock.
-        const valid = await tx
-          .update(conversation)
-          .set({ botLeaseUntil: new Date(now.getTime() + botLeaseMs) })
-          .where(
-            and(
-              ownsConversation(conversationId),
-              eq(conversation.botLeaseToken, token),
-              gt(conversation.botLeaseUntil, now),
-              botEligible,
-              serviceWindowOpen(now),
-            ),
-          )
-          .returning({
-            tenantId: conversation.tenantId,
-            unavailableNoticeSent: conversation.unavailableNoticeSent,
-          });
-        if (!valid.length) return null;
-        // Resuming after a Handoff settles the backlog, possibly while this
-        // turn generated its reply. A settled snapshot is never answered.
-        const stillUnanswered = await tx
-          .select({ id: message.id })
-          .from(message)
-          .where(and(unanswered(conversationId), inArray(message.id, ids)))
-          .for("update");
-        if (stillUnanswered.length !== ids.length) return null;
-        // The Contact already has the unavailability notice, and no turn has
-        // succeeded nor a Member acted since. Hand off again without a second
-        // notice or a spent Bot reply. The snapshot stays unanswered: the
-        // Contact's next message returns it to the Bot with the rest.
-        if (handoffReason === "bot_unavailable" && valid[0].unavailableNoticeSent) {
-          await handOff(tx, scope, conversationId, handoffReason, { alerts: raised });
-          return { withheld: true } as const;
-        }
-        // Durable before Meta is called, so a crash after sending keeps it.
-        // Before `beforeReserve`, which takes the reply usage row: the
-        // Handoff's Alert rows rank below it (docs/locking.md).
-        if (handoffReason)
-          await handOff(tx, scope, conversationId, handoffReason, { alerts: raised });
-        await beforeReserve?.(tx);
-        const [pending] = await tx
-          .insert(message)
-          .values({
-            tenantId: valid[0].tenantId,
-            conversationId,
-            direction: "outbound",
-            origin: "bot",
-            status: "pending",
-            answeredMessageId: ids.at(-1)!,
-            type: "text",
-            text,
-            sentAt: now,
-            createdAt: now,
-          })
-          .onConflictDoNothing({ target: [message.conversationId, message.answeredMessageId] })
-          .returning({ id: message.id });
-        if (!pending) throw new ReservationConflict();
-        await tx
-          .update(message)
-          .set({ botAnswered: true })
-          .where(and(unanswered(conversationId), inArray(message.id, ids)));
-        await tx
-          .update(conversation)
-          .set({
-            lastMessageAt: sql`greatest(${conversation.lastMessageAt}, ${now.toISOString()}::timestamptz)`,
-            // Any other reply means the Model answered again.
-            unavailableNoticeSent: handoffReason === "bot_unavailable",
-          })
-          .where(ownsConversation(conversationId));
-        return pending.id;
-      }).catch((error: unknown) => {
-        if (error instanceof ReservationConflict) return null;
-        throw error;
-      });
-    },
-    async consume(conversationId: string, token: string, ids: string[], now: Date) {
-      await db
-        .update(message)
-        .set({ botAnswered: true })
-        .where(
-          and(
-            unanswered(conversationId),
-            inArray(message.id, ids),
-            sql`exists(select 1 from ${conversation} where ${ownsConversation(conversationId)} and ${conversation.botLeaseToken} = ${token} and ${conversation.botLeaseUntil} > ${now.toISOString()}::timestamptz)`,
-          ),
-        );
-    },
-    // Fenced like `consume`: a turn whose lease expired records nothing.
-    async markSkipped(conversationId: string, token: string, now: Date) {
-      const skipped = await db
-        .update(conversation)
-        .set({ botSkippedAt: now })
-        .where(
-          and(
-            ownsConversation(conversationId),
-            eq(conversation.botLeaseToken, token),
-            gt(conversation.botLeaseUntil, now),
-          ),
-        )
-        .returning({ id: conversation.id });
-      return skipped.length > 0;
-    },
-    async clearExpired(conversationId: string, now: Date) {
-      return db
-        .update(conversation)
-        .set({ botLeaseToken: null, botLeaseUntil: null })
-        .where(and(ownsConversation(conversationId), lte(conversation.botLeaseUntil, now)))
-        .returning({ id: conversation.id });
-    },
     async snapshot(conversationId: string) {
       const pending = await db
         .select({ id: message.id })
@@ -620,29 +232,6 @@ export const runBotTurn = async <T>(
     await announce();
     await repository.release(conversationId, token);
     await afterRelease?.(scope, followUp);
-  }
-};
-
-// The sweep's lease recovery: fails Bot replies stranded without a wamid by a
-// lease that expired, then clears the expired leases. `onRecovered` runs before a
-// lease is cleared, so it stays recoverable if `onRecovered` fails. A worker
-// that already claimed it has a later expiry and is never cleared here.
-export const recoverStaleBotTurns = async (
-  { db, clock, notifier }: BotTurnDependencies,
-  onRecovered: (scope: ChannelRoute, conversationId: string) => Promise<void>,
-) => {
-  const now = clock.now();
-  for (const conversationId of await listBotRecoveryCandidates(db, now)) {
-    const scope = await resolveBotConversation(db, conversationId);
-    if (!scope) continue;
-    const alerts: AlertPing[] = [];
-    const repository = createConversationBotRepository(db, scope, alerts);
-    if (await repository.failPending(conversationId, now, true)) {
-      await notifyInbox(notifier, scope.tenantId, { conversationId });
-      await notifyAlerts(notifier, scope.tenantId, alerts);
-    }
-    await onRecovered(scope, conversationId);
-    await repository.clearExpired(conversationId, now);
   }
 };
 
