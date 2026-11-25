@@ -147,11 +147,17 @@ Let the script create the role: roles made in the Neon console join `neon_superu
 | `lock_timeout` | 5s | Locks are held for a few short statements ([Locks and leases](docs/locking.md)). A job that times out fails with HTTP 500 and QStash retries it. |
 | `idle_in_transaction_session_timeout` | 15s | No transaction waits on an external call, so an idle one is stuck. |
 
-The pool itself gives up waiting for a connection after 5 seconds (`db/pool-options.ts`).
+The pool itself gives up waiting for a connection after 5 seconds. When the database closes a connection the pool was keeping idle, the pool logs `database_connection_lost` instead of crashing (`db/pool.ts`).
 
 Then copy the role's **pooled** connection string (Neon console → Connect, pick the role) into `DATABASE_URL`. `bun run doctor` fails while `DATABASE_URL` connects with a role that can change the schema or has no timeouts. Neon copies roles into a branch only when the branch is created, so a branch made before the role existed needs its own `bun run db:roles`.
 
-For production, run the script once with production's direct string, then replace `DATABASE_URL` in Vercel's production environment with the application role's pooled string and redeploy. Also turn off **scale to zero** on production's compute (Neon console → Branches → production → compute settings), so the first request after a quiet period does not spend the pool's connection timeout waiting for the database to wake.
+For production, run the script once with production's direct string, then replace `DATABASE_URL` in Vercel's production environment with the application role's pooled string and redeploy.
+
+### Scale to zero
+
+Production's Neon plan does not allow turning off scale to zero. The compute suspends after 5 minutes without queries, and the next connection wakes it, usually in well under a second. Only the pool's 5-second connection timeout covers that wait; the role's timeouts start once a session is open. A wake-up slower than that fails its request with HTTP 500: Meta redelivers webhooks, QStash retries jobs, the sweep runs again 5 minutes later, and a failed daily task alerts and runs again the next day. A person loading the dashboard sees the error and reloads.
+
+The sweep runs every 5 minutes and queries the database, so in practice the compute rarely stays suspended. Watch the plan's monthly compute usage in the Neon console: a compute that uses up its allowance is suspended until the next cycle.
 
 ## Demo Tenant
 
