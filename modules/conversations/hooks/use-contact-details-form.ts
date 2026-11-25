@@ -1,19 +1,14 @@
 "use client";
 
-import {
-  useMutation,
-  useQueryClient,
-  type InfiniteData,
-  type QueryKey,
-} from "@tanstack/react-query";
-import type { inferOutput } from "@trpc/tanstack-react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { contactDetailInputs } from "@/modules/conversations/hooks/contact-display";
+import {
+  patchConversationCaches,
+  rollback,
+} from "@/modules/conversations/hooks/conversation-cache";
 import { useTRPC } from "@/trpc/client";
 
-type Trpc = ReturnType<typeof useTRPC>;
-type ConversationList = InfiniteData<inferOutput<Trpc["conversations"]["list"]>>;
-type Conversation = inferOutput<Trpc["conversations"]["get"]>;
 type Details = { name: string; email: string; city: string; need: string };
 type ContactWithDetails = {
   id: string;
@@ -32,53 +27,37 @@ const blankAsNull = (value: string) => value.trim() || null;
 export const useUpdateContactDetails = () => {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
-  const affected = [trpc.conversations.get.pathFilter(), trpc.conversations.list.pathFilter()];
 
   return useMutation(
     trpc.contacts.update.mutationOptions({
-      onMutate: async ({ contactId, name, email, city, need }) => {
-        await Promise.all(affected.map((filter) => queryClient.cancelQueries(filter)));
-        const previous = affected.flatMap((filter) => queryClient.getQueriesData(filter));
-        const renameInList = <T extends { contact: { id: string; name: string | null } }>(
-          found: T,
-        ): T =>
-          found.contact.id === contactId
-            ? { ...found, contact: { ...found.contact, name: blankAsNull(name) } }
-            : found;
-
-        queryClient.setQueriesData<Conversation>(trpc.conversations.get.pathFilter(), (found) =>
-          found && found.contact.id === contactId
-            ? {
-                ...found,
-                contact: {
-                  ...found.contact,
-                  name: blankAsNull(name),
-                  email: blankAsNull(email),
-                  city: blankAsNull(city),
-                  need: blankAsNull(need),
-                },
-              }
-            : found,
-        );
-        queryClient.setQueriesData<ConversationList>(
-          trpc.conversations.list.pathFilter(),
-          (list) =>
-            list && {
-              ...list,
-              pages: list.pages.map((page) => ({
-                ...page,
-                conversations: page.conversations.map(renameInList),
-              })),
-            },
-        );
-        return { previous };
-      },
-      onError: (_error, _input, context) => {
-        context?.previous.forEach(([queryKey, data]: [QueryKey, unknown]) =>
-          queryClient.setQueryData(queryKey, data),
-        );
-      },
-      onSettled: () => Promise.all(affected.map((filter) => queryClient.invalidateQueries(filter))),
+      onMutate: ({ contactId, name, email, city, need }) =>
+        patchConversationCaches(queryClient, trpc, {
+          filters: [trpc.conversations.get.pathFilter()],
+          patch: (found) =>
+            found.contact.id === contactId
+              ? {
+                  ...found,
+                  contact: {
+                    ...found.contact,
+                    name: blankAsNull(name),
+                    email: blankAsNull(email),
+                    city: blankAsNull(city),
+                    need: blankAsNull(need),
+                  },
+                }
+              : found,
+          patchRow: (row) =>
+            row.contact.id === contactId
+              ? { ...row, contact: { ...row.contact, name: blankAsNull(name) } }
+              : row,
+        }),
+      onError: (_error, _input, context) => rollback(queryClient, context?.previous),
+      onSettled: () =>
+        Promise.all(
+          [trpc.conversations.get.pathFilter(), trpc.conversations.list.pathFilter()].map(
+            (filter) => queryClient.invalidateQueries(filter),
+          ),
+        ),
     }),
   );
 };
