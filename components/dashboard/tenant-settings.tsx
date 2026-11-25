@@ -6,18 +6,18 @@ import { MemberInvitations } from "@/components/dashboard/member-invitations";
 import { MemberList } from "@/components/dashboard/member-list";
 import { SettingsSection } from "@/components/dashboard/settings-section";
 import { db } from "@/db";
-import { createTenantRepository } from "@/modules/tenancy";
+import { createTenantRepository, isOwner } from "@/modules/tenancy";
 import type { TenantScope } from "@/modules/tenancy";
 import { memberManagement } from "@/server/services";
 
 export async function TenantSettings({ scope }: { scope: TenantScope }) {
   const tenant = createTenantRepository(db, scope);
   // Hiding the controls is not the authorization: the module re-checks.
-  const isOwner = scope.role === "owner";
+  const owner = isOwner(scope);
   const [members, acceptances, invitations] = await Promise.all([
     tenant.listMembers(),
     tenant.listLegalAcceptances(),
-    isOwner ? memberManagement.listPendingInvitations(scope) : [],
+    owner ? memberManagement.listPendingInvitations(scope) : [],
   ]);
 
   return (
@@ -26,8 +26,8 @@ export async function TenantSettings({ scope }: { scope: TenantScope }) {
         <WhatsAppChannel scope={scope} />
       </SettingsSection>
       <SettingsSection id="equipe" title="Equipe">
-        <MemberList members={members} canRemove={isOwner} />
-        {isOwner && <MemberInvitations memberCount={members.length} invitations={invitations} />}
+        <MemberList members={members} canRemove={owner} />
+        {owner && <MemberInvitations memberCount={members.length} invitations={invitations} />}
       </SettingsSection>
       <SettingsSection
         id="notificacoes"

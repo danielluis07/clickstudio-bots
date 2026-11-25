@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
 import { channel } from "@/db/schema";
-import type { TenantScope } from "@/modules/tenancy";
+import { isOwner, forbidden, type TenantScope } from "@/modules/tenancy";
 
 export const readChannelBotState = async (db: Database, scope: TenantScope) => {
   const [found] = await db
@@ -26,7 +26,7 @@ export const activateChannelBot = async (
   scope: TenantScope,
   input: { ready: boolean; at: Date },
 ) => {
-  if (scope.role !== "owner") return { ok: false as const, error: "forbidden" as const };
+  if (!isOwner(scope)) return forbidden;
   if (!input.ready) return { ok: false as const, error: "incomplete" as const };
   const changed = await tx
     .update(channel)

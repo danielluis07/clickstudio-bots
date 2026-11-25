@@ -2,10 +2,10 @@ import { BotActivation } from "@/components/bot/bot-activation";
 import { BotActivationStatus } from "@/components/bot/bot-activation-status";
 import { DashboardPage } from "@/components/dashboard/dashboard-page";
 import { BotReplyTile } from "@/components/overview/bot-reply-tile";
-import type { TenantScope } from "@/modules/tenancy";
+import { isOwner, type TenantScope } from "@/modules/tenancy";
 
 export function BotActivationOverview({ scope }: { scope: TenantScope }) {
-  const isOwner = scope.role === "owner";
+  const owner = isOwner(scope);
 
   return (
     <DashboardPage
@@ -20,8 +20,8 @@ export function BotActivationOverview({ scope }: { scope: TenantScope }) {
       rail={
         <>
           {/* Hiding the button is not the authorization: the module re-checks. */}
-          <BotActivationStatus canActivate={isOwner} />
-          {isOwner && <BotReplyTile />}
+          <BotActivationStatus canActivate={owner} />
+          {owner && <BotReplyTile />}
         </>
       }
       railLabel="Estado do Bot"

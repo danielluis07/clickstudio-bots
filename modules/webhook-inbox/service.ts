@@ -1,4 +1,5 @@
 import type { Database } from "@/db/database";
+import { forbidden } from "@/modules/tenancy";
 import {
   recordAccountUpdate,
   recordHistoryDeclined,
@@ -299,8 +300,7 @@ export const createWebhookInbox = ({
     },
 
     async listFailures(actorId: string, page = 1) {
-      if (!(await isPlatformAdmin(db, actorId)))
-        return { ok: false as const, error: "forbidden" as const };
+      if (!(await isPlatformAdmin(db, actorId))) return forbidden;
       const { events, hasMore } = await repository.listFailures(
         Number.isSafeInteger(page) && page >= 1 ? page : 1,
       );
@@ -323,8 +323,7 @@ export const createWebhookInbox = ({
     // fresh set of automatic replays. Takes event ids only: each job resolves
     // its Tenant from the stored event, as any other.
     async replayFailures(actorId: string, inboxEventIds?: readonly string[]) {
-      if (!(await isPlatformAdmin(db, actorId)))
-        return { ok: false as const, error: "forbidden" as const };
+      if (!(await isPlatformAdmin(db, actorId))) return forbidden;
       if (inboxEventIds?.length === 0) return { ok: true as const, requeued: 0 };
       const moved = await repository.resetFailures(
         inboxEventIds ? [...inboxEventIds] : null,
@@ -335,8 +334,7 @@ export const createWebhookInbox = ({
     },
 
     async replay(actorId: string, inboxEventId: string) {
-      if (!(await isPlatformAdmin(db, actorId)))
-        return { ok: false as const, error: "forbidden" as const };
+      if (!(await isPlatformAdmin(db, actorId))) return forbidden;
       return process(inboxEventId, true);
     },
   };

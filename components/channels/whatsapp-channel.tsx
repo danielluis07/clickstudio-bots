@@ -1,15 +1,15 @@
 import { ConnectWhatsAppButton } from "@/components/channels/connect-whatsapp-button";
 import { ConnectedChannel } from "@/components/channels/connected-channel";
 import { WhatsAppInstructions } from "@/components/channels/whatsapp-instructions";
-import type { TenantScope } from "@/modules/tenancy";
+import { isOwner, type TenantScope } from "@/modules/tenancy";
 import { channelService } from "@/server/services";
 import { getWhatsAppSignupConfig } from "@/server/whatsapp";
 
 export async function WhatsAppChannel({ scope }: { scope: TenantScope }) {
   const channel = await channelService.getChannel(scope);
-  const isOwner = scope.role === "owner";
+  const owner = isOwner(scope);
   // The owner connects a new Channel, or reconnects one Meta stopped serving.
-  const canConnect = isOwner && (!channel || channel.canReconnect);
+  const canConnect = owner && (!channel || channel.canReconnect);
   const config = canConnect ? getWhatsAppSignupConfig() : null;
   return (
     <div className="flex flex-col gap-4">
@@ -20,8 +20,8 @@ export async function WhatsAppChannel({ scope }: { scope: TenantScope }) {
         </p>
       </div>
       {channel ? (
-        <ConnectedChannel channel={channel} isOwner={isOwner} />
-      ) : isOwner ? (
+        <ConnectedChannel channel={channel} isOwner={owner} />
+      ) : owner ? (
         <WhatsAppInstructions />
       ) : (
         <p className="text-sm text-muted-foreground">

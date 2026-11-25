@@ -12,7 +12,7 @@ import {
   noContactDetails,
   type ContactDetails,
 } from "@/modules/conversations";
-import type { TenantScope } from "@/modules/tenancy";
+import { isOwner, forbidden, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 
 export const sandboxDailyCap = 50;
@@ -42,7 +42,6 @@ export type SandboxMessage = z.infer<typeof sandboxMessageSchema>;
 export type SandboxContact = z.infer<typeof sandboxContactSchema>;
 
 const dayFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: botTimeZone });
-const forbidden = { ok: false as const, error: "forbidden" as const };
 
 export const createBotSandbox = ({
   db,
@@ -68,12 +67,12 @@ export const createBotSandbox = ({
 
   return {
     async status(scope: TenantScope) {
-      if (scope.role !== "owner") return forbidden;
+      if (!isOwner(scope)) return forbidden;
       return { ok: true as const, available: model !== null, allowance: await getAllowance(scope) };
     },
 
     async respond(scope: TenantScope, input: z.input<typeof sandboxInputSchema>) {
-      if (scope.role !== "owner") return forbidden;
+      if (!isOwner(scope)) return forbidden;
       const parsed = sandboxInputSchema.safeParse(input);
       if (!parsed.success) return { ok: false as const, error: "invalid" as const };
       if (!model) return { ok: false as const, error: "unavailable" as const };

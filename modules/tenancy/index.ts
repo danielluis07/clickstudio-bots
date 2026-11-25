@@ -15,7 +15,13 @@ export {
 } from "@/modules/tenancy/onboarding";
 export { passwordConfirmationError } from "@/modules/tenancy/password-confirmation";
 export { createTenantRepository, findTenantOwnerEmail } from "@/modules/tenancy/repository";
-export { resolveTenantScope, type MemberRole, type TenantScope } from "@/modules/tenancy/scope";
+export {
+  forbidden,
+  isOwner,
+  resolveTenantScope,
+  type MemberRole,
+  type TenantScope,
+} from "@/modules/tenancy/scope";
 export { createTenantLifecycle } from "@/modules/tenancy/lifecycle";
 export { tenantOperationLeaseMs, tenantRecoveryDays } from "@/modules/tenancy/lifecycle-policy";
 export { pruneCanceledTenants } from "@/modules/tenancy/retention";

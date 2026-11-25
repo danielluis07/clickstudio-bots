@@ -1,4 +1,5 @@
 import { asc, eq } from "drizzle-orm";
+import { forbidden } from "@/modules/tenancy/scope";
 import type { Database } from "@/db/database";
 import {
   botActivation,
@@ -31,8 +32,7 @@ export type TenantExportFile = { filename: string; content: string };
 // Alerts are per-Member signals, not Tenant data, and stay out (ADR 0010).
 export const createTenantExport = ({ db, clock }: { db: Database; clock: Clock }) => ({
   async export(actorId: string, tenantId: string, format: "json" | "csv") {
-    if (!(await isPlatformAdmin(db, actorId)))
-      return { ok: false as const, error: "forbidden" as const };
+    if (!(await isPlatformAdmin(db, actorId))) return forbidden;
     if (format !== "json" && format !== "csv")
       return { ok: false as const, error: "invalid_format" as const };
     const data = await db.transaction(

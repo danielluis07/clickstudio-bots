@@ -4,7 +4,7 @@ import type { ChannelHealth } from "@/db/schema";
 import { reconnectableHealth, reconnectChannel } from "@/modules/channels/health";
 import { createChannelRepository, resolveChannelPhoneNumber } from "@/modules/channels/repository";
 import type { WhatsAppGateway } from "@/modules/channels/whatsapp-gateway";
-import type { TenantScope } from "@/modules/tenancy";
+import { isOwner, forbidden, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 import { whatsAppWebhookFields } from "@/platform/whatsapp";
 
@@ -114,7 +114,7 @@ export const createChannelService = ({
       return resolveChannelPhoneNumber(db, phoneNumberId);
     },
     async connect(scope: TenantScope, input: ChannelSignup) {
-      if (scope.role !== "owner") return { ok: false as const, error: "forbidden" as const };
+      if (!isOwner(scope)) return forbidden;
       const parsed = signupSchema.safeParse(input);
       if (!parsed.success) return { ok: false as const, error: "invalid" as const };
       const repository = createChannelRepository(db, scope);
@@ -157,7 +157,7 @@ export const createChannelService = ({
       return { ok: true as const, reconnected: false };
     },
     async retrySubscription(scope: TenantScope) {
-      if (scope.role !== "owner") return { ok: false as const, error: "forbidden" as const };
+      if (!isOwner(scope)) return forbidden;
       return subscribe(scope);
     },
   };

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isOwner } from "@/modules/tenancy";
 import { channelSignal } from "@/modules/channels";
 import { createTRPCRouter, tenantProcedure } from "@/trpc/init";
 
@@ -8,10 +9,10 @@ export const channelsRouter = createTRPCRouter({
   // the public signup identifiers.
   status: tenantProcedure.input(z.void()).query(async ({ ctx }) => {
     const found = await ctx.channels.getChannel(ctx.scope);
-    const isOwner = ctx.scope.role === "owner";
-    const canConnect = isOwner && (!found || found.canReconnect);
+    const owner = isOwner(ctx.scope);
+    const canConnect = owner && (!found || found.canReconnect);
     return {
-      isOwner,
+      isOwner: owner,
       canConnect,
       channel: found && {
         displayPhoneNumber: found.displayPhoneNumber,

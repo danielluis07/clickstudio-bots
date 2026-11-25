@@ -4,6 +4,8 @@ import {
   recordMemberActivity,
   type MemberActivityAction,
   type TenantScope,
+  isOwner,
+  forbidden,
 } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 
@@ -38,7 +40,7 @@ export const createOwnerSave = <Settings>({
   persist: Persist<Settings>;
 }) =>
   async function save(scope: TenantScope, input: Settings) {
-    if (scope.role !== "owner") return { ok: false as const, error: "forbidden" as const };
+    if (!isOwner(scope)) return forbidden;
     const parsed = schema.safeParse(input);
     if (!parsed.success) return { ok: false as const, error: "invalid" as const };
     const at = clock.now();

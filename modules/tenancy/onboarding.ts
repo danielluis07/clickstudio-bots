@@ -1,4 +1,5 @@
 import { hashPassword, verifyPassword } from "better-auth/crypto";
+import { forbidden } from "@/modules/tenancy/scope";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@/db/database";
@@ -102,7 +103,7 @@ export const createTenantOnboarding = ({
 
     async createTenant(actorUserId: string, input: NewTenant) {
       if (!(await isPlatformAdmin(db, actorUserId))) {
-        return { ok: false as const, error: "forbidden" as const };
+        return forbidden;
       }
       const parsed = newTenantSchema.safeParse(input);
       if (!parsed.success) {

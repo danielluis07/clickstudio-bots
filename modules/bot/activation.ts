@@ -3,7 +3,7 @@ import type { Database, Transaction } from "@/db/database";
 import { botActivation, botSettings, organization } from "@/db/schema";
 import { activateChannelBot, readChannelBotState, setChannelBotPaused } from "@/modules/channels";
 import { readKnowledgeBaseReadiness } from "@/modules/knowledge-base";
-import { recordMemberActivity, type TenantScope } from "@/modules/tenancy";
+import { recordMemberActivity, type TenantScope, isOwner, forbidden } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 
 const activateWithSnapshot = async <T>(db: Database, activate: (tx: Transaction) => Promise<T>) => {
@@ -58,7 +58,7 @@ export const createBotActivation = ({ db, clock }: { db: Database; clock: Clock 
     ),
 
   async activate(scope: TenantScope) {
-    if (scope.role !== "owner") return { ok: false as const, error: "forbidden" as const };
+    if (!isOwner(scope)) return forbidden;
     // One snapshot replaces the former single-statement predicate: readiness
     // and the flag write cannot read different committed configurations.
     return activateWithSnapshot(db, async (tx) => {
@@ -87,7 +87,7 @@ export const createBotActivation = ({ db, clock }: { db: Database; clock: Clock 
     }),
 
   async markTested(scope: TenantScope, testedAt: Date) {
-    if (scope.role !== "owner") return { ok: false as const, error: "forbidden" as const };
+    if (!isOwner(scope)) return forbidden;
     // Use the turn's start time: an edit during generation still needs a test.
     await db
       .insert(botActivation)
