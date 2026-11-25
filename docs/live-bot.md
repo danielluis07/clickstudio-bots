@@ -102,7 +102,7 @@ fenced by its lease and publishes an inbox notification.
 
 Reservation atomically fences out expired holders and rechecks eligibility and
 the service window. It uses the same SQL predicates as the gate
-(`modules/conversations/bot-turns.ts`, with the service window from
+(`modules/conversations/bot-eligibility.ts`, with the service window from
 `modules/conversations/repository.ts`, which the dashboard shares), so the two
 cannot disagree.
 It inserts a pending Bot message and marks the snapshot's Contact messages
@@ -233,5 +233,5 @@ the required branch-protection context.
 Entry points: `modules/bot/index.ts`, `server/bot-jobs.ts`,
 `server/services.ts`, `trpc/routers/bot.ts` and `components/bot/bot-activation.tsx`.
 Conversation persistence is scoped by `ChannelRoute` in
-`modules/conversations/bot-turns.ts`; Channel activation and pause writes live
+`modules/conversations/bot-turns.ts`, `bot-lease.ts`, `bot-reservation.ts` and `bot-recovery.ts`; Channel activation and pause writes live
 in `modules/channels/bot-controls.ts`. Bot owns the activation checklist policy.

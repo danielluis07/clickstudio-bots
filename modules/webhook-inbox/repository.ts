@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import { inboxEvent } from "@/db/schema";
-import type { InboxEventInput } from "@/modules/webhook-inbox/deliveries";
+import type { InboxEventInput } from "@/modules/webhook-inbox/split-delivery";
 import type { ErrorClass } from "@/platform/diagnostics";
 
 // Expired raw events deleted per statement.

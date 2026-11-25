@@ -1,4 +1,7 @@
 import type { Database } from "@/db/database";
+import { createBotSweep } from "@/modules/bot/live-sweep";
+import { createSendWithRetry, wait } from "@/modules/bot/live-send";
+import type { BotJobQueue } from "@/modules/bot/live-jobs";
 import { readBotConfiguration } from "@/modules/bot/configuration";
 import { recordBotReplyUsage } from "@/modules/bot/allowance";
 import { reserveContactReply } from "@/modules/bot/contact-cap";
@@ -8,12 +11,10 @@ import { createBotCore, RetryableTurnError, type TurnTokens } from "@/modules/bo
 import { createReplyGate, type BotAllowance, type ReplyDecision } from "@/modules/bot/reply-gate";
 import type { Model } from "@/modules/bot/model";
 import { recordBotTurn, type BotTurnRecord } from "@/modules/bot/turn-records";
-import { recordCredentialRejected, type ChannelRoute } from "@/modules/channels";
+import { type ChannelRoute } from "@/modules/channels";
 import {
   hasUnansweredContactMessages,
-  listStrandedBotConversations,
   readConversationContactDetails,
-  recoverStaleBotTurns,
   runBotTurn,
   saveCapturedContactDetails,
   type LiveBotTurn,
@@ -23,12 +24,8 @@ import type { Clock } from "@/platform/clock";
 import { annotateError, logError } from "@/platform/diagnostics";
 import type { Notifier } from "@/platform/notifier";
 import { RetryableError } from "@/platform/retryable";
-import { CredentialRejectedError } from "@/platform/whatsapp-credentials";
 
-export type BotJob = { type: "run-bot-turn"; conversationId: string; delaySeconds?: number };
-export interface BotJobQueue {
-  enqueue(jobs: readonly BotJob[]): Promise<void>;
-}
+export type { BotJob, BotJobQueue } from "@/modules/bot/live-jobs";
 
 // People often send several short messages in a row. Each Contact message
 // enqueues its Bot job `delaySeconds` later, and a job whose newest unanswered
@@ -52,16 +49,6 @@ const stillWriting = (
   return age(Math.max(...sent)) < quietMs && age(Math.min(...sent)) < maxWaitMs;
 };
 
-// The sweep recovers a Contact message whose Bot job never ran once it is two
-// minutes old, past any live turn's lease. After an hour it leaves it: a
-// message that old was skipped on purpose, outside the Schedule, and waits for
-// the Contact to write again.
-const strandedAfterMs = 2 * 60_000;
-const strandedUntilMs = 60 * 60_000;
-const strandedPerSweep = 100;
-// Pages a sweep may scan when the reply gate skips whole Tenants.
-const strandedPages = 3;
-
 // Deliveries of one Bot job that may meet a transient Model failure. Each
 // earlier one fails the job, so the queue delivers it again, 2 s and then
 // 30 s later; the last hands off. A Contact waits about a minute at most,
@@ -69,14 +56,8 @@ const strandedPages = 3;
 // many deliveries.
 export const botTurnAttempts = 3;
 
-// Waits before resending a reply Meta refused, within the turn's lease and
-// its job's time limit. A send that fails after the last one hands off.
-const sendRetryDelaysMs = [1_000, 3_000];
-
 // Milliseconds a turn waited on the Model; unset until its first call.
 type ModelTiming = { modelMs?: number };
-
-const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export const createLiveBot = ({
   db,
@@ -119,34 +100,7 @@ export const createLiveBot = ({
     tokens?: TurnTokens;
   };
 
-  // Null when the send failed: Meta refused it on every try, or may have
-  // received it. Only a refusal is retried, with the same pending reply. A
-  // rejected credential marks the Channel unhealthy, which stops new turns.
-  const send = async (
-    scope: ChannelRoute,
-    sender: WhatsAppSender,
-    input: Parameters<WhatsAppSender["sendText"]>[0],
-  ) => {
-    for (const delay of [...sendRetryDelaysMs, null]) {
-      try {
-        return await sender.sendText(input);
-      } catch (error) {
-        if (error instanceof CredentialRejectedError) {
-          // Best effort: the turn still fails its reply and hands off.
-          await recordCredentialRejected(db, scope, scope.channelId, clock.now()).catch(
-            (recordError: unknown) =>
-              logError("channel_health_record_failed", recordError, {
-                tenantId: scope.tenantId,
-              }),
-          );
-          return null;
-        }
-        if (delay === null || !(error instanceof RetryableError)) return null;
-        await sleep(delay);
-      }
-    }
-    return null;
-  };
+  const send = createSendWithRetry({ db, clock, sleep });
 
   // Adds each Model call's wait to the turn's `timing`, including a call that
   // times out, so a turn record shows how much of its duration was the Model.
@@ -334,41 +288,7 @@ export const createLiveBot = ({
         throw annotateError(error, { tenantId, conversationId });
       }
     },
-    // Every few minutes: recovers crashed turns, then re-enqueues Contact
-    // messages whose job never ran. Idempotent; each scan is bounded.
-    async sweep() {
-      const recovered = new Set<string>();
-      await recoverStaleBotTurns({ db, clock, notifier }, async (scope, conversationId) => {
-        recovered.add(conversationId);
-        await enqueue(scope, conversationId);
-      });
-      const now = clock.now();
-      const skippedTenants = new Set<string>();
-      const seen = new Set(recovered);
-      const jobs: BotJob[] = [];
-      for (let page = 0; page < strandedPages && jobs.length < strandedPerSweep; page++) {
-        const stranded = await listStrandedBotConversations(db, now, {
-          sentAfter: new Date(now.getTime() - strandedUntilMs),
-          sentBy: new Date(now.getTime() - strandedAfterMs),
-          limit: strandedPerSweep - jobs.length,
-          except: { tenantIds: [...skippedTenants], conversationIds: [...seen] },
-        });
-        if (!stranded.length) break;
-        for (const candidate of stranded) {
-          seen.add(candidate.conversationId);
-          if (skippedTenants.has(candidate.scope.tenantId)) continue;
-          // The gate as the turn would see it, so a Schedule skip is not
-          // retried every sweep. Eligibility and the service window are in
-          // the scan; the Schedule and allowance are per Tenant, so one skip
-          // leaves the Tenant's other Conversations for the next page.
-          // An exhausted allowance still runs, to hand off.
-          if ((await gate.check(candidate, "beforeModel")).kind === "skip")
-            skippedTenants.add(candidate.scope.tenantId);
-          else jobs.push({ type: "run-bot-turn", conversationId: candidate.conversationId });
-        }
-      }
-      if (jobs.length) await queue.enqueue(jobs);
-    },
+    sweep: createBotSweep({ db, clock, notifier, queue, gate, enqueue }),
   };
 };
 

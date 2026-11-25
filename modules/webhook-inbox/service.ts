@@ -24,8 +24,8 @@ import {
   readMessageEcho,
   readMessageStatus,
   readWabaId,
-  splitDelivery,
-} from "@/modules/webhook-inbox/deliveries";
+} from "@/modules/webhook-inbox/event-readers";
+import { splitDelivery } from "@/modules/webhook-inbox/split-delivery";
 import type { JobQueue } from "@/modules/webhook-inbox/job-queue";
 import { createInboxRepository } from "@/modules/webhook-inbox/repository";
 import { isValidDeliverySignature } from "@/modules/webhook-inbox/signature";

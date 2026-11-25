@@ -13,12 +13,16 @@ export {
   type MemberAlertPreferences,
 } from "@/modules/conversations/alert-preferences";
 export {
+  listStrandedBotConversations,
+  recoverStaleBotTurns,
+} from "@/modules/conversations/bot-recovery";
+export {
   countContactBotReplies,
   countPendingBotReplies,
+} from "@/modules/conversations/bot-reservation";
+export {
   hasUnansweredContactMessages,
-  listStrandedBotConversations,
   readBotEligibility,
-  recoverStaleBotTurns,
   runBotTurn,
   type BotTurnDependencies,
   type BotTurnMessage,

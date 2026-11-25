@@ -204,7 +204,7 @@ transition.
 ### The Bot lease
 
 The Bot lease (`bot_lease_token`, `bot_lease_until`) is written only by
-`claim`, `release` and `clearExpired` in `bot-turns.ts` (see
+`claim`, `release` and `clearExpired` in `bot-lease.ts` (see
 [Locks and leases](locking.md#leases)). It never changes the state, but it
 fences the writes a live turn makes. The reply gate's Handoffs pass the
 turn's token, so a turn whose lease expired cannot hand off. A skipped turn's
@@ -235,10 +235,10 @@ It also records one [Handoff event](#handoff-events) in the same transaction.
 | Member's app reply: a new echo that matches no own send | `app_reply` | `recordMessageEcho`, `echoes.ts` |
 | Member's app reply: an echo filed while a Bot reply awaited its wamid, still unmatched once the wamid is stored | `app_reply` | `resolveUnresolvedEchoes` from `recordSentWamid`, `echoes.ts` |
 | Contact message: an audio, or media with no caption | `no_answer` | `recordInboundMessage`, `inbound.ts` |
-| The Bot's turn: the Model hands off, or its unavailability notice | `no_answer`, `contact_request`, `handoff_topic`, `bot_unavailable` | `reserve`, `bot-turns.ts`, in the reservation that stores the notice, or that withholds a repeated unavailability notice |
+| The Bot's turn: the Model hands off, or its unavailability notice | `no_answer`, `contact_request`, `handoff_topic`, `bot_unavailable` | `reserve`, `bot-reservation.ts`, in the reservation that stores the notice, or that withholds a repeated unavailability notice |
 | The Bot's turn: the reply gate, under the turn's lease | `allowance_exhausted`, `contact_cap_reached`, `bot_unavailable` | `handOff` on `LiveBotTurn` (`handOffAndNotify` with the lease token), `bot-turns.ts` |
-| The Bot's turn: a failed send, or a pending reply left without a wamid by an earlier turn | `bot_unavailable` | `failPending`, `bot-turns.ts` |
-| The sweep: a pending reply stranded by an expired lease | `bot_unavailable` | `failPending` from `recoverStaleBotTurns`, `bot-turns.ts` |
+| The Bot's turn: a failed send, or a pending reply left without a wamid by an earlier turn | `bot_unavailable` | `failPending`, `bot-reservation.ts` |
+| The sweep: a pending reply stranded by an expired lease | `bot_unavailable` | `failPending` from `recoverStaleBotTurns`, `bot-recovery.ts` |
 
 Applied to a Conversation in **Team** or **Team, returns on the Contact's
 message**, a Handoff changes nothing, so the reason stays the one that put it
@@ -347,5 +347,5 @@ The transition tests at the end of `handoff.test.ts` cover every row of
 
 Entry points: `modules/conversations/handoff.ts` (Member commands and the
 shared Handoff write), `modules/conversations/echoes.ts`,
-`modules/conversations/bot-turns.ts`, `trpc/routers/conversations.ts` and
+`modules/conversations/bot-turns.ts`, `bot-reservation.ts`, `trpc/routers/conversations.ts` and
 `components/inbox/handoff-controls.tsx`.
