@@ -108,10 +108,11 @@ export const conversation = pgTable(
     // long Model outage tells the Contact once.
     unavailableNoticeSent: boolean("unavailable_notice_sent").notNull().default(false),
     // The model's Handoff that the Bot's latest reply put off to ask for
-    // missing required Contact details (#105). The next Bot turn completes it.
-    // Any other Bot reply, any Handoff, "Resolvida" and "Devolver ao Bot"
-    // clear it.
+    // missing required Contact details (#105), and when it asked. The next Bot
+    // turn completes it, unless the request is older than the Bot's context
+    // window. Any Handoff, "Resolvida" and "Devolver ao Bot" clear both.
     pendingHandoffReason: text("pending_handoff_reason", { enum: modelHandoffReasons }),
+    pendingHandoffAt: timestamp("pending_handoff_at", { withTimezone: true }),
     // When a Member last returned the Conversation to the Bot. The daily reply
     // cap per Contact counts only Bot replies sent after it.
     returnedByMemberAt: timestamp("returned_by_member_at", { withTimezone: true }),

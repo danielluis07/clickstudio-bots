@@ -16,8 +16,8 @@ The Handoff events migration
 empty `handoff_event` table. Past Handoffs cannot be recovered, so events, and
 any stats built on them, start from that deploy. The pending Handoff migration
 ([#105](https://github.com/danielluis07/clickstudio-bots/issues/105)) adds
-`pending_handoff_reason`, the model Handoff the Bot put off to ask for
-required Contact details. Every Handoff, "Resolvida" and "Devolver ao Bot"
+`pending_handoff_reason` and `pending_handoff_at`, the model Handoff the Bot
+put off to ask for required Contact details and when it asked. Every Handoff, "Resolvida" and "Devolver ao Bot"
 clear it ([Required details before a Handoff](contact-capture.md#required-details-before-a-handoff)).
 
 The reasons were renamed from Portuguese identifiers to English in

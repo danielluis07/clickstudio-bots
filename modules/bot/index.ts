@@ -55,6 +55,7 @@ export type {
   ContextMessage,
   ContextWindow,
   KnowledgeBase,
+  PendingHandoff,
 } from "@/modules/bot/repository";
 export {
   botSchedules,

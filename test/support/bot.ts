@@ -10,7 +10,7 @@ import {
   type ContextMessage,
   type KnowledgeBase,
   type LiveBot,
-  type ModelHandoffReason,
+  type PendingHandoff,
 } from "@/modules/bot";
 import type { ChannelRoute } from "@/modules/channels";
 import type { TenantScope } from "@/modules/tenancy";
@@ -94,7 +94,7 @@ export type TestBotRepository = BotRepository &
     messages: ContextMessage[];
     turns: BotTurn[];
     // The Handoff the Bot's latest reply put off, as the caller stored it.
-    pendingHandoff: ModelHandoffReason | null;
+    pendingHandoff: PendingHandoff | null;
   };
 
 // Hands the core one Conversation's saved settings, Knowledge base and

@@ -115,7 +115,11 @@ export const createBotSandbox = ({
             contact = { ...contact, ...details, name: contact.name ?? details.name ?? null };
           },
           listRecentMessages: async () => messages,
-          getPendingHandoff: async () => parsed.data.pendingHandoff ?? null,
+          // The transcript has no times: the request is as recent as this message.
+          getPendingHandoff: async () => {
+            const reason = parsed.data.pendingHandoff;
+            return reason ? { reason, askedAt: now } : null;
+          },
         },
       });
       const outcome = await core.respond({ scope, conversationId: "sandbox" });

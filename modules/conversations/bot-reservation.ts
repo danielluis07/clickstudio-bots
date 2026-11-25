@@ -221,8 +221,10 @@ export const createBotReservation = (db: Database, scope: ChannelRoute, alerts?:
             lastMessageAt: sql`greatest(${conversation.lastMessageAt}, ${now.toISOString()}::timestamptz)`,
             // Any other reply means the Model answered again.
             unavailableNoticeSent: handoffReason === "bot_unavailable",
-            // Any other reply settles a pending Handoff; a Handoff already did.
+            // Set by a details request. The turn after one always hands off,
+            // so null here only restates what that Handoff already cleared.
             pendingHandoffReason: pendingHandoff ?? null,
+            pendingHandoffAt: pendingHandoff ? now : null,
           })
           .where(ownsConversation(conversationId));
         return pending.id;

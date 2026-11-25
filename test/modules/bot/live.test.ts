@@ -1708,6 +1708,19 @@ test("the Contact's next message completes the put-off Handoff even when the mod
   expect(await pendingHandoff(conversationId)).toBeNull();
 });
 
+test("a Contact who returns after the context window is answered, not handed off", async () => {
+  const { clock, model, sender, conversationId, worker, repository, reply } = await askedForName();
+  clock.advance(8 * 24 * 60 * 60_000);
+  await reply("Quanto custa o corte?");
+  model.script({ text: "O corte custa R$ 80." });
+
+  await worker.run(conversationId);
+
+  expect(sender.sent.at(-1)?.text).toBe("O corte custa R$ 80.");
+  expect(await repository.getConversation(conversationId)).toMatchObject({ owner: "bot" });
+  expect(await pendingHandoff(conversationId)).toBeNull();
+});
+
 test("a Member's takeover clears the put-off Handoff, so the Bot answers after its return", async () => {
   const { scope, model, sender, conversationId, worker, repository, reply, dependencies } =
     await askedForName();

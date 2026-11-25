@@ -118,7 +118,7 @@ export const createBotCore = ({
     { retryTransient = false }: { retryTransient?: boolean } = {},
   ): Promise<TurnOutcome> {
     const window = contextWindow(clock.now(), context);
-    const [{ behaviour, knowledgeBase, capture, links }, details, recent, pendingHandoff] =
+    const [{ behaviour, knowledgeBase, capture, links }, details, recent, pending] =
       await Promise.all([
         repository.getConfiguration(turn),
         repository.getContactDetails(turn),
@@ -127,6 +127,9 @@ export const createBotCore = ({
       ]);
     const messages = replayContext(recent, window);
     if (!messages) return { kind: "nothing_to_answer" };
+    // A request older than the context window no longer binds: a Contact who
+    // comes back later with something else is answered afresh.
+    const pendingHandoff = pending && pending.askedAt >= window.since ? pending.reason : null;
     const request: ModelRequest = {
       tools: modelTools(capture, links),
       instructions: renderInstructions(behaviour, capture, links),

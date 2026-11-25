@@ -2,7 +2,7 @@
   "type": "diff",
   "version": "9",
   "dialect": "postgres",
-  "id": "1d8de94b-1214-439c-b92d-a9e94f02f7d2",
+  "id": "7b44b5cf-5b4f-441e-bb8c-a776544cb71d",
   "prevIds": [
     "de600be2-c373-4e75-ac01-177544335c67"
   ],
@@ -24,6 +24,24 @@
         "n|tbl|public.conversation",
         "n|sch|public"
       ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "conversation",
+        "pending_handoff_at"
+      ],
+      "writes": [
+        "s|col|public.conversation.pending_handoff_at",
+        "n|col|public.conversation.pending_handoff_at",
+        "e|col|public.conversation.pending_handoff_at"
+      ],
+      "reads": [
+        "n|tbl|public.conversation",
+        "n|sch|public"
+      ]
     }
   ],
   "deltas": [
@@ -34,6 +52,22 @@
         "table": "conversation",
         "name": "pending_handoff_reason",
         "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "conversation",
+        "name": "pending_handoff_at",
+        "type": "timestamp with time zone",
         "typeSchema": null,
         "notNull": false,
         "dimensions": 0,

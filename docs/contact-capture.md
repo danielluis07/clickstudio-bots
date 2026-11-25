@@ -61,7 +61,8 @@ Bot does not hand off. It sends the answerable part, if any, followed by:
 > Antes de chamar a equipe, me informe seu nome e seu e-mail, por favor.
 
 The Conversation stays with the Bot, and the put-off Handoff's reason is
-stored with the request on the Conversation (`pending_handoff_reason`, #105).
+stored with the request on the Conversation, with when it asked
+(`pending_handoff_reason` and `pending_handoff_at`, #105).
 The Contact's next message completes that Handoff with its stored reason,
 whether or not the model calls `handoff` again. Details captured in that turn
 are saved first, and the reply carries the model's text, if any, followed by
@@ -70,9 +71,8 @@ without the usual extra tool round trip.
 
 The pending reason is cleared by any Handoff (the Bot's, a system one or a
 Member's, such as **Assumir** or a reply), by **Resolvida** and by
-**Devolver ao Bot**. A Bot reply other than the request also clears it,
-although the next turn after a request always hands off. A request whose
-send fails hands off as `bot_unavailable`, which clears it too.
+**Devolver ao Bot**. A request whose send fails hands off as
+`bot_unavailable`, which clears it too.
 
 These are the uncertain cases, each covered by a core test:
 
@@ -80,6 +80,9 @@ These are the uncertain cases, each covered by a core test:
   ask-once rule was approved during review of #58. The next message completes
   the Handoff with whatever was given, so a Contact who declines is never
   stuck. A required field is therefore asked for once, never enforced.
+- **The Contact comes back after the context window** (7 days). A request
+  older than the Bot's context window no longer binds: the turn is answered
+  as usual, and a new Handoff asks again for what is still missing.
 - **The model gives another reason** on the next message. The Handoff keeps
   the stored reason: it completes the one the Bot promised.
 - **The Model fails** on the next message. The Handoff is `bot_unavailable`,
@@ -113,7 +116,8 @@ CI applies the migration in production before the new code serves ([ADR 0009](ad
 `bot_capture_settings` table (one row per Tenant, created on the first save)
 and the nullable `email`, `city` and `need` columns on `contact`. The
 pending Handoff migration (#105) adds the nullable
-`conversation.pending_handoff_reason`, null for existing rows: a request sent
+`conversation.pending_handoff_reason` and `pending_handoff_at`, null for
+existing rows: a request sent
 before that deploy is not completed automatically, and a later model Handoff
 asks once more.
 

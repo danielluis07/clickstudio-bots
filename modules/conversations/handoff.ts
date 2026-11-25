@@ -70,6 +70,7 @@ export const handOff = async (
       resumeOnContactMessage: reason === "bot_unavailable",
       // Whatever the Bot put off to ask for details has now happened.
       pendingHandoffReason: null,
+      pendingHandoffAt: null,
       // A Member on the Conversation hears of the next outage again.
       ...(byMember ? { unavailableNoticeSent: false } : {}),
     })
@@ -198,6 +199,7 @@ const resume = async (
       resumeOnContactMessage: false,
       // Resolved or back from a Handoff: the Contact's next message starts afresh.
       pendingHandoffReason: null,
+      pendingHandoffAt: null,
       // The automatic returns keep it: no Member acted, and no turn succeeded.
       ...(byMemberAt ? { returnedByMemberAt: byMemberAt, unavailableNoticeSent: false } : {}),
       ...(resolved ? { waiting: false, handoffReason: null } : {}),

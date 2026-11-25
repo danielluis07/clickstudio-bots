@@ -951,7 +951,7 @@ describe("Contact capture", () => {
 
     // After the request, with its Handoff as the caller stored it.
     const afterRequest = (contactReply: string) => {
-      repository.pendingHandoff = "contact_request";
+      repository.pendingHandoff = { reason: "contact_request", askedAt: minutesAgo(2) };
       repository.messages = [
         fromContact("Quero falar com alguém", minutesAgo(3)),
         { author: "bot", text: askNameAndEmail, sentAt: minutesAgo(2) },
@@ -1023,6 +1023,14 @@ describe("Contact capture", () => {
         kind: "handoff",
         reason: "contact_request",
       });
+    });
+
+    test("answers afresh once the request is older than the context window", async () => {
+      repository.pendingHandoff = { reason: "contact_request", askedAt: minutesAgo(8 * 24 * 60) };
+      repository.messages = [fromContact("Quanto custa o corte?")];
+      model.script({ text: "O corte custa R$ 80." });
+
+      expect(await core().respond(turn)).toEqual({ kind: "answer", reply: "O corte custa R$ 80." });
     });
 
     test("still hands off as unavailable when the Model fails after the request", async () => {

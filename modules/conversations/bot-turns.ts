@@ -78,7 +78,8 @@ const createConversationBotRepository = (
             credential: channel.credential,
             to: contact.phone,
           },
-          pendingHandoff: conversation.pendingHandoffReason,
+          pendingReason: conversation.pendingHandoffReason,
+          pendingAt: conversation.pendingHandoffAt,
         })
         .from(conversation)
         .innerJoin(
@@ -95,7 +96,10 @@ const createConversationBotRepository = (
         history: history?.messages ?? [],
         current: current?.messages ?? [],
         recipient: found?.recipient ?? null,
-        pendingHandoff: found?.pendingHandoff ?? null,
+        pendingHandoff:
+          found?.pendingReason && found.pendingAt
+            ? { reason: found.pendingReason, askedAt: found.pendingAt }
+            : null,
       };
     },
   };
@@ -114,8 +118,8 @@ export type BotTurnSnapshot = {
   // The latest messages, oldest first. It may include the current ones.
   readonly history: readonly BotTurnMessage[];
   // The Handoff the Bot's latest reply put off to ask for missing required
-  // Contact details, if any.
-  readonly pendingHandoff: ConversationPendingHandoff | null;
+  // Contact details, and when it asked, if any.
+  readonly pendingHandoff: { reason: ConversationPendingHandoff; askedAt: Date } | null;
 };
 
 export type BotTurnDependencies = { db: Database; clock: Clock; notifier: Notifier };
