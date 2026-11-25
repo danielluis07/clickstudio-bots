@@ -37,7 +37,6 @@ export const useBulkReturnToBot = (conversations: { id: string; owner: "bot" | "
   return {
     selected,
     toggle,
-    hasHandoffs: eligible.size > 0,
     atLimit: selected.size >= 100,
     pending: mutation.isPending,
     failed: mutation.isError,

@@ -1,3 +1,4 @@
+import { Info } from "lucide-react";
 import { ContactPanel } from "@/components/inbox/contact-panel";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,9 +25,17 @@ export function ContactDetailsSheet({
   return (
     <Sheet>
       <SheetTrigger
-        render={<Button type="button" variant="outline" size="sm" className="xl:hidden" />}
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="lg:hidden"
+            aria-label="Dados do contato"
+          />
+        }
       >
-        Contato
+        <Info />
       </SheetTrigger>
       <SheetContent
         className="data-[side=right]:w-full data-[side=right]:max-w-sm"

@@ -22,6 +22,17 @@ export const formatContactPhone = (phone: string) => {
 export const contactDisplayName = (contact: ContactNames) =>
   contact.name ?? contact.appName ?? contact.profileName ?? formatContactPhone(contact.phone);
 
+// The avatar's letters: the first and last word of the shown name, or "#"
+// when the name has no letters (a phone number, emoji).
+export const contactInitials = (contact: ContactNames) => {
+  const words = contactDisplayName(contact)
+    .split(/\s+/)
+    .filter((word) => /^\p{L}/u.test(word));
+  if (words.length === 0) return "#";
+  const first = words[0][0];
+  return (words.length > 1 ? first + words[words.length - 1][0] : first).toUpperCase();
+};
+
 type DetailInput = {
   label: string;
   placeholder: string;

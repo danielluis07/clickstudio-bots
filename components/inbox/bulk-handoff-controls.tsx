@@ -18,7 +18,7 @@ export function BulkHandoffControls({
   onReturn,
 }: BulkHandoffControlsProps) {
   return (
-    <div className="flex flex-col gap-2 border-b border-border p-3">
+    <div className="flex shrink-0 flex-col gap-2 border-t border-border p-3">
       <p className="text-sm text-muted-foreground" aria-live="polite">
         {count === 1 ? "1 conversa selecionada" : `${count} conversas selecionadas`}
       </p>

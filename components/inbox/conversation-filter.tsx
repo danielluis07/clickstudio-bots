@@ -9,17 +9,14 @@ export function ConversationFilter({
   onFilter: (filter: string) => void;
 }) {
   return (
-    <div
-      role="group"
-      aria-label="Filtrar conversas"
-      className="flex gap-1 border-b border-border p-2"
-    >
+    <div role="group" aria-label="Filtrar conversas" className="flex gap-1.5">
       {conversationFilters.map(({ value, label }) => (
         <Button
           key={value}
           type="button"
-          size="sm"
-          variant={filter === value ? "secondary" : "ghost"}
+          size="xs"
+          className="rounded-full px-3"
+          variant={filter === value ? "default" : "secondary"}
           aria-pressed={filter === value}
           onClick={() => onFilter(value)}
         >

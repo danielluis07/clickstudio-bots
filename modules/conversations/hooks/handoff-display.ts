@@ -1,7 +1,5 @@
 import type { ConversationHandoffReason } from "@/modules/conversations/handoff";
 
-export const conversationOwnerLabels = { bot: "Bot", team: "Equipe" } as const;
-
 // Why the latest Handoff happened, as Members read it.
 export const handoffReasonLabels: Record<ConversationHandoffReason, string> = {
   no_answer: "O Bot não soube responder",
@@ -14,6 +12,21 @@ export const handoffReasonLabels: Record<ConversationHandoffReason, string> = {
   dashboard_reply: "Membro respondeu pelo painel",
   app_reply: "Membro respondeu pelo app",
 };
+
+export const conversationAnswererLabels = {
+  bot: "Bot respondendo",
+  team: "Equipe atendendo",
+} as const;
+
+// Under the Contact's name: who answers now and, for the team, why.
+export const conversationStatusLine = (conversation: {
+  owner: keyof typeof conversationAnswererLabels;
+  handoffReason: ConversationHandoffReason | null;
+}) =>
+  (conversation.owner === "team" &&
+    conversation.handoffReason &&
+    handoffReasonLabels[conversation.handoffReason]) ||
+  conversationAnswererLabels[conversation.owner];
 
 // The inbox's list filters, as kept in the URL.
 export const conversationFilters = [
