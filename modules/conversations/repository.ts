@@ -287,7 +287,11 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
         )
         .orderBy(desc(botReturnEvent.occurredAt), desc(botReturnEvent.id))
         .limit(handoffHistoryLimit);
-      return [...handoffs, ...returns]
+      // A return and a Handoff in one transaction share its time: the
+      // Contact's audio returns a "Bot indisponível" Handoff and hands it off
+      // again. The return came first, so it sorts first. Each list is read
+      // newest first; reversed, events of one kind at one time keep id order.
+      return [...returns.reverse(), ...handoffs.reverse()]
         .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime())
         .slice(-handoffHistoryLimit);
     },

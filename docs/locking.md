@@ -264,7 +264,7 @@ Ranks are those of the [ordering rule](#the-ordering-rule).
 | Bot or dashboard reply acknowledged (`recordSentWamid`) | wamid (1) → Conversation row `for update` (4) → Message rows (4) → Handoff on that same Conversation → reply usage upsert (5), Bot replies only |
 | Bot reply reservation (`reserve`) | Conversation row, fencing `UPDATE` (4) → Message rows `for update` (4) → Handoff on that same Conversation → its Alert rows (4) → reply usage row `for update` (5) → message insert |
 | Pending Bot reply failed (`failPending`) | Conversation row `for update` (4) → Message rows (4) → Handoff on that same Conversation → its Alert rows (4) |
-| Return to the Bot (`resume`) | Conversation rows `for update`, ascending id (4) → Message rows (4) → those same Conversations |
+| Return to the Bot (`resume`) | Conversation rows `for update`, ascending id (4) → Message rows (4) → those same Conversations → return event rows of those that were with the team (4) |
 | Dashboard reply stored (`insertPendingReply`) | New message row → Conversation row (4). The new row is invisible to others, so the Conversation row is the only lock that can wait. |
 | Contact deletion (`deleteContact`) | Contact address (3) → message changes → Contact row → cascade to Conversation → Message, Handoff events, return events, Alerts (4) → inbox events. Message changes are only ever written under this Contact's address lock, and inbox events only by single statements outside any transaction, so nothing that holds one of those rows waits for another lock. |
 | Cancel, disconnect, reactivate (`claim`) | Tenant row `for update` (2) → Channel rows (4) |

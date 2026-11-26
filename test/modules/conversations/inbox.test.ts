@@ -384,7 +384,21 @@ describe("Conversation view", () => {
         trigger: "quiet",
         occurredAt: new Date("2026-10-21T11:00:00Z"),
       },
+      {
+        // Returned and handed off again in one transaction: the same time.
+        tenantId: "tenant-a",
+        conversationId: conversationId!,
+        trigger: "contact_message",
+        occurredAt: new Date("2026-10-22T08:00:00Z"),
+      },
     ]);
+    await db.insert(handoffEvent).values({
+      tenantId: "tenant-a",
+      conversationId: conversationId!,
+      reason: "no_answer",
+      actor: "bot",
+      occurredAt: new Date("2026-10-22T08:00:00Z"),
+    });
 
     expect(await inboxOf(tenantA).listHandoffs(conversationId!)).toEqual([
       {
@@ -424,6 +438,21 @@ describe("Conversation view", () => {
         trigger: "quiet",
         memberName: null,
         occurredAt: new Date("2026-10-21T11:00:00Z"),
+      },
+      {
+        kind: "return",
+        id: expect.any(String),
+        trigger: "contact_message",
+        memberName: null,
+        occurredAt: new Date("2026-10-22T08:00:00Z"),
+      },
+      {
+        kind: "handoff",
+        id: expect.any(String),
+        reason: "no_answer",
+        actor: "bot",
+        memberName: null,
+        occurredAt: new Date("2026-10-22T08:00:00Z"),
       },
     ]);
   });
