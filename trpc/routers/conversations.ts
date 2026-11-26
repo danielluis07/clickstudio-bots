@@ -36,7 +36,8 @@ export const conversationsRouter = createTRPCRouter({
       orNotFound(await ctx.conversations(ctx.scope).listMessages(input.conversationId, input)),
     ),
 
-  // The thread's dividers: when and why the Conversation passed to the team.
+  // The thread's dividers: when and why the Conversation passed to the team
+  // or back to the Bot.
   handoffs: tenantProcedure
     .input(z.object({ conversationId: z.string() }))
     .query(async ({ ctx, input }) =>

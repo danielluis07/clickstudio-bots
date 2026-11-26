@@ -106,6 +106,18 @@ to its Handoff events. Only a transaction that holds the Conversation row ever
 inserts one, so the cascade waits for nothing the Conversation row did not
 already wait for.
 
+### Return events
+
+Every return to the Bot that changes hands ends with an insert into
+`bot_return_event` (`resume`, `modules/conversations/handoff.ts`; see
+[Return events](handoff.md#return-events)). Its only foreign key is to the
+Conversation, and `resume` has already locked those Conversation rows
+`for update` and updated them, so the insert's `for key share` never waits.
+Like Handoff events, it has no reference to the Tenant or the Member row, no
+unique key besides a fresh id, and adds no rank. Deleting a Conversation
+cascades to its return events, which wait for nothing the Conversation row
+did not already wait for.
+
 ### Alerts
 
 Alerts ([ADR 0010](adr/0010-alerts-stored-per-member-and-written-with-their-event.md),
@@ -254,7 +266,7 @@ Ranks are those of the [ordering rule](#the-ordering-rule).
 | Pending Bot reply failed (`failPending`) | Conversation row `for update` (4) → Message rows (4) → Handoff on that same Conversation → its Alert rows (4) |
 | Return to the Bot (`resume`) | Conversation rows `for update`, ascending id (4) → Message rows (4) → those same Conversations |
 | Dashboard reply stored (`insertPendingReply`) | New message row → Conversation row (4). The new row is invisible to others, so the Conversation row is the only lock that can wait. |
-| Contact deletion (`deleteContact`) | Contact address (3) → message changes → Contact row → cascade to Conversation → Message, Handoff events, Alerts (4) → inbox events. Message changes are only ever written under this Contact's address lock, and inbox events only by single statements outside any transaction, so nothing that holds one of those rows waits for another lock. |
+| Contact deletion (`deleteContact`) | Contact address (3) → message changes → Contact row → cascade to Conversation → Message, Handoff events, return events, Alerts (4) → inbox events. Message changes are only ever written under this Contact's address lock, and inbox events only by single statements outside any transaction, so nothing that holds one of those rows waits for another lock. |
 | Cancel, disconnect, reactivate (`claim`) | Tenant row `for update` (2) → Channel rows (4) |
 | Member subscription (`claimSubscription`, `finishSubscription`, `finishCanceledSubscription`) | Tenant row `for update` (2) → Channel rows (4) |
 | Invitation (`inviteMember`) | Tenant row `for update` (2) → Invitation rows (4) |

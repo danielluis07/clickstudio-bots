@@ -54,6 +54,10 @@ _Avoid_: Escalation, transfer, takeover
 The record of one Handoff: when it happened, which Conversation, its reason, and whether the Bot or a Member caused it. A Handoff of a Conversation already with the team records none.
 _Avoid_: Handoff log, escalation record
 
+**Return event**:
+The record of one return of a Conversation from the team to the Bot: when it happened, which Conversation, what returned it ("Devolver ao Bot", "Resolvida", the Contact's message after a "Bot indisponível" Handoff, or a quiet service window) and the Member who did it, if one did. A return of a Conversation already with the Bot records none.
+_Avoid_: Resume log, de-escalation record
+
 **Alert**:
 A signal in the dashboard telling one Member that something happened in their Tenant which may need a person: a Handoff the Bot caused, or a new Contact message. Each Member reads and clears their own Alerts. Handoffs a Member causes and returns to the Bot raise none.
 _Avoid_: Notification, ping

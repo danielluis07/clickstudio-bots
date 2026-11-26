@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { BotReturnTrigger, ConversationHandoffReason } from "@/modules/conversations";
 import {
   handoffDividerLabel,
   placeHandoffs,
@@ -10,9 +11,22 @@ const message = (id: string, sentAt: string) => ({ id, sentAt: new Date(sentAt) 
 const handoff = (
   id: string,
   occurredAt: string,
-  reason: ThreadHandoff["reason"] = "contact_request",
+  reason: ConversationHandoffReason = "contact_request",
   memberName: string | null = null,
-): ThreadHandoff => ({ id, reason, memberName, occurredAt: new Date(occurredAt) });
+): ThreadHandoff => ({
+  kind: "handoff",
+  id,
+  reason,
+  memberName,
+  occurredAt: new Date(occurredAt),
+});
+
+const botReturn = (
+  id: string,
+  occurredAt: string,
+  trigger: BotReturnTrigger,
+  memberName: string | null = null,
+): ThreadHandoff => ({ kind: "return", id, trigger, memberName, occurredAt: new Date(occurredAt) });
 
 const placement = (placed: Map<string, ThreadHandoff[]>) =>
   Object.fromEntries([...placed].map(([id, handoffs]) => [id, handoffs.map(({ id }) => id)]));
@@ -69,6 +83,38 @@ describe("Handoff dividers in the thread", () => {
     );
     expect(handoffDividerLabel(handoff("4", at, "no_answer"))).toBe(
       "Passou para a equipe: O Bot não soube responder",
+    );
+  });
+
+  test("a return to the Bot follows the latest message before it, beside the Handoffs", () => {
+    const messages = [
+      message("bot-reply", "2026-10-20T09:00:00Z"),
+      message("contact", "2026-10-21T10:00:00Z"),
+    ];
+
+    expect(
+      placement(
+        placeHandoffs(messages, [
+          handoff("claim", "2026-10-20T09:01:00Z", "claimed"),
+          botReturn("quiet", "2026-10-21T09:05:00Z", "quiet"),
+        ]),
+      ),
+    ).toEqual({ "bot-reply": ["claim", "quiet"] });
+  });
+
+  test("says who returned the Conversation to the Bot, or why it went back on its own", () => {
+    const at = "2026-10-20T09:00:00Z";
+    expect(handoffDividerLabel(botReturn("1", at, "returned", "Juliana Prado"))).toBe(
+      "Juliana Prado devolveu a conversa ao Bot",
+    );
+    expect(handoffDividerLabel(botReturn("2", at, "resolved"))).toBe(
+      "Um membro marcou como resolvida",
+    );
+    expect(handoffDividerLabel(botReturn("3", at, "contact_message"))).toBe(
+      "Voltou para o Bot: o contato escreveu de novo",
+    );
+    expect(handoffDividerLabel(botReturn("4", at, "quiet"))).toBe(
+      "Voltou para o Bot: 24 horas sem mensagens",
     );
   });
 });

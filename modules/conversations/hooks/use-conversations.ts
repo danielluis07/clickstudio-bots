@@ -56,7 +56,8 @@ export const useConversationMessages = (conversationId: string) => {
   };
 };
 
-// When and why the Conversation passed to the team, for the thread's dividers.
+// When and why the Conversation passed to the team or back to the Bot, for
+// the thread's dividers.
 // They only decorate the thread, so a failed load shows the messages without them.
 export const useConversationHandoffs = (conversationId: string) => {
   const trpc = useTRPC();

@@ -177,6 +177,34 @@ export const handoffEvent = pgTable(
   ],
 );
 
+// What returned a Conversation to the Bot: a Member's "Devolver ao Bot" or
+// "Resolvida", the Contact's message after an unacted "Bot indisponível"
+// Handoff, or the sweep after a quiet service window.
+export const botReturnTriggers = ["returned", "resolved", "contact_message", "quiet"] as const;
+
+// One row each time a Conversation changes hands from the team back to the
+// Bot, written by `resume` with the change, for the thread's dividers. A
+// return of a Conversation already with the Bot writes none. Kept like Handoff
+// events: ids and codes only, deleted with the Conversation, no foreign key to
+// the Tenant or the Member (docs/locking.md).
+export const botReturnEvent = pgTable(
+  "bot_return_event",
+  {
+    id: id(),
+    tenantId: text("tenant_id").notNull(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversation.id, { onDelete: "cascade" }),
+    trigger: text("trigger", { enum: botReturnTriggers }).notNull(),
+    // The Member who returned it, for "returned" and "resolved". Kept after
+    // the Member is removed.
+    memberId: text("member_id"),
+    // The database's time of the transaction that returned it.
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("bot_return_event_conversation_id_idx").on(t.conversationId)],
+);
+
 export const message = pgTable(
   "message",
   {
