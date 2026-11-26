@@ -15,6 +15,11 @@ export const organization = pgTable(
     // Serializes Meta calls without keeping a transaction open over the network.
     lifecycleToken: text("lifecycle_token"),
     lifecycleLeaseUntil: timestamp("lifecycle_lease_until", { withTimezone: true }),
+    // Billing (ADR 0012), written only by `modules/billing`. The Trial end is
+    // null until billing is turned on. Suspended is not `canceledAt` and not
+    // a paused Bot: only the Bot stops while it is set.
+    trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
     ...timestamps(),
   },
   (t) => [index("organization_canceled_at_idx").on(t.canceledAt)],

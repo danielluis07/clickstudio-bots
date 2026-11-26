@@ -12,6 +12,7 @@ import type {
 } from "@/modules/conversations";
 import type { BotActivation, BotSandbox, ReplyAllowance } from "@/modules/bot";
 import type { createChannelService } from "@/modules/channels";
+import type { Billing } from "@/modules/billing";
 import {
   resolveTenantScope,
   type MemberTour,
@@ -47,6 +48,8 @@ export type TRPCContext = {
   // Whether the scope's Member has seen the Tour, in the scope's Tenant.
   tour: (scope: TenantScope) => MemberTour;
   channels: Pick<ReturnType<typeof createChannelService>, "getChannel">;
+  // The Tenant's Trial and suspension, behind the billing switch.
+  billing: Pick<Billing, "status">;
   // The public identifiers the browser needs to open Meta's Embedded Signup,
   // or null while WhatsApp is not configured.
   signupConfig: () => { appId: string; configId: string; graphVersion: string } | null;

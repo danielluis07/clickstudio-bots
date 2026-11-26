@@ -35,6 +35,7 @@ import { createTestMailer } from "@/test/support/mailer";
 import { seedLiveBot } from "@/test/support/live-bot";
 import { createMemberTour, createTenantRepository } from "@/modules/tenancy";
 import { saveTestSettings, testBotSettings } from "@/test/support/bot";
+import { createBilling } from "@/modules/billing";
 
 let db: Database;
 let conversationOfB: string;
@@ -48,6 +49,7 @@ const callerFor = (
   session: TRPCContext["session"],
   clock = createTestClock(),
   configured: TRPCContext["signupConfig"] = () => signupConfig,
+  billingEnabled = true,
 ) => {
   const activation = createBotActivation({ db, clock });
   return appRouter.createCaller({
@@ -76,6 +78,7 @@ const callerFor = (
       },
     }),
     signupConfig: configured,
+    billing: createBilling({ db, clock, enabled: billingEnabled }),
     sandbox: createBotSandbox({ activation, db, clock, model: sandboxModel }),
     allowance: createBotAllowance({ db, clock, mailer: createTestMailer() }),
     replies: createReplyService({
@@ -364,6 +367,37 @@ describe("tRPC router", () => {
       expect(await codeOf(callByPath(callerFor(ownerA, clock), "conversations.stats", input))).toBe(
         "BAD_REQUEST",
       );
+    }
+  });
+
+  test("the Suspended banner shows to every Member, with the call to action for the owner only, and never with billing off", async () => {
+    const clock = createTestClock(new Date("2026-12-01T12:00:00Z"));
+    const launchedAt = createTestClock(new Date("2026-11-01T12:00:00Z"));
+    const ownerB = { userId: "owner-b", activeTenantId: "tenant-b" };
+    const attendant = { userId: "attendant", activeTenantId: "tenant-b" };
+    expect(await callerFor(ownerB, clock).billing.status()).toEqual({
+      suspended: false,
+      isOwner: true,
+    });
+
+    await createBilling({ db, clock: launchedAt, enabled: true }).launch();
+    await createBilling({ db, clock, enabled: true }).sweep();
+    try {
+      expect(await callerFor(ownerB, clock).billing.status()).toEqual({
+        suspended: true,
+        isOwner: true,
+      });
+      expect(await callerFor(attendant, clock).billing.status()).toEqual({
+        suspended: true,
+        isOwner: false,
+      });
+      expect(await callerFor(ownerB, clock, () => signupConfig, false).billing.status()).toEqual({
+        suspended: false,
+        isOwner: true,
+      });
+    } finally {
+      await createBilling({ db, clock, enabled: false }).sweep();
+      await db.update(organization).set({ trialEndsAt: null });
     }
   });
 

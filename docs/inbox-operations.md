@@ -272,23 +272,27 @@ the alerts matter most then. Each run:
    [health](whatsapp-setup.md#channel-health), with the Tenant and the state
    as `operation`. For `credential_rejected` and `removed`, ask the owner to
    reconnect; for `banned` and `restricted`, the owner appeals to Meta.
-4. Re-enqueues up to 100 inbox events still `pending` five minutes after they
+4. Enforces billing (`enforce-billing`): Suspends every Tenant whose Trial
+   has ended without an active Subscription, so its Bot stops replying. With
+   billing off it Suspends nobody and lifts any suspension. See
+   [Billing](billing.md).
+5. Re-enqueues up to 100 inbox events still `pending` five minutes after they
    were received, oldest first. An event whose job already failed waits until
    35 minutes after its last failure or replay, so QStash's own retries come
    first.
-5. Replays up to 100 failed events whose next
+6. Replays up to 100 failed events whose next
    [automatic replay](#automatic-replay) is due.
-6. Fails Bot replies stuck without a wamid behind an expired lease, hands those
+7. Fails Bot replies stuck without a wamid behind an expired lease, hands those
    Conversations off and clears the expired leases. Then it re-enqueues eligible
    unanswered messages from the recovered Conversations.
-7. Re-enqueues up to 100 Bot-owned, eligible Conversations with no live lease
+8. Re-enqueues up to 100 Bot-owned, eligible Conversations with no live lease
    whose newest unanswered Contact message was sent between two minutes and one
    hour ago and passes the [reply gate](live-bot.md#reply-gate). A message
    skipped outside the Schedule is never answered later by the sweep. The
    Schedule and allowance are per Tenant, so a skip leaves that Tenant's other
    Conversations out of the run, which scans up to three pages. Canceled
    Tenants are left out of lease recovery.
-8. Returns to the Bot up to 100 Handoffs, oldest first, with no message from
+9. Returns to the Bot up to 100 Handoffs, oldest first, with no message from
    either side for 24 hours, a whole service window. They stay on the waiting
    list, and their backlog is settled as after **Devolver ao Bot**. See
    [Resuming](handoff.md#resuming).

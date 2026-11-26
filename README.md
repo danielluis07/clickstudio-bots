@@ -75,6 +75,7 @@ which is pending legal review before go-live.
 | `bun run db:roles`    | Create or update the application role ([Database roles](#database-roles)) |
 | `bun run admin:create` | Create a platform administrator (see below)                    |
 | `bun run sweep:schedule` | Create or update the QStash schedule for the sweep ([guide](docs/inbox-operations.md#the-sweep)) |
+| `bun run billing:launch` | Start every Tenant's 30-day Trial when billing is turned on ([guide](docs/billing.md)) |
 | `bun run db:seed`     | Recreate the demo Tenant on the dev database (see below)        |
 | `bun run db:seed:showcase` | Recreate the showcase Tenant for screenshots and sales demos (see below) |
 

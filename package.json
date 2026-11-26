@@ -26,7 +26,8 @@
     "sweep:schedule": "bun scripts/schedule-sweep.ts",
     "tenant:cancel": "bun scripts/tenant-administration.ts cancel",
     "tenant:reactivate": "bun scripts/tenant-administration.ts reactivate",
-    "tenant:export": "bun scripts/tenant-administration.ts export"
+    "tenant:export": "bun scripts/tenant-administration.ts export",
+    "billing:launch": "bun scripts/launch-billing.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.102",

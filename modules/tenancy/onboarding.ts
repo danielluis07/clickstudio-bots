@@ -22,6 +22,8 @@ type TenantOnboardingDependencies = {
   mailer: Mailer;
   clock: Clock;
   appUrl: string;
+  // A new Tenant's Trial end, from billing; none when left out.
+  trialEndFor?: (createdAt: Date) => Date | null;
 };
 
 const newTenantSchema = z.object({
@@ -70,6 +72,7 @@ export const createTenantOnboarding = ({
   mailer,
   clock,
   appUrl,
+  trialEndFor = () => null,
 }: TenantOnboardingDependencies) => {
   const signInThrottle = createSignInThrottle({ db, clock });
   const findInvitation = async (invitationId: string) => {
@@ -117,6 +120,7 @@ export const createTenantOnboarding = ({
           id: tenantId,
           name: tenantName,
           slug: `${slugify(tenantName)}-${tenantId.slice(-8)}`,
+          trialEndsAt: trialEndFor(clock.now()),
         });
         const [ownerInvitation] = await tx
           .insert(invitation)
