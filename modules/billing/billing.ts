@@ -1,31 +1,37 @@
-import { and, asc, eq, isNotNull, isNull, lte, not, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lte, not } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import { organization } from "@/db/schema";
 import { isPlatformAdmin } from "@/modules/identity";
 import { forbidden, recordAdminActivity, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
+import {
+  createSubscriptions,
+  hasActiveSubscription,
+  type SubscriptionsConfig,
+} from "@/modules/billing/subscriptions";
 
 export const trialDays = 30;
 const trialMs = trialDays * 24 * 60 * 60 * 1000;
 
-// Whether the Tenant row's Tenant has an active Subscription. There are none
-// until owners can subscribe (#257), which replaces this stub.
-const hasActiveSubscription = sql<boolean>`false`;
-
 // Billing behind its per-environment switch (ADR 0012). While `enabled` is
-// false no Trial counts down and no Tenant is Suspended.
+// false no Trial counts down and no Tenant is Suspended. `subscriptions` is
+// Mercado Pago, or null where it isn't configured.
 export const createBilling = ({
   db,
   clock,
   enabled,
+  subscriptions = null,
 }: {
   db: Database;
   clock: Clock;
   enabled: boolean;
+  subscriptions?: SubscriptionsConfig | null;
 }) => {
   const trialEndFrom = (start: Date) => new Date(start.getTime() + trialMs);
 
   return {
+    ...createSubscriptions({ db, clock, enabled, config: subscriptions }),
+
     // A new Tenant's Trial end: 30 days from its creation while billing is
     // on, none while it is off (the launch action sets it later).
     trialEndFor: (createdAt: Date) => (enabled ? trialEndFrom(createdAt) : null),
@@ -142,6 +148,9 @@ export const createBilling = ({
 };
 
 export type Billing = ReturnType<typeof createBilling>;
+
+// What the billing page shows its owner.
+export type BillingCheckout = Extract<Awaited<ReturnType<Billing["checkout"]>>, { ok: true }>;
 
 // One row of the platform administrator's list of Trials.
 export type TenantTrial = Extract<

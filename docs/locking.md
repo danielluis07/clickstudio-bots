@@ -161,7 +161,7 @@ other's upsert and nothing else, which is what makes the count exact. The daily
 prune deletes only rows whose window has ended. `acceptInvitation` counts its
 attempt before its transaction opens, so it adds no rank.
 
-### Billing's Tenant row updates
+### Billing's Tenant row and Subscription updates
 
 Billing (`modules/billing/billing.ts`; see [Billing](billing.md)) writes the
 Trial end and the Suspended state on Tenant rows with single `UPDATE`
@@ -177,6 +177,19 @@ no lock. Extending a Trial (`extendTrial`) updates one Tenant row in a
 transaction, then inserts its activity entry, which waits for nothing
 ([member activity entries](#member-activity-entries)); it holds that one row
 and no other lock.
+
+Subscriptions (`modules/billing/subscriptions.ts`) take no lock across a
+Mercado Pago call. `subscribe` creates the `preapproval` first, then stores it
+with one `INSERT ... ON CONFLICT (tenant_id) DO UPDATE ... WHERE status =
+'cancelled'` outside any transaction. Its foreign key takes `for key share` on
+the Tenant row (rank 2), and a conflict locks the Tenant's `subscription` row
+(rank 4); the statement holds nothing else and ends at once. Of two subscribes
+at once, the second waits for the first's row and then skips it, and its
+`preapproval` is cancelled after the statement. A Mercado Pago notification
+writes with single `UPDATE`s outside any transaction: the `subscription` row
+(rank 4), then, for an approved charge, the one Tenant row's `suspended_at`
+(rank 2), never both at once. Tenant deletion cascades into `subscription`
+under the Tenant row it already holds `for update`.
 
 ## Every lock
 

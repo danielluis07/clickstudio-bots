@@ -48,8 +48,9 @@ export type TRPCContext = {
   // Whether the scope's Member has seen the Tour, in the scope's Tenant.
   tour: (scope: TenantScope) => MemberTour;
   channels: Pick<ReturnType<typeof createChannelService>, "getChannel">;
-  // The Tenant's Trial and suspension, behind the billing switch.
-  billing: Pick<Billing, "status">;
+  // The Tenant's Trial and suspension, behind the billing switch, and
+  // whether the Member may open the billing page.
+  billing: Pick<Billing, "status" | "canManage">;
   // The public identifiers the browser needs to open Meta's Embedded Signup,
   // or null while WhatsApp is not configured.
   signupConfig: () => { appId: string; configId: string; graphVersion: string } | null;

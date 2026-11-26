@@ -6,3 +6,4 @@ export * from "@/db/schema/webhook-inbox";
 export * from "@/db/schema/knowledge-base";
 export * from "@/db/schema/bot";
 export * from "@/db/schema/sweep";
+export * from "@/db/schema/billing";

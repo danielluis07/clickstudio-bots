@@ -38,6 +38,8 @@ See [ADR 0003](docs/adr/0003-node-postgres-global-pool-on-neon.md) for why the a
 
 To enable owner-managed WhatsApp Channels, follow [WhatsApp Channel setup](docs/whatsapp-setup.md) for the Meta v4 configuration, encrypted-token keys and live validation steps.
 
+To try Tenant billing, set `BILLING_ENABLED=true` and Mercado Pago's test credentials (`MERCADO_PAGO_ACCESS_TOKEN`, `MERCADO_PAGO_PUBLIC_KEY`, `MERCADO_PAGO_WEBHOOK_SECRET`) as described in [Billing](docs/billing.md#mercado-pago-setup), which also lists the test cards.
+
 To enable live inbox updates, set the server-only `ABLY_API_KEY` as described in [Realtime inbox setup](docs/realtime-inbox.md).
 
 See [Phone inbox](docs/phone-inbox.md) for responsive layouts and browser checks.

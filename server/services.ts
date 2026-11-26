@@ -11,6 +11,8 @@ import {
 } from "@/modules/tenancy";
 import { createResendMailer } from "@/platform/resend-mailer";
 import { createBilling } from "@/modules/billing";
+import { createMercadoPagoGateway } from "@/platform/mercado-pago";
+import { createMercadoPagoWebhookRoute } from "@/server/mercado-pago-webhook";
 import { pruneSignInAttempts } from "@/modules/identity";
 import { createChannelService, sweepChannelHealth } from "@/modules/channels";
 import {
@@ -78,8 +80,23 @@ const dependencies = {
   appUrl: env.APP_URL,
 };
 
+const mercadoPago = env.MERCADO_PAGO_ACCESS_TOKEN
+  ? createMercadoPagoGateway({ accessToken: env.MERCADO_PAGO_ACCESS_TOKEN })
+  : null;
+
 // Off in production until launch (ADR 0012).
-export const billing = createBilling({ ...base, enabled: env.BILLING_ENABLED });
+export const billing = createBilling({
+  ...base,
+  enabled: env.BILLING_ENABLED,
+  subscriptions: mercadoPago ? { gateway: mercadoPago, appUrl: env.APP_URL } : null,
+});
+
+// Unconfigured, it refuses notifications, so Mercado Pago keeps retrying them.
+export const mercadoPagoWebhookRoute = createMercadoPagoWebhookRoute({
+  billing: mercadoPago ? billing : null,
+  secret: env.MERCADO_PAGO_WEBHOOK_SECRET ?? null,
+  diagnostics,
+});
 
 export const tenantOnboarding = createTenantOnboarding({
   ...dependencies,

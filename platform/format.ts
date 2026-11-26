@@ -21,6 +21,14 @@ const shortDateFormat = new Intl.DateTimeFormat("pt-BR", {
   timeZone: businessTimeZone,
 });
 
+// "20/01/2027", the São Paulo day of `date`.
+export const formatDate = (date: Date) => shortDateFormat.format(date);
+
+const reaisFormat = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+// "R$ 99,90" from centavos.
+export const formatReais = (cents: number) => reaisFormat.format(cents / 100);
+
 // "20/01/2027": the last São Paulo day before `end`, the day a deadline such
 // as a Trial end still covers. The inverse of `endOfLocalDate`.
 export const formatLastDay = (end: Date) => shortDateFormat.format(new Date(end.getTime() - 1));
