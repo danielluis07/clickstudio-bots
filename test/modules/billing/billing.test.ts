@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
-import { member, organization, user } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { member, memberActivity, organization, user } from "@/db/schema";
 import { createBilling } from "@/modules/billing";
 import { createPlatformAdmin } from "@/modules/identity";
 import { createTenantOnboarding, resolveTenantScope, type TenantScope } from "@/modules/tenancy";
@@ -131,4 +132,98 @@ test("a Tenant created while billing is off gets no Trial end until launch", asy
   clock.advance(10 * day);
   await billing(true).launch();
   expect((await billing(true).status(scope)).trialEndsAt).toEqual(new Date("2027-01-10T12:00:00Z"));
+});
+
+const seedAdmin = async () =>
+  (
+    await createPlatformAdmin(db, {
+      name: "Admin",
+      email: "admin@clickstudio.example",
+      password: "admin-password-123",
+    })
+  ).id;
+
+test("the platform administrator extends a Suspended Tenant's Trial, which lifts the suspension and is recorded", async () => {
+  const adminId = await seedAdmin();
+  const scope = await seedTenant("tenant");
+  await billing(true).launch();
+  clock.advance(31 * day);
+  await billing(true).sweep();
+
+  const newEnd = new Date("2027-01-20T03:00:00Z");
+  expect(await billing(true).extendTrial(adminId, scope.tenantId, newEnd)).toEqual({
+    ok: true,
+    tenantName: "tenant",
+    trialEndsAt: newEnd,
+  });
+  expect(await billing(true).status(scope)).toEqual({ trialEndsAt: newEnd, suspended: false });
+  // The sweep leaves it alone until the new end.
+  await billing(true).sweep();
+  expect((await billing(true).status(scope)).suspended).toBe(false);
+
+  expect(
+    await db
+      .select({
+        actorUserId: memberActivity.actorUserId,
+        action: memberActivity.action,
+        subjectId: memberActivity.subjectId,
+        occurredAt: memberActivity.occurredAt,
+      })
+      .from(memberActivity)
+      .where(eq(memberActivity.tenantId, scope.tenantId)),
+  ).toEqual([
+    { actorUserId: adminId, action: "trial.extended", subjectId: null, occurredAt: clock.now() },
+  ]);
+});
+
+test("extending a Trial is refused to anyone but the platform administrator, for an end not in the future, with billing off and for an unknown Tenant", async () => {
+  const adminId = await seedAdmin();
+  const scope = await seedTenant("tenant");
+  await billing(true).launch();
+  const launched = (await billing(true).status(scope)).trialEndsAt;
+  const later = new Date("2027-02-01T03:00:00Z");
+
+  expect(await billing(true).extendTrial(scope.userId, scope.tenantId, later)).toEqual({
+    ok: false,
+    error: "forbidden",
+  });
+  expect(await billing(true).extendTrial(adminId, scope.tenantId, clock.now())).toEqual({
+    ok: false,
+    error: "not_future",
+  });
+  expect(await billing(false).extendTrial(adminId, scope.tenantId, later)).toEqual({
+    ok: false,
+    error: "billing_disabled",
+  });
+  expect(await billing(true).extendTrial(adminId, "missing", later)).toEqual({
+    ok: false,
+    error: "not_found",
+  });
+
+  expect((await billing(true).status(scope)).trialEndsAt).toEqual(launched);
+  expect(await db.select().from(memberActivity)).toEqual([]);
+});
+
+test("the platform administrator lists every Tenant's Trial end and whether it is Suspended", async () => {
+  const adminId = await seedAdmin();
+  const first = await seedTenant("first");
+  await billing(true).launch();
+  clock.advance(31 * day);
+  await billing(true).sweep();
+  const second = await seedTenant("second");
+
+  expect(await billing(true).trials(adminId)).toEqual({
+    ok: true,
+    tenants: [
+      {
+        id: first.tenantId,
+        name: "first",
+        trialEndsAt: new Date("2026-12-31T12:00:00Z"),
+        suspended: true,
+      },
+      { id: second.tenantId, name: "second", trialEndsAt: null, suspended: false },
+    ],
+  });
+  expect(await billing(true).trials(first.userId)).toEqual({ ok: false, error: "forbidden" });
+  expect(await billing(false).trials(adminId)).toEqual({ ok: false, error: "billing_disabled" });
 });

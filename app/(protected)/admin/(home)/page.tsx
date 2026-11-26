@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminPage() {
-  await requireAdmin();
+  const { user } = await requireAdmin();
 
-  return <AdminTenants />;
+  return <AdminTenants actorId={user.id} />;
 }

@@ -11,7 +11,8 @@ numbers.
 ## What is recorded
 
 Each action writes its entry in the same transaction as the change, through
-`recordMemberActivity` (`modules/tenancy/activity.ts`). A refused or failed
+`recordMemberActivity`, or `recordAdminActivity` for the administrator
+(`modules/tenancy/activity.ts`). A refused or failed
 action writes nothing, and an entry that cannot be written rolls the change
 back.
 
@@ -28,6 +29,7 @@ back.
 | `bot.activated` | Owner | none | Activating the Bot |
 | `bot.paused`, `bot.unpaused` | Member | none | Pausing and resuming the Bot |
 | `business_profile.saved`, `behaviour_settings.saved`, `capture_settings.saved`, `link_settings.saved` | Owner | none | Saving settings |
+| `trial.extended` | Administrator | none | Extending a Tenant's Trial from `/admin` |
 
 The actor is a user id, so it also covers the administrator, who has no
 Member row. Returns to the Bot that no one made (a Contact's message after a

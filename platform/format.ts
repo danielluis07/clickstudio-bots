@@ -16,6 +16,15 @@ const shortDateTimeFormat = new Intl.DateTimeFormat("pt-BR", {
 
 export const formatShortDateTime = (date: Date) => shortDateTimeFormat.format(date);
 
+const shortDateFormat = new Intl.DateTimeFormat("pt-BR", {
+  dateStyle: "short",
+  timeZone: businessTimeZone,
+});
+
+// "20/01/2027": the last São Paulo day before `end`, the day a deadline such
+// as a Trial end still covers. The inverse of `endOfLocalDate`.
+export const formatLastDay = (end: Date) => shortDateFormat.format(new Date(end.getTime() - 1));
+
 const timeFormat = new Intl.DateTimeFormat("pt-BR", {
   timeStyle: "short",
   timeZone: businessTimeZone,

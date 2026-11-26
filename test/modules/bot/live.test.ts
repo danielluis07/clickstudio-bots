@@ -20,6 +20,7 @@ import {
 } from "@/modules/bot";
 import { RetryableError } from "@/platform/retryable";
 import { createBilling } from "@/modules/billing";
+import { createPlatformAdmin } from "@/modules/identity";
 import { createTestClock } from "@/test/support/clock";
 import { eq, sql } from "drizzle-orm";
 import {
@@ -1200,6 +1201,32 @@ test("a Suspended Tenant's Bot stops replying, keeps its Conversations, and answ
   // Turning billing off lifts the suspension; the next sweep answers.
   await createBilling({ db, clock, enabled: false }).sweep();
   model.script({ text: "O corte custa R$ 80." });
+  await worker.sweep();
+  expect(queue.take()).toEqual([{ type: "run-bot-turn", conversationId }]);
+  await worker.run(conversationId);
+  expect(sender.sent.map(({ text }) => text)).toEqual(["O corte custa R$ 80."]);
+});
+
+test("extending a Suspended Tenant's Trial lets its Bot answer again", async () => {
+  const { scope, clock, model, sender, queue, activation, conversationId, worker } = await setup();
+  await activation.activate(scope);
+  const launchedAt = createTestClock(new Date(clock.now().getTime() - 30 * 24 * 60 * 60_000));
+  await createBilling({ db, clock: launchedAt, enabled: true }).launch();
+  const billing = createBilling({ db, clock, enabled: true });
+  await billing.sweep();
+  await worker.run(conversationId);
+  expect(sender.sent).toEqual([]);
+
+  const { id: adminId } = await createPlatformAdmin(db, {
+    name: "Admin",
+    email: "admin@clickstudio.example",
+    password: "admin-password-123",
+  });
+  const later = new Date(clock.now().getTime() + 7 * 24 * 60 * 60_000);
+  expect(await billing.extendTrial(adminId, scope.tenantId, later)).toMatchObject({ ok: true });
+
+  model.script({ text: "O corte custa R$ 80." });
+  clock.advance(2 * 60_000);
   await worker.sweep();
   expect(queue.take()).toEqual([{ type: "run-bot-turn", conversationId }]);
   await worker.run(conversationId);

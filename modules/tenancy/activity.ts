@@ -32,6 +32,15 @@ export const recordActivity = async (
   );
 };
 
-// What a signed-in Member did. Other modules record through this one.
+// What a signed-in Member did. Other modules record through this one, or
+// through `recordAdminActivity` for the platform administrator.
 export const recordMemberActivity = (tx: Transaction, scope: TenantScope, entry: ActivityEntry) =>
   recordActivity(tx, { tenantId: scope.tenantId, actorUserId: scope.userId }, entry);
+
+// What the platform administrator, who has no Member row, did to one Tenant.
+// Call it only after checking `isPlatformAdmin` for `adminId`.
+export const recordAdminActivity = (
+  tx: Transaction,
+  { tenantId, adminId }: { tenantId: string; adminId: string },
+  entry: ActivityEntry,
+) => recordActivity(tx, { tenantId, actorUserId: adminId }, entry);
