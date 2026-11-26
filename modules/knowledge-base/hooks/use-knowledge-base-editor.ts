@@ -2,6 +2,10 @@
 
 import { useRef, useState, useTransition } from "react";
 import type { KnowledgeEntrySummary } from "@/modules/knowledge-base/editor";
+import {
+  importFileMaxBytes,
+  importFileTooLargeMessage,
+} from "@/modules/knowledge-base/import-limits";
 import type { KnowledgeEntryKind } from "@/modules/knowledge-base/kinds";
 
 export type KnowledgeEntryDraft = { title: string; body: string };
@@ -11,6 +15,8 @@ type MutationResult = { status: "idle" } | { status: "error" | "success"; messag
 export type KnowledgeBaseActions = {
   save: (previous: MutationResult, formData: FormData) => Promise<MutationResult>;
   remove: (entryId: string) => Promise<MutationResult>;
+  // Adds the text of the form's `file` as a new Text section.
+  importFile: (previous: MutationResult, formData: FormData) => Promise<MutationResult>;
 };
 const targetKey = ({ kind, entry }: KnowledgeEntryTarget) => entry?.id ?? `new:${kind}`;
 const initialDraft = ({ entry }: KnowledgeEntryTarget): KnowledgeEntryDraft => ({
@@ -22,6 +28,7 @@ export const useKnowledgeBaseEditor = ({
   entries,
   save,
   remove,
+  importFile,
   rethrow,
 }: KnowledgeBaseActions & {
   entries: KnowledgeEntrySummary[];
@@ -30,6 +37,9 @@ export const useKnowledgeBaseEditor = ({
 }) => {
   const [pending, startSaving] = useTransition();
   const locked = useRef(false);
+  const [importing, setImporting] = useState(false);
+  // The last import's success message, until the next change.
+  const [notice, setNotice] = useState<string | null>(null);
   const [dialog, setDialog] = useState<KnowledgeEntryTarget | null>(null);
   const [drafts, setDrafts] = useState<Record<string, KnowledgeEntryDraft>>({});
   const [failure, setFailure] = useState<{
@@ -54,6 +64,7 @@ export const useKnowledgeBaseEditor = ({
 
   const perform = async (action: () => Promise<MutationResult>, target?: KnowledgeEntryTarget) => {
     setFailure(null);
+    setNotice(null);
     try {
       const result = await action();
       if (result.status !== "success") {
@@ -68,6 +79,7 @@ export const useKnowledgeBaseEditor = ({
         clearDraft(target);
         setDialog(null);
       }
+      return result;
     } catch (error) {
       rethrow(error);
       setFailure({
@@ -88,7 +100,9 @@ export const useKnowledgeBaseEditor = ({
     formData.set("body", text.body);
     if (target.entry) formData.set("entryId", target.entry.id);
     else formData.set("kind", target.kind);
-    startSaving(() => perform(() => save({ status: "idle" }, formData), target));
+    startSaving(async () => {
+      await perform(() => save({ status: "idle" }, formData), target);
+    });
   };
 
   // ConfirmProvider invokes this inside its transition and awaits the promise.
@@ -98,10 +112,35 @@ export const useKnowledgeBaseEditor = ({
     await perform(() => remove(entryId));
   };
 
+  const importChosenFile = (file: File) => {
+    if (locked.current || pending) return;
+    if (file.size > importFileMaxBytes) {
+      // Vercel would refuse the upload before the server could explain why.
+      setNotice(null);
+      setFailure({ message: importFileTooLargeMessage });
+      return;
+    }
+    locked.current = true;
+    setImporting(true);
+    const formData = new FormData();
+    formData.set("file", file);
+    startSaving(async () => {
+      try {
+        const result = await perform(() => importFile({ status: "idle" }, formData));
+        if (result?.status === "success") setNotice(result.message);
+      } finally {
+        setImporting(false);
+      }
+    });
+  };
+
   return {
     entries,
     used: entries.reduce((total, entry) => total + entry.size, 0),
     pending,
+    importing,
+    notice,
+    importChosenFile,
     dialog,
     draft: dialog ? (drafts[targetKey(dialog)] ?? initialDraft(dialog)) : null,
     failure,

@@ -3,11 +3,16 @@
 import { unstable_rethrow } from "next/navigation";
 import { KnowledgeBasePage } from "@/components/knowledge-base/knowledge-base-page";
 import { KnowledgeEntryDialog } from "@/components/knowledge-base/knowledge-entry-dialog";
+import { ImportKnowledgeFileButton } from "@/components/knowledge-base/import-knowledge-file-button";
 import { KnowledgeEntrySection } from "@/components/knowledge-base/knowledge-entry-section";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import type { KnowledgeEntrySummary } from "@/modules/knowledge-base";
-import { useKnowledgeBaseEditor, type KnowledgeBaseActions } from "@/modules/knowledge-base/hooks";
+import {
+  importFileDescription,
+  useKnowledgeBaseEditor,
+  type KnowledgeBaseActions,
+} from "@/modules/knowledge-base/hooks";
 
 // The owner's whole Base de conhecimento page, so the allowance in the rail
 // follows each save.
@@ -17,6 +22,7 @@ export function KnowledgeBaseManager({
   titleMaxLength,
   save,
   remove,
+  importFile,
 }: KnowledgeBaseActions & {
   entries: KnowledgeEntrySummary[];
   cap: number;
@@ -26,12 +32,19 @@ export function KnowledgeBaseManager({
     entries,
     save,
     remove,
+    importFile,
     rethrow: unstable_rethrow,
   });
   const controls = { pending: editor.pending, open: editor.open, remove: editor.deleteEntry };
 
   return (
     <KnowledgeBasePage used={editor.used} cap={cap}>
+      {editor.notice && (
+        <Alert role="status">
+          <AlertTitle>Arquivo importado</AlertTitle>
+          <AlertDescription>{editor.notice}</AlertDescription>
+        </Alert>
+      )}
       {editor.failure && !editor.dialog && (
         <Alert variant="destructive">
           <AlertTitle>Não foi possível concluir a alteração</AlertTitle>
@@ -59,6 +72,16 @@ export function KnowledgeBaseManager({
         kind="section"
         entries={editor.entries.filter(({ kind }) => kind === "section")}
         controls={controls}
+        extraAction={{
+          control: (
+            <ImportKnowledgeFileButton
+              disabled={editor.pending}
+              importing={editor.importing}
+              onSelect={editor.importChosenFile}
+            />
+          ),
+          description: importFileDescription,
+        }}
       />
       {editor.dialog && editor.draft && (
         <KnowledgeEntryDialog

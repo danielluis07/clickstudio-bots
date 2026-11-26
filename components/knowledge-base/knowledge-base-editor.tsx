@@ -6,6 +6,7 @@ import { isOwner, type TenantScope } from "@/modules/tenancy";
 import { knowledgeBaseEditor } from "@/server/services";
 import {
   deleteKnowledgeEntryAction,
+  importKnowledgeFileAction,
   saveKnowledgeEntryAction,
 } from "@/server/actions/knowledge-base";
 
@@ -20,6 +21,7 @@ export async function KnowledgeBaseEditor({ scope }: { scope: TenantScope }) {
         titleMaxLength={entryTitleMaxLength}
         save={saveKnowledgeEntryAction}
         remove={deleteKnowledgeEntryAction}
+        importFile={importKnowledgeFileAction}
       />
     );
 

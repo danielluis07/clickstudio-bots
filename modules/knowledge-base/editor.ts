@@ -8,7 +8,12 @@ import {
   knowledgeBaseCharacterCap,
   knowledgeBaseSize,
 } from "@/modules/knowledge-base/allowance";
-import { knowledgeEntryKinds } from "@/modules/knowledge-base/kinds";
+import {
+  extractFileText,
+  sectionTitleFor,
+  type UploadedFile,
+} from "@/modules/knowledge-base/file-import";
+import { knowledgeEntryKinds, type KnowledgeEntryKind } from "@/modules/knowledge-base/kinds";
 import { normalizeEntryText } from "@/modules/knowledge-base/text";
 import { isOwner, forbidden, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
@@ -84,6 +89,25 @@ export const createKnowledgeBaseEditor = ({ db, clock }: { db: Database; clock: 
       return { ok: true as const, saved: await save(tx) };
     });
 
+  const insertEntry = async (
+    tx: Database,
+    scope: TenantScope,
+    entry: EntryText & { kind: KnowledgeEntryKind },
+  ) => {
+    const now = clock.now();
+    const [created] = await tx
+      .insert(knowledgeBaseEntry)
+      .values({
+        ...entry,
+        tenantId: scope.tenantId,
+        updatedByMemberId: scope.memberId,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({ id: knowledgeBaseEntry.id });
+    return created.id;
+  };
+
   return {
     async getKnowledgeBase(scope: TenantScope) {
       const entries = await db
@@ -111,20 +135,9 @@ export const createKnowledgeBaseEditor = ({ db, clock }: { db: Database; clock: 
       if (!isOwner(scope)) return forbidden;
       const parsed = newEntrySchema.safeParse(input);
       if (!parsed.success) return invalid;
-      const now = clock.now();
-      const result = await saveWithinCap(scope, parsed.data, null, async (tx) => {
-        const [created] = await tx
-          .insert(knowledgeBaseEntry)
-          .values({
-            ...parsed.data,
-            tenantId: scope.tenantId,
-            updatedByMemberId: scope.memberId,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning({ id: knowledgeBaseEntry.id });
-        return created.id;
-      });
+      const result = await saveWithinCap(scope, parsed.data, null, (tx) =>
+        insertEntry(tx, scope, parsed.data),
+      );
       return result.ok ? { ok: true as const, entryId: result.saved } : result;
     },
 
@@ -144,6 +157,29 @@ export const createKnowledgeBaseEditor = ({ db, clock }: { db: Database; clock: 
           ),
       );
       return result.ok ? { ok: true as const } : result;
+    },
+
+    // Adds a file's text as a new Text section titled after the file, so the
+    // owner edits it like any other. Only the text is kept.
+    async importFile(scope: TenantScope, file: UploadedFile) {
+      if (!isOwner(scope)) return forbidden;
+      const extracted = await extractFileText(file);
+      if (!extracted.ok) return extracted;
+      const section = {
+        kind: "section" as const,
+        title: sectionTitleFor(file.name, entryTitleMaxLength),
+        body: extracted.text,
+      };
+      // Saved without the form's body bound, so text that is too long on its
+      // own is refused for the cap, with the size the Knowledge base would reach.
+      const result = await saveWithinCap(scope, section, null, (tx) =>
+        insertEntry(tx, scope, section),
+      );
+      if (result.ok) return { ok: true as const, entryId: result.saved, title: section.title };
+      // A new entry replaces none, so it cannot be missing.
+      if (result.error === "not_found") throw new Error("an import replaced an entry");
+      // Tells a file too long by itself apart from one the saved entries crowd out.
+      return { ...result, sectionSize: entrySize(section) };
     },
 
     async deleteEntry(scope: TenantScope, entryId: string) {

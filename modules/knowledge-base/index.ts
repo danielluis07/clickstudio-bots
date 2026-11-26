@@ -7,5 +7,9 @@ export {
   type KnowledgeEntrySummary,
   type NewKnowledgeBaseEntry,
 } from "@/modules/knowledge-base/editor";
+export {
+  importFileTooLargeMessage,
+  pasteTextInstead,
+} from "@/modules/knowledge-base/import-limits";
 export type { KnowledgeEntryKind } from "@/modules/knowledge-base/kinds";
 export { readKnowledgeBase, readKnowledgeBaseReadiness } from "@/modules/knowledge-base/reader";

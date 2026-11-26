@@ -202,7 +202,7 @@ and no other lock.
 | `pruneCanceledTenants`, `retention.ts` | User rows `for update`, ascending id | Deciding which of the Tenant's Users are no longer needed by any Tenant or role. |
 | `inviteMember`, `modules/tenancy/members.ts` | Tenant row `for update` | The seat count: two invitations at once cannot both take the last seat. |
 | `removeMember`, `members.ts` | User row `for update` | Deleting a User with no other membership: an acceptance elsewhere must wait for it, so the check cannot miss that acceptance. |
-| `saveWithinCap`, `modules/knowledge-base/editor.ts` | Tenant row `for update` | The Knowledge base size cap: two saves at once cannot both fit under it. |
+| `saveWithinCap`, `modules/knowledge-base/editor.ts` (from `addEntry`, `editEntry` and `importFile`) | Tenant row `for update` | The Knowledge base size cap: two saves at once cannot both fit under it. A file import reads the file's text before the transaction, so no lock is held while parsing. |
 | `lockConversation`, `modules/conversations/echoes.ts` (from `recordSentWamid` and `recordMessageEcho`) | Conversation row `for update` | Filing an echo against the outcome of the Bot reply that may be its source. |
 | `failPending`, `modules/conversations/bot-reservation.ts` | Conversation row `for update` | Failing a pending Bot reply against a reservation and the sweep's cleanup. |
 | `reserve`, `bot-reservation.ts` | Message rows `for update` (the snapshot's unanswered Contact messages) | That the snapshot is still unanswered when the Bot reply is reserved: a Member's resume cannot settle it at the same moment. |
@@ -271,7 +271,7 @@ Ranks are those of the [ordering rule](#the-ordering-rule).
 | Member subscription (`claimSubscription`, `finishSubscription`, `finishCanceledSubscription`) | Tenant row `for update` (2) → Channel rows (4) |
 | Invitation (`inviteMember`) | Tenant row `for update` (2) → Invitation rows (4) |
 | Invitation accepted (`acceptInvitation`) | Tenant row `for share` (2) → Invitation row → new User → new Member (4) |
-| Knowledge entry saved (`saveWithinCap`) | Tenant row `for update` (2) → Knowledge entry (4) |
+| Knowledge entry saved or imported from a file (`saveWithinCap`) | Tenant row `for update` (2) → Knowledge entry (4) |
 
 ### Exceptions
 

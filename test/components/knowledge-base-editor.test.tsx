@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { act } from "react";
 import type { KnowledgeEntrySummary } from "@/modules/knowledge-base";
@@ -69,6 +69,14 @@ const fill = async (name: string, value: string) => {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 };
+const fileInput = () => document.querySelector<HTMLInputElement>('input[type="file"]')!;
+const choose = async (file: File) => {
+  const input = fileInput();
+  Object.defineProperty(input, "files", { value: [file], configurable: true });
+  await act(async () => {
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+};
 const submit = async () => {
   await act(async () => {
     document
@@ -83,7 +91,11 @@ beforeEach(async () => {
   root = createRoot(host);
   entries = [];
   cap = 30_000;
-  actions = { save: async () => success, remove: async () => success };
+  actions = {
+    save: async () => success,
+    remove: async () => success,
+    importFile: async () => success,
+  };
 });
 
 afterEach(async () => {
@@ -323,4 +335,68 @@ test("Members see entries without mutation controls", async () => {
   await act(async () => root.render(<KnowledgeEntrySection kind="faq" entries={[entry()]} />));
   expect(host.textContent).toContain("Preço?");
   expect(host.querySelectorAll("button")).toHaveLength(0);
+});
+
+describe("importing a file", () => {
+  test("the owner picks a PDF, DOCX or TXT; controls lock while it uploads and the result is announced", async () => {
+    const request = deferred();
+    const calls: FormData[] = [];
+    actions.importFile = async (_previous, data) => {
+      calls.push(data);
+      return request.promise;
+    };
+    await act(async () => render());
+    expect(fileInput().accept).toBe(".pdf,.docx,.txt");
+    expect(host.textContent).toContain("PDF, DOCX ou TXT de até 4 MB");
+
+    const file = new File(["Horário"], "horario.txt", { type: "text/plain" });
+    await choose(file);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].get("file")).toBe(file);
+    expect(button("Importando…").disabled).toBe(true);
+    expect(button("Adicionar seção").disabled).toBe(true);
+    expect(fileInput().disabled).toBe(true);
+
+    await act(async () => {
+      entries = [entry({ id: "section-1", kind: "section", title: "horario", body: "Horário" })];
+      render();
+      request.resolve({ status: "success", message: "Arquivo importado como a seção “horario”." });
+    });
+    expect(host.querySelector('[role="status"]')!.textContent).toContain(
+      "Arquivo importado como a seção “horario”.",
+    );
+    expect(host.querySelectorAll("article")).toHaveLength(1);
+    expect(button("Importar arquivo").disabled).toBe(false);
+    // Choosing the same file again starts a new import.
+    expect(fileInput().value).toBe("");
+  });
+
+  test("a refusal is shown in place of the previous result, keeping the Knowledge base as it was", async () => {
+    let result: Awaited<ReturnType<KnowledgeBaseActions["importFile"]>> = success;
+    actions.importFile = async () => result;
+    await act(async () => render());
+    await choose(new File(["a"], "a.txt"));
+    result = { status: "error", message: "Não encontramos texto neste arquivo." };
+    await choose(new File(["%PDF"], "digitalizado.pdf"));
+
+    expect(host.querySelector('[role="status"]')).toBeNull();
+    expect(host.textContent).toContain("Não encontramos texto neste arquivo.");
+    expect(host.textContent).not.toContain("Revisar e tentar novamente");
+  });
+
+  test("a file over 4 MB is refused before uploading", async () => {
+    let calls = 0;
+    actions.importFile = async () => {
+      calls++;
+      return success;
+    };
+    await act(async () => render());
+    await choose(new File([new Uint8Array(4 * 1024 * 1024 + 1)], "manual.pdf"));
+
+    expect(calls).toBe(0);
+    expect(host.textContent).toContain(
+      "O arquivo tem mais de 4 MB, o tamanho máximo para importar.",
+    );
+  });
 });
