@@ -11,6 +11,8 @@ export type ProviderSubscription = {
   payerEmail: string | null;
   amountCents: number;
   nextChargeAt: Date | null;
+  // The latest successful charge, or null before the first.
+  lastCharge: { at: Date; amountCents: number } | null;
   // When the provider last changed it, so an older read never overwrites a
   // newer one.
   modifiedAt: Date;
@@ -22,8 +24,11 @@ export type ProviderPayment = {
   status: string;
   amountCents: number;
   approvedAt: Date | null;
-  // The Subscription the payment charged, or null for any other payment.
+  // The Subscription the payment charged, when the payment names it.
   subscriptionId: string | null;
+  // The payment's external reference: a Tenant's id on our Subscriptions'
+  // charges, when the provider copies it there.
+  externalReference: string | null;
 };
 
 export type NewProviderSubscription = {

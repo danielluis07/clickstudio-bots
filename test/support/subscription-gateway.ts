@@ -53,6 +53,7 @@ export const createTestSubscriptionGateway = (clock: Clock): TestSubscriptionGat
         payerEmail: subscription.payerEmail,
         amountCents: subscription.amountCents,
         nextChargeAt: subscription.startDate ?? clock.now(),
+        lastCharge: null,
         modifiedAt: clock.now(),
       };
       subscriptions.set(record.id, record);

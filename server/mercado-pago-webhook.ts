@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Billing } from "@/modules/billing";
 import { reportError, type Diagnostics } from "@/platform/diagnostics";
-import { verifyMercadoPagoSignature } from "@/platform/mercado-pago";
+import { isMercadoPagoResourceId, verifyMercadoPagoSignature } from "@/platform/mercado-pago";
 
 const empty = (status: number) => new Response(null, { status });
 
@@ -24,8 +24,6 @@ const parseJson = (body: string): unknown => {
     return null;
   }
 };
-
-const resourceIdPattern = /^[A-Za-z0-9_-]{1,64}$/;
 
 // Mercado Pago's webhooks for `subscription_preapproval`,
 // `subscription_authorized_payment` and `payment` (ADR 0012). The signed id
@@ -58,7 +56,7 @@ export const createMercadoPagoWebhookRoute = ({
 
     const type = body.type ?? query.get("type") ?? query.get("topic");
     if (!id || !type) return empty(200);
-    if (!resourceIdPattern.test(id)) return empty(400);
+    if (!isMercadoPagoResourceId(id)) return empty(400);
     try {
       await billing.receiveNotification({ type, id });
       return empty(200);

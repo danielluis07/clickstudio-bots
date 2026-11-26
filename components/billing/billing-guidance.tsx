@@ -9,7 +9,7 @@ export function BillingGuidance({ checkout }: { checkout: BillingCheckout }) {
     text = suspended
       ? "Assinatura feita. O Bot volta a responder assim que o Mercado Pago aprovar a cobrança, o que costuma levar alguns minutos."
       : "Sua assinatura está ativa. O Mercado Pago cobra o cartão todo mês e envia o recibo por e-mail.";
-  } else if (subscription && subscription.status !== "cancelled") {
+  } else if (!checkout.canSubscribe) {
     text =
       "O Mercado Pago ainda não confirmou esta assinatura. Esta página mostra a situação assim que ele avisar.";
   } else if (suspended) {

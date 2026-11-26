@@ -1,10 +1,10 @@
 // Mercado Pago's Subscription statuses, as owners read them.
-const subscriptionStatusLabels: Record<string, string> = {
+const billingSubscriptionStatusLabels: Record<string, string> = {
   authorized: "Ativa",
   pending: "Pendente",
   paused: "Pausada",
   cancelled: "Cancelada",
 };
 
-export const subscriptionStatusLabel = (status: string) =>
-  subscriptionStatusLabels[status] ?? "Em análise";
+export const billingSubscriptionStatusLabel = (status: string) =>
+  billingSubscriptionStatusLabels[status] ?? "Em análise";

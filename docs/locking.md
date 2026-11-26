@@ -36,7 +36,7 @@ one table in ascending id.
 | 1 | wamid lock (`tenantId:wamid`) | advisory |
 | 2 | Tenant row (`organization`) | `for share` or `for update` |
 | 3 | Contact address lock (`contact:<sha256(tenantId:phone)>`) | advisory |
-| 4 | Rows owned by the Tenant, from owner to owned. Inbox side: Contact → Conversation → Message → Alert. Tenancy side: Channel, Invitation → User → Member → Alert preference, Knowledge entry | row |
+| 4 | Rows owned by the Tenant, from owner to owned. Inbox side: Contact → Conversation → Message → Alert. Tenancy side: Channel, Invitation → User → Member → Alert preference, Knowledge entry, Subscription | row |
 | 5 | Reply usage row (`bot_reply_usage`, Tenant and month) | row |
 
 Why this order:
@@ -285,6 +285,7 @@ Ranks are those of the [ordering rule](#the-ordering-rule).
 | Invitation (`inviteMember`) | Tenant row `for update` (2) → Invitation rows (4) |
 | Invitation accepted (`acceptInvitation`) | Tenant row `for share` (2) → Invitation row → new User → new Member (4) |
 | Knowledge entry saved or imported from a file (`saveWithinCap`) | Tenant row `for update` (2) → Knowledge entry (4) |
+| Subscription stored (`subscribe`'s upsert, one statement outside a transaction) | Tenant row `for key share` through the foreign key (2) → the Tenant's Subscription row on a conflict (4) |
 
 ### Exceptions
 

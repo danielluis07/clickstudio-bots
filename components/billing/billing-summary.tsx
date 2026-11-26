@@ -1,5 +1,5 @@
 import { StatTile } from "@/components/overview/stat-tile";
-import { subscriptionStatusLabel, type BillingCheckout } from "@/modules/billing";
+import { billingSubscriptionStatusLabel, type BillingCheckout } from "@/modules/billing";
 import { monthlyReplyLimit } from "@/modules/bot";
 import { formatCount, formatDate, formatLastDay, formatReais } from "@/platform/format";
 
@@ -18,7 +18,7 @@ export function BillingSummary({ checkout }: { checkout: BillingCheckout }) {
       {subscription ? (
         <StatTile
           label="Assinatura"
-          value={subscriptionStatusLabel(subscription.status)}
+          value={billingSubscriptionStatusLabel(subscription.status)}
           caption={`Recibos para ${subscription.payerEmail}`}
         />
       ) : (

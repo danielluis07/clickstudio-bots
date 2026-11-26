@@ -8,7 +8,7 @@ export {
   type TenantTrial,
 } from "@/modules/billing/billing";
 export { planAmountCents } from "@/modules/billing/subscriptions";
-export { subscriptionStatusLabel } from "@/modules/billing/labels";
+export { billingSubscriptionStatusLabel } from "@/modules/billing/labels";
 export type {
   NewProviderSubscription,
   ProviderPayment,

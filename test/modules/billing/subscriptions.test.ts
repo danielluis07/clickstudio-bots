@@ -78,6 +78,7 @@ test("an owner on Trial subscribes: the Subscription is active and the first cha
     trialEndsAt: new Date("2026-12-31T12:00:00Z"),
     suspended: false,
     available: true,
+    canSubscribe: false,
     subscription: {
       active: true,
       status: "authorized",
@@ -111,6 +112,7 @@ test("a Suspended owner is charged now, and the suspension ends once Mercado Pag
     amountCents: planAmountCents,
     approvedAt: clock.now(),
     subscriptionId: "preapproval-1",
+    externalReference: null,
   });
   await billing().receiveNotification({ type: "payment", id: "payment-1" });
   expect((await billing().status(owner)).suspended).toBe(false);
@@ -135,12 +137,50 @@ test("an approved authorized payment ends the suspension too", async () => {
     approvedAt: clock.now(),
     // The payment itself doesn't name the Subscription; its invoice does.
     subscriptionId: null,
+    externalReference: null,
   });
   gateway.authorizedPayments.set("invoice-1", {
     subscriptionId: "preapproval-1",
     paymentId: "payment-1",
   });
   await billing().receiveNotification({ type: "subscription_authorized_payment", id: "invoice-1" });
+  expect((await billing().status(owner)).suspended).toBe(false);
+});
+
+test("a preapproval notification showing the first charge ends the suspension", async () => {
+  const owner = await seedMember("owner");
+  await billing().launch();
+  clock.advance(31 * day);
+  await billing().sweep();
+  await billing().subscribe(owner, card);
+
+  clock.advance(60_000);
+  gateway.subscriptions.set("preapproval-1", {
+    ...gateway.subscriptions.get("preapproval-1")!,
+    lastCharge: { at: clock.now(), amountCents: planAmountCents },
+    modifiedAt: clock.now(),
+  });
+  await billing().receiveNotification({ type: "subscription_preapproval", id: "preapproval-1" });
+  expect((await billing().status(owner)).suspended).toBe(false);
+});
+
+test("a payment that names only the Tenant ends the suspension", async () => {
+  const owner = await seedMember("owner");
+  await billing().launch();
+  clock.advance(31 * day);
+  await billing().sweep();
+  await billing().subscribe(owner, card);
+
+  clock.advance(60_000);
+  gateway.payments.set("payment-1", {
+    id: "payment-1",
+    status: "approved",
+    amountCents: planAmountCents,
+    approvedAt: clock.now(),
+    subscriptionId: null,
+    externalReference: "tenant",
+  });
+  await billing().receiveNotification({ type: "payment", id: "payment-1" });
   expect((await billing().status(owner)).suspended).toBe(false);
 });
 
@@ -157,6 +197,7 @@ test("a charge that doesn't pay for the Plan leaves the Tenant Suspended", async
     amountCents: planAmountCents,
     approvedAt: new Date(suspendedAt.getTime() + 60_000),
     subscriptionId: "preapproval-1",
+    externalReference: null,
   };
   gateway.payments.set("refused", { ...payment, id: "refused", status: "rejected" });
   // Mercado Pago's small card check, refunded.

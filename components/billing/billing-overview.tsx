@@ -17,14 +17,12 @@ export function BillingOverview({
   publicKey: string | null;
   defaultEmail: string;
 }) {
-  const canSubscribe = !checkout.subscription || checkout.subscription.status === "cancelled";
-
   return (
     <DashboardPage title="Assinatura" width="form">
       <div className="flex flex-col gap-6">
         <BillingSummary checkout={checkout} />
         <BillingGuidance checkout={checkout} />
-        {canSubscribe &&
+        {checkout.canSubscribe &&
           (checkout.available && publicKey ? (
             <SubscribeForm
               publicKey={publicKey}

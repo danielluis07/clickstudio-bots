@@ -57,6 +57,7 @@ describe("Mercado Pago gateway", () => {
         payerEmail: "dona@sorriso.example",
         amountCents: 9990,
         nextChargeAt: new Date("2027-01-01T15:00:00Z"),
+        lastCharge: null,
         modifiedAt: new Date("2026-12-01T12:00:00Z"),
       },
     });
@@ -117,12 +118,20 @@ describe("Mercado Pago gateway", () => {
       Response.json(
         request.method === "PUT"
           ? { ...preapproval, status: "cancelled", payer_email: "" }
-          : preapproval,
+          : {
+              ...preapproval,
+              summarized: {
+                charged_quantity: 1,
+                last_charged_date: "2026-12-01T10:05:00.000-03:00",
+                last_charged_amount: "99.90",
+              },
+            },
       ),
     );
 
     expect(await gateway.fetchSubscription(preapproval.id)).toMatchObject({
       status: "authorized",
+      lastCharge: { at: new Date("2026-12-01T13:05:00Z"), amountCents: 9990 },
     });
     expect(await gateway.updateSubscription(preapproval.id, { status: "cancelled" })).toMatchObject(
       { status: "cancelled", payerEmail: null },
@@ -147,6 +156,7 @@ describe("Mercado Pago gateway", () => {
       status: "approved",
       transaction_amount: 99.9,
       date_approved: "2026-12-01T10:00:00.000-03:00",
+      external_reference: "tenant",
       point_of_interaction: { transaction_data: { subscription_id: preapproval.id } },
     };
     const { gateway, requests } = gatewayAnswering((request) =>
@@ -161,6 +171,7 @@ describe("Mercado Pago gateway", () => {
       amountCents: 9990,
       approvedAt: new Date("2026-12-01T13:00:00Z"),
       subscriptionId: preapproval.id,
+      externalReference: "tenant",
     });
     expect((await gateway.fetchPayment("2")).subscriptionId).toBeNull();
     expect(requests[0].url).toBe("https://api.mercadopago.com/v1/payments/1234567890");

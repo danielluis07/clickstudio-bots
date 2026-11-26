@@ -148,11 +148,20 @@ owner as a refused card.
    one (Mercado Pago's `last_modified`) already is. So a repeated or
    out-of-order notification changes nothing more, and no dedupe table is
    needed.
-4. **An approved charge ends a suspension.** A payment of one of our
-   Subscriptions, `approved`, for at least the Subscription's amount and
-   approved after the Tenant was Suspended, clears `suspended_at`, and the
-   Bot replies again. Mercado Pago's small card check doesn't count, and
-   neither does a replayed payment from before the suspension.
+4. **An approved charge ends a suspension.** A charge of one of our
+   Subscriptions, for at least the Subscription's amount and made after the
+   Tenant was Suspended, clears `suspended_at`, and the Bot replies again.
+   Mercado Pago's small card check doesn't count, and neither does a
+   replayed payment from before the suspension. Three signals carry a charge,
+   so a missing topic or field doesn't leave a paying Tenant Suspended:
+   - an `approved` payment, found through its authorized payment;
+   - an `approved` payment linked to the Subscription
+     (`point_of_interaction.transaction_data.subscription_id` or
+     `metadata.preapproval_id`), or else to the Tenant through its
+     `external_reference`;
+   - the preapproval's own `summarized.last_charged_date` and
+     `last_charged_amount`, read on every `subscription_preapproval`
+     notification.
 
 Anything but 200 makes Mercado Pago retry (every 15 minutes, then less
 often), so a failed fetch answers 500 and is reported as

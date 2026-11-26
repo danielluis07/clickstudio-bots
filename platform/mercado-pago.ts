@@ -15,9 +15,12 @@ export class MercadoPagoRequestError extends Error {
   }
 }
 
-// Ids are digits or hex; anything else could reach another path.
+// Mercado Pago's ids are digits or hex; anything else could reach another
+// path.
+export const isMercadoPagoResourceId = (id: string) => /^[A-Za-z0-9_-]{1,64}$/.test(id);
+
 const resourceId = (id: string) => {
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new MercadoPagoRequestError();
+  if (!isMercadoPagoResourceId(id)) throw new MercadoPagoRequestError();
   return id;
 };
 
@@ -30,6 +33,13 @@ const preapprovalSchema = z.object({
   payer_email: z.string().nullish(),
   auto_recurring: z.object({ transaction_amount: z.coerce.number() }),
   next_payment_date: z.string().nullish(),
+  // The charge history in the preapproval reference.
+  summarized: z
+    .object({
+      last_charged_date: z.string().nullish(),
+      last_charged_amount: z.coerce.number().nullish(),
+    })
+    .nullish(),
   last_modified: z.string().min(1),
 });
 
@@ -38,6 +48,7 @@ const paymentSchema = z.object({
   status: z.string().min(1),
   transaction_amount: z.coerce.number(),
   date_approved: z.string().nullish(),
+  external_reference: z.string().nullish(),
   // Where Mercado Pago names the preapproval a charge belongs to. Not in the
   // payments reference: confirm against a real subscription charge.
   point_of_interaction: z
@@ -54,14 +65,20 @@ const authorizedPaymentSchema = z.object({
 });
 
 const toSubscription = (body: unknown) => {
-  const found = preapprovalSchema.parse(body);
+  const preapproval = preapprovalSchema.parse(body);
+  const lastChargedAt = dateOf(preapproval.summarized?.last_charged_date);
+  const lastChargedAmount = preapproval.summarized?.last_charged_amount;
   return {
-    id: found.id,
-    status: found.status,
-    payerEmail: found.payer_email || null,
-    amountCents: centsOf(found.auto_recurring.transaction_amount),
-    nextChargeAt: dateOf(found.next_payment_date),
-    modifiedAt: new Date(found.last_modified),
+    id: preapproval.id,
+    status: preapproval.status,
+    payerEmail: preapproval.payer_email || null,
+    amountCents: centsOf(preapproval.auto_recurring.transaction_amount),
+    nextChargeAt: dateOf(preapproval.next_payment_date),
+    lastCharge:
+      lastChargedAt && typeof lastChargedAmount === "number"
+        ? { at: lastChargedAt, amountCents: centsOf(lastChargedAmount) }
+        : null,
+    modifiedAt: new Date(preapproval.last_modified),
   };
 };
 
@@ -156,6 +173,7 @@ export const createMercadoPagoGateway = ({
           payment.point_of_interaction?.transaction_data?.subscription_id ||
           payment.metadata?.preapproval_id ||
           null,
+        externalReference: payment.external_reference || null,
       };
     },
 
