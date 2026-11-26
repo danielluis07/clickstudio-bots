@@ -5,10 +5,11 @@ import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 
 // A text input that reports its value once typing pauses. When `value`
 // changes from elsewhere, such as back/forward navigation, the input follows.
+// Spread `value` and `onChange` onto the input; `clear` empties it.
 export function useDebouncedInput(value: string, onSettle: (value: string) => void, delay = 300) {
   const [draft, setDraft] = useState(value);
   const [settled, setSettled] = useState(value);
-  const settleSoon = useDebouncedCallback(onSettle, delay);
+  const [settleSoon, cancelSettle] = useDebouncedCallback(onSettle, delay);
 
   if (value !== settled) {
     setSettled(value);
@@ -20,5 +21,12 @@ export function useDebouncedInput(value: string, onSettle: (value: string) => vo
     settleSoon(event.target.value);
   };
 
-  return { value: draft, onChange };
+  // Empties the input and reports it at once, dropping any pending report.
+  const clear = () => {
+    cancelSettle();
+    setDraft("");
+    onSettle("");
+  };
+
+  return { value: draft, onChange, clear };
 }

@@ -315,12 +315,36 @@ Tenant or the Member (see [Locks and leases](locking.md#handoff-events)), so
 `member_id` stays after that Member is removed. Nothing else prunes them, and
 they are left out of the Tenant export, like `bot_turn_record`.
 
+### Return events
+
+`resume` also appends a row to `bot_return_event` for each Conversation it
+moves from the team back to the Bot, in the same transaction as the ownership
+`UPDATE`. A return of a Conversation already with the Bot (a repeated
+**Devolver ao Bot**, or **Resolvida** on a Conversation still waiting) changes
+no hands and records nothing. They are kept apart from `handoff_event`, so the
+Handoff stats stay a count of Handoffs.
+
+| Column | Holds |
+| --- | --- |
+| `tenant_id` | The Tenant |
+| `conversation_id` | The Conversation that returned |
+| `trigger` | `returned` (**Devolver ao Bot**, one or many), `resolved` (**Resolvida**), `contact_message` (the Contact wrote after an unacted `bot_unavailable` Handoff) or `quiet` (the sweep, after a service window with no message) |
+| `member_id` | The Member who returned it, for `returned` and `resolved`. Null for the automatic returns. |
+| `occurred_at` | The database's time of the transaction that returned it |
+
+Like Handoff events they hold ids and codes only, are deleted with their
+Conversation, have no foreign key to the Tenant or the Member, and are left out
+of the Tenant export. Returns before the `bot_return_event` migration cannot
+be recovered, so older threads show no return dividers.
+
 ### In the thread
 
-The Conversation view draws each event as a divider ("Passou para a equipe: O
-contato pediu atendimento", "Juliana assumiu a conversa"). The
-`conversations.handoffs` query returns the latest 100 events oldest first,
-naming the Member at read time; the event itself still holds only the id. It
+The Conversation view draws each Handoff event and return event as a divider
+("Passou para a equipe: O contato pediu atendimento", "Juliana assumiu a
+conversa", "Juliana devolveu a conversa ao Bot", "Voltou para o Bot: 24 horas
+sem mensagens"). The `conversations.handoffs` query returns the latest 100 of
+both, oldest first, each marked with its `kind`, naming the Member at read
+time; the event itself still holds only the id. It
 is separate from the message pages, so the Bot's history reads and the
 thread's paging are unchanged. Each divider follows the latest loaded message
 sent at or before `occurred_at`, with two seconds of slack because the event

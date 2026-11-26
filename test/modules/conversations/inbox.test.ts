@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:tes
 import type { Database } from "@/db/database";
 import { eq } from "drizzle-orm";
 import {
+  botReturnEvent,
   channel,
   contact,
   conversation,
@@ -337,7 +338,7 @@ describe("Conversation view", () => {
     expect(await inboxOf(tenantA).listHandoffs(id)).toBeNull();
   });
 
-  test("lists the Conversation's Handoffs oldest first, naming the Member who caused them", async () => {
+  test("lists the Conversation's Handoffs and returns to the Bot oldest first, naming the Member who caused them", async () => {
     const conversationId = await receive(channelA, "5511900000001", "Oi", "2026-10-20T09:00:00Z");
     const [owner] = await db
       .select({ id: member.id })
@@ -369,9 +370,39 @@ describe("Conversation view", () => {
         occurredAt: new Date("2026-10-20T10:00:00Z"),
       },
     ]);
+    await db.insert(botReturnEvent).values([
+      {
+        tenantId: "tenant-a",
+        conversationId: conversationId!,
+        trigger: "returned",
+        memberId: owner.id,
+        occurredAt: new Date("2026-10-20T09:30:00Z"),
+      },
+      {
+        tenantId: "tenant-a",
+        conversationId: conversationId!,
+        trigger: "quiet",
+        occurredAt: new Date("2026-10-21T11:00:00Z"),
+      },
+      {
+        // Returned and handed off again in one transaction: the same time.
+        tenantId: "tenant-a",
+        conversationId: conversationId!,
+        trigger: "contact_message",
+        occurredAt: new Date("2026-10-22T08:00:00Z"),
+      },
+    ]);
+    await db.insert(handoffEvent).values({
+      tenantId: "tenant-a",
+      conversationId: conversationId!,
+      reason: "no_answer",
+      actor: "bot",
+      occurredAt: new Date("2026-10-22T08:00:00Z"),
+    });
 
     expect(await inboxOf(tenantA).listHandoffs(conversationId!)).toEqual([
       {
+        kind: "handoff",
         id: expect.any(String),
         reason: "contact_request",
         actor: "bot",
@@ -379,6 +410,14 @@ describe("Conversation view", () => {
         occurredAt: new Date("2026-10-20T09:01:00Z"),
       },
       {
+        kind: "return",
+        id: expect.any(String),
+        trigger: "returned",
+        memberName: "Owner A",
+        occurredAt: new Date("2026-10-20T09:30:00Z"),
+      },
+      {
+        kind: "handoff",
         id: expect.any(String),
         reason: "dashboard_reply",
         actor: "member",
@@ -386,11 +425,34 @@ describe("Conversation view", () => {
         occurredAt: new Date("2026-10-20T10:00:00Z"),
       },
       {
+        kind: "handoff",
         id: expect.any(String),
         reason: "claimed",
         actor: "member",
         memberName: "Owner A",
         occurredAt: new Date("2026-10-20T11:00:00Z"),
+      },
+      {
+        kind: "return",
+        id: expect.any(String),
+        trigger: "quiet",
+        memberName: null,
+        occurredAt: new Date("2026-10-21T11:00:00Z"),
+      },
+      {
+        kind: "return",
+        id: expect.any(String),
+        trigger: "contact_message",
+        memberName: null,
+        occurredAt: new Date("2026-10-22T08:00:00Z"),
+      },
+      {
+        kind: "handoff",
+        id: expect.any(String),
+        reason: "no_answer",
+        actor: "bot",
+        memberName: null,
+        occurredAt: new Date("2026-10-22T08:00:00Z"),
       },
     ]);
   });

@@ -55,7 +55,8 @@ export const handoffMutationOptions = (
     },
     onError: (_error: unknown, _input: unknown, context: { previous: Snapshot } | undefined) =>
       rollback(queryClient, context?.previous),
-    // "Assumir" records a Handoff, so the thread's dividers refetch too.
+    // Every control can change hands, which the thread's dividers show, so
+    // they refetch too.
     onSettled: (_data: unknown, _error: unknown, input: HandoffInput) =>
       Promise.all(
         [

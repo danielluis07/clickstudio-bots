@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import type { Database } from "@/db/database";
 import { and, eq } from "drizzle-orm";
-import { conversation, handoffEvent, member, message, user } from "@/db/schema";
+import { botReturnEvent, conversation, handoffEvent, member, message, user } from "@/db/schema";
 import { resolveTenantScope } from "@/modules/tenancy";
 import {
   createBotActivation,
@@ -930,6 +930,24 @@ const handoffEvents = async (conversationId: string) =>
     return event;
   });
 
+// The return events recorded for a Conversation, oldest first.
+const botReturnEvents = async (conversationId: string) =>
+  (
+    await db
+      .select({
+        tenantId: botReturnEvent.tenantId,
+        trigger: botReturnEvent.trigger,
+        memberId: botReturnEvent.memberId,
+        occurredAt: botReturnEvent.occurredAt,
+      })
+      .from(botReturnEvent)
+      .where(eq(botReturnEvent.conversationId, conversationId))
+      .orderBy(botReturnEvent.occurredAt, botReturnEvent.id)
+  ).map(({ occurredAt, ...event }) => {
+    expect(occurredAt).toBeInstanceOf(Date);
+    return event;
+  });
+
 const memberReasons: ConversationHandoffReason[] = ["claimed", "dashboard_reply", "app_reply"];
 
 const appEcho = ({ phoneNumberId, deliver, timestamp }: Fixture) =>
@@ -1341,4 +1359,64 @@ test("the sweep's quiet-window return keeps the reason and the waiting item, and
     returnedByMemberAt: null,
   });
   expect(await unansweredTexts(conversationId)).toEqual([]);
+});
+
+test("each return to the Bot records what returned it and the Member who did", async () => {
+  const fixture = await setup();
+  const { scope, clock, notifier, conversationId, controls, receive } = fixture;
+  const attendant = await addAttendant(scope.tenantId);
+
+  await controls.takeOver(scope, conversationId);
+  await controls.returnToBot(attendant, conversationId);
+  await controls.takeOver(scope, conversationId);
+  await controls.resolve(scope, conversationId);
+  await receive("Ainda preciso de ajuda");
+  await failModel(fixture);
+  await receive("Alô?");
+  await controls.takeOver(scope, conversationId);
+  clock.advance(dayMs);
+  await returnQuietHandoffs({ db, clock, notifier });
+
+  expect(await botReturnEvents(conversationId)).toEqual([
+    { tenantId: scope.tenantId, trigger: "returned", memberId: attendant.memberId },
+    { tenantId: scope.tenantId, trigger: "resolved", memberId: scope.memberId },
+    { tenantId: scope.tenantId, trigger: "contact_message", memberId: null },
+    { tenantId: scope.tenantId, trigger: "quiet", memberId: null },
+  ]);
+});
+
+test("a return of a Conversation already with the Bot records nothing", async () => {
+  const { scope, conversationId, controls } = await setup();
+
+  await controls.returnToBot(scope, conversationId);
+  await controls.takeOver(scope, conversationId);
+  await controls.returnToBot(scope, conversationId);
+  // Back with the Bot but still waiting: "Resolvida" changes no hands.
+  await controls.resolve(scope, conversationId);
+
+  expect(await botReturnEvents(conversationId)).toEqual([
+    { tenantId: scope.tenantId, trigger: "returned", memberId: scope.memberId },
+  ]);
+});
+
+test("a bulk return records one event per Conversation that changed hands", async () => {
+  const { scope, conversationId, controls, receive } = await setup();
+  const other = await receive("Oi", "5511999990002");
+  await controls.takeOver(scope, conversationId);
+
+  await controls.bulkReturnToBot(scope, [conversationId, other]);
+
+  expect(await botReturnEvents(conversationId)).toHaveLength(1);
+  expect(await botReturnEvents(other)).toEqual([]);
+});
+
+test("return events are deleted with their Conversation", async () => {
+  const { scope, conversationId, controls } = await setup();
+  await controls.takeOver(scope, conversationId);
+  await controls.returnToBot(scope, conversationId);
+  expect(await botReturnEvents(conversationId)).toHaveLength(1);
+
+  await db.delete(conversation).where(eq(conversation.id, conversationId));
+
+  expect(await botReturnEvents(conversationId)).toEqual([]);
 });

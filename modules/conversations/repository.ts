@@ -1,7 +1,15 @@
 import { and, desc, eq, ilike, inArray, like, or, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Database } from "@/db/database";
-import { contact, conversation, handoffEvent, member, message, user } from "@/db/schema";
+import {
+  botReturnEvent,
+  contact,
+  conversation,
+  handoffEvent,
+  member,
+  message,
+  user,
+} from "@/db/schema";
 import { botReplyingUntil } from "@/modules/conversations/bot-replying";
 import { recordSentWamid } from "@/modules/conversations/echoes";
 import { handOff } from "@/modules/conversations/handoff";
@@ -30,7 +38,8 @@ const matchesSearch = (search: string) => {
 export type ConversationCursor = { lastMessageAt: Date; id: string };
 export type MessageCursor = { sentAt: Date; id: string };
 
-// How many of a Conversation's latest Handoffs the thread receives.
+// How many of a Conversation's latest Handoffs and returns to the Bot the
+// thread receives.
 export const handoffHistoryLimit = 100;
 
 const contactFields = {
@@ -229,13 +238,17 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
       return { messages: page.reverse(), nextCursor };
     },
 
-    // The Conversation's Handoffs, oldest first, for the thread's dividers.
+    // Each time the Conversation changed hands, to the team (a Handoff) or
+    // back to the Bot (a return), oldest first, for the thread's dividers.
     // Only the latest are kept: a Conversation rarely changes hands this often,
     // and the thread shows only those among its loaded messages.
     async listHandoffs(conversationId: string) {
       if (!(await getConversation(conversationId))) return null;
-      const rows = await db
+      const memberOf = (memberId: AnyPgColumn) =>
+        and(eq(member.id, memberId), eq(member.organizationId, scope.tenantId));
+      const handoffs = await db
         .select({
+          kind: sql<"handoff">`'handoff'`,
           id: handoffEvent.id,
           reason: handoffEvent.reason,
           actor: handoffEvent.actor,
@@ -244,10 +257,7 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
           occurredAt: handoffEvent.occurredAt,
         })
         .from(handoffEvent)
-        .leftJoin(
-          member,
-          and(eq(member.id, handoffEvent.memberId), eq(member.organizationId, scope.tenantId)),
-        )
+        .leftJoin(member, memberOf(handoffEvent.memberId))
         .leftJoin(user, eq(user.id, member.userId))
         .where(
           and(
@@ -257,7 +267,33 @@ export const createConversationRepository = (db: Database, scope: TenantScope | 
         )
         .orderBy(desc(handoffEvent.occurredAt), desc(handoffEvent.id))
         .limit(handoffHistoryLimit);
-      return rows.reverse();
+      const returns = await db
+        .select({
+          kind: sql<"return">`'return'`,
+          id: botReturnEvent.id,
+          trigger: botReturnEvent.trigger,
+          // Null for the automatic returns and once the Member is removed.
+          memberName: user.name,
+          occurredAt: botReturnEvent.occurredAt,
+        })
+        .from(botReturnEvent)
+        .leftJoin(member, memberOf(botReturnEvent.memberId))
+        .leftJoin(user, eq(user.id, member.userId))
+        .where(
+          and(
+            eq(botReturnEvent.conversationId, conversationId),
+            eq(botReturnEvent.tenantId, scope.tenantId),
+          ),
+        )
+        .orderBy(desc(botReturnEvent.occurredAt), desc(botReturnEvent.id))
+        .limit(handoffHistoryLimit);
+      // A return and a Handoff in one transaction share its time: the
+      // Contact's audio returns a "Bot indisponível" Handoff and hands it off
+      // again. The return came first, so it sorts first. Each list is read
+      // newest first; reversed, events of one kind at one time keep id order.
+      return [...returns.reverse(), ...handoffs.reverse()]
+        .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime())
+        .slice(-handoffHistoryLimit);
     },
 
     // Stores the scope's Member's reply before it is sent, so a send that

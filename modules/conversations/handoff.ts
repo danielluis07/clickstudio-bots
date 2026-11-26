@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, lte, or, type SQL } from "drizzle-orm";
 import type { Database, Transaction } from "@/db/database";
-import { conversation, handoffEvent, message } from "@/db/schema";
+import { botReturnEvent, conversation, handoffEvent, message } from "@/db/schema";
 import { raiseHandoffAlerts } from "@/modules/conversations/alerts";
 import { serviceWindowHours } from "@/modules/conversations/repository";
 import { recordMemberActivity, type TenantScope } from "@/modules/tenancy";
@@ -10,6 +10,9 @@ import { notifyAlerts, notifyInbox, type AlertPing, type Notifier } from "@/plat
 export type ConversationHandoffReason = NonNullable<
   (typeof conversation.$inferSelect)["handoffReason"]
 >;
+
+// What returned a Conversation to the Bot.
+export type BotReturnTrigger = (typeof botReturnEvent.$inferSelect)["trigger"];
 
 // A model Handoff the Bot put off to ask for required Contact details.
 export type ConversationPendingHandoff = NonNullable<
@@ -140,6 +143,10 @@ export const handOffAndNotify = async (
 };
 
 type Resumption = {
+  // What returned it, recorded as a return event for each Conversation that
+  // changes hands, with the Member who did it, if one did.
+  trigger: BotReturnTrigger;
+  memberId?: string;
   // "Resolvida": also clears the reason and takes it off the waiting list.
   resolved?: boolean;
   // Leaves the Handoff backlog to the Bot's next turn, for when no Member can
@@ -164,12 +171,14 @@ const resume = async (
   scope: { tenantId: string },
   conversationIds: string[],
   {
+    trigger,
+    memberId,
     resolved = false,
     answerBacklog = false,
     requireAll = false,
     where,
     byMemberAt,
-  }: Resumption = {},
+  }: Resumption,
 ) => {
   const ids = [...new Set(conversationIds)];
   if (ids.length === 0) return [];
@@ -205,6 +214,17 @@ const resume = async (
       ...(resolved ? { waiting: false, handoffReason: null } : {}),
     })
     .where(and(eq(conversation.tenantId, scope.tenantId), inArray(conversation.id, resumed)));
+  // Only a change of hands is a return. The rows above are already locked, so
+  // the inserts' references to them never wait (docs/locking.md).
+  if (handoffs.length > 0)
+    await tx.insert(botReturnEvent).values(
+      handoffs.map((conversationId) => ({
+        tenantId: scope.tenantId,
+        conversationId,
+        trigger,
+        memberId: memberId ?? null,
+      })),
+    );
   return resumed;
 };
 
@@ -218,6 +238,8 @@ const resumeFromDashboard = async (
   (
     await db.transaction(async (tx) => {
       const resumed = await resume(tx, scope, conversationIds, {
+        trigger: resolved ? "resolved" : "returned",
+        memberId: scope.memberId,
         resolved,
         requireAll: true,
         byMemberAt: now,
@@ -243,6 +265,7 @@ export const resumeOnContactMessage = async (
 ) =>
   (
     await resume(tx, scope, [conversationId], {
+      trigger: "contact_message",
       answerBacklog: true,
       where: and(eq(conversation.owner, "team"), eq(conversation.resumeOnContactMessage, true)),
     })
@@ -275,7 +298,9 @@ export const returnQuietHandoffs = async ({
   const byTenant = Map.groupBy(candidates, ({ tenantId }) => tenantId);
   for (const [tenantId, rows] of byTenant) {
     const ids = rows.map(({ id }) => id);
-    const resumed = await db.transaction((tx) => resume(tx, { tenantId }, ids, { where: quiet }));
+    const resumed = await db.transaction((tx) =>
+      resume(tx, { tenantId }, ids, { trigger: "quiet", where: quiet }),
+    );
     for (const conversationId of resumed) await notifyInbox(notifier, tenantId, { conversationId });
   }
 };

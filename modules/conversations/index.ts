@@ -60,6 +60,7 @@ export {
   createHandoffControls,
   handOffAndNotify,
   returnQuietHandoffs,
+  type BotReturnTrigger,
   type ConversationHandoffReason,
   type ConversationPendingHandoff,
   type HandoffControls,
