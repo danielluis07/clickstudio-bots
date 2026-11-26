@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/db";
 import { auth } from "@/server/auth/auth";
 import {
+  billing,
   botActivation,
   botAllowance,
   botSandbox,
@@ -40,6 +41,7 @@ export const contextForSession = (session: Session): TRPCContext => ({
   tenants: tenantRepository,
   tour: memberTour,
   channels: channelService,
+  billing,
   signupConfig: getWhatsAppSignupConfig,
   session: session
     ? { userId: session.user.id, activeTenantId: session.session.activeOrganizationId ?? null }

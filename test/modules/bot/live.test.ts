@@ -19,6 +19,8 @@ import {
   type BurstWait,
 } from "@/modules/bot";
 import { RetryableError } from "@/platform/retryable";
+import { createBilling } from "@/modules/billing";
+import { createTestClock } from "@/test/support/clock";
 import { eq, sql } from "drizzle-orm";
 import {
   botReplyUsage,
@@ -1176,6 +1178,32 @@ test("a Contact message whose Bot job never ran is answered after the next sweep
   // Running the sweep again changes nothing.
   await worker.sweep();
   expect(queue.take()).toEqual([]);
+});
+
+test("a Suspended Tenant's Bot stops replying, keeps its Conversations, and answers again once lifted", async () => {
+  const { scope, clock, model, sender, queue, activation, conversationId, worker, repository } =
+    await setup();
+  await activation.activate(scope);
+  // Billing launched 30 days ago, so the Trial ends now.
+  const launchedAt = createTestClock(new Date(clock.now().getTime() - 30 * 24 * 60 * 60_000));
+  await createBilling({ db, clock: launchedAt, enabled: true }).launch();
+  await createBilling({ db, clock, enabled: true }).sweep();
+
+  await worker.run(conversationId);
+  clock.advance(2 * 60_000);
+  await worker.sweep();
+  expect(queue.take()).toEqual([]);
+  expect(sender.sent).toEqual([]);
+  expect(model.requests).toHaveLength(1); // the sandbox's, in setup
+  expect(await repository.getConversation(conversationId)).toMatchObject({ owner: "bot" });
+
+  // Turning billing off lifts the suspension; the next sweep answers.
+  await createBilling({ db, clock, enabled: false }).sweep();
+  model.script({ text: "O corte custa R$ 80." });
+  await worker.sweep();
+  expect(queue.take()).toEqual([{ type: "run-bot-turn", conversationId }]);
+  await worker.run(conversationId);
+  expect(sender.sent.map(({ text }) => text)).toEqual(["O corte custa R$ 80."]);
 });
 
 test("the sweep leaves a message skipped outside the Schedule, even once the Schedule opens after an hour", async () => {

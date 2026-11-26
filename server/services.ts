@@ -10,6 +10,7 @@ import {
   pruneCanceledTenants,
 } from "@/modules/tenancy";
 import { createResendMailer } from "@/platform/resend-mailer";
+import { createBilling } from "@/modules/billing";
 import { pruneSignInAttempts } from "@/modules/identity";
 import { createChannelService, sweepChannelHealth } from "@/modules/channels";
 import {
@@ -77,7 +78,13 @@ const dependencies = {
   appUrl: env.APP_URL,
 };
 
-export const tenantOnboarding = createTenantOnboarding(dependencies);
+// Off in production until launch (ADR 0012).
+export const billing = createBilling({ ...base, enabled: env.BILLING_ENABLED });
+
+export const tenantOnboarding = createTenantOnboarding({
+  ...dependencies,
+  trialEndFor: billing.trialEndFor,
+});
 export const tenantLifecycle = createTenantLifecycle({
   ...base,
   getWhatsApp: createWhatsAppGateway,
@@ -240,6 +247,9 @@ export const sweepRoute = createSweepRoute({
       name: "check-channel-health",
       run: () => sweepChannelHealth({ ...base, diagnostics }),
     },
+    // Before the Bot's own recovery, so a Tenant whose Trial just ended gets
+    // no stranded turn re-enqueued in the same run.
+    { name: "enforce-billing", run: () => billing.sweep() },
     { name: "requeue-inbox-events", run: async () => webhookInbox?.requeueStalled() },
     { name: "retry-failed-inbox-events", run: async () => webhookInbox?.retryFailed() },
     { name: "sweep-bot-turns", run: async () => liveBot?.sweep() },

@@ -22,6 +22,7 @@ import {
   recordSentWamid,
 } from "@/modules/conversations";
 import { createMemberManagement, resolveTenantScope, type TenantScope } from "@/modules/tenancy";
+import { createBilling } from "@/modules/billing";
 import { createTestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestMailer } from "@/test/support/mailer";
@@ -275,6 +276,29 @@ describe("Dashboard replies", () => {
       { id: "channel-b", health: "healthy", at: null },
     ]);
     await db.update(channel).set({ health: "healthy", healthChangedAt: null });
+  });
+
+  test("Members of a Suspended Tenant still receive Contact messages and reply to them", async () => {
+    clock.set(new Date("2026-10-21T09:00:00Z"));
+    const launchedAt = createTestClock(new Date("2026-09-01T09:00:00Z"));
+    await createBilling({ db, clock: launchedAt, enabled: true }).launch();
+    await createBilling({ db, clock, enabled: true }).sweep();
+    expect((await createBilling({ db, clock, enabled: true }).status(owner)).suspended).toBe(true);
+    try {
+      const conversationId = await receive(channelA, "2026-10-21T09:00:00Z");
+      clock.set(new Date("2026-10-21T10:00:00Z"));
+
+      expect(
+        await replies.sendReply(attendant, { conversationId, text: "Já respondo" }),
+      ).toMatchObject({ ok: true });
+      expect(sender.sent.map(({ text }) => text)).toEqual(["Já respondo"]);
+      expect((await messagesOf(attendant, conversationId)).map(({ text }) => text)).toEqual([
+        "Oi",
+        "Já respondo",
+      ]);
+    } finally {
+      await createBilling({ db, clock, enabled: false }).sweep();
+    }
   });
 
   test("refuses blank replies and another Tenant's Conversation without sending", async () => {

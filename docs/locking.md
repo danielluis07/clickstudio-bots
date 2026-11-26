@@ -149,6 +149,20 @@ other's upsert and nothing else, which is what makes the count exact. The daily
 prune deletes only rows whose window has ended. `acceptInvitation` counts its
 attempt before its transaction opens, so it adds no rank.
 
+### Billing's Tenant row updates
+
+Billing (`modules/billing/billing.ts`; see [Billing](billing.md)) writes the
+Trial end and the Suspended state on Tenant rows with single `UPDATE`
+statements outside any transaction: the launch action and the sweep's
+`enforce-billing` task. Each may lock many Tenant rows (rank 2) in the order
+Postgres chooses, but holds no other lock and waits for nothing after it.
+Every other path holds at most one Tenant row at a time, so no path holds one
+Tenant row while waiting for another, and the order across rows can't
+deadlock. A statement that meets a Tenant row held `for update`
+(cancellation, an invitation) waits for that transaction and nothing else.
+A new Tenant's Trial end is part of its own insert in `createTenant` and adds
+no lock.
+
 ## Every lock
 
 ### Advisory locks
