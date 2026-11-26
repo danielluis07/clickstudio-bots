@@ -104,6 +104,28 @@ _Avoid_: Blocked topic, forbidden subject
 A subject that always makes the Bot hand the Conversation to the Tenant's Members.
 _Avoid_: Escalation topic, transfer topic
 
+## Billing
+
+**Plan**:
+What a Tenant pays for: one flat monthly price in reais, the same for every Tenant.
+_Avoid_: Tier, package, pricing
+
+**Trial**:
+The 30 days a Tenant uses the platform free, before it must have a Subscription. They count from the Tenant's creation or from the day billing begins, whichever is later. No card is asked for to start it, and the platform administrator may extend one Tenant's Trial.
+_Avoid_: Free period, test, demo
+
+**Subscription**:
+A Tenant's standing agreement to pay for the Plan every month by credit card, set up and cancelled only by its owner.
+_Avoid_: Payment, signature, membership, plan
+
+**Grace period**:
+The 7 days after a failed monthly charge during which the Tenant keeps its Bot while the charge is retried.
+_Avoid_: Overdue period, tolerance
+
+**Suspended**:
+A Tenant whose Trial or Grace period has ended without an active Subscription: its Bot stops replying, but its Members, data and dashboard remain, and paying restores it at once. Distinct from a Bot the owner paused and from a Tenant that was canceled.
+_Avoid_: Blocked, paused, inactive, delinquent
+
 ## Dashboard
 
 **Tour**:
