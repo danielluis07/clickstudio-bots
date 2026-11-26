@@ -33,7 +33,7 @@ import { createTestNotifier } from "@/test/support/notifier";
 import { createTestModel } from "@/test/support/model";
 import { createTestMailer } from "@/test/support/mailer";
 import { seedLiveBot } from "@/test/support/live-bot";
-import { createTenantRepository } from "@/modules/tenancy";
+import { createMemberTour, createTenantRepository } from "@/modules/tenancy";
 import { saveTestSettings, testBotSettings } from "@/test/support/bot";
 
 let db: Database;
@@ -66,6 +66,7 @@ const callerFor = (
     conversations: (scope) => createConversationRepository(db, scope),
     alerts: (scope) => createMemberAlerts({ db, clock }, scope),
     alertPreferences: (scope) => createMemberAlertPreferences({ db, clock }, scope),
+    tour: (scope) => createMemberTour({ db, clock }, scope),
     tenants: (scope) => createTenantRepository(db, scope),
     channels: createChannelService({
       db,
@@ -554,6 +555,36 @@ describe("tRPC router", () => {
       "BAD_REQUEST",
     );
     expect((await ownerB.alerts.preferences()).handoff).toBe(true);
+  });
+
+  test("each Member marks only their own Tour as seen, in the current Tenant only", async () => {
+    await db.insert(user).values({ id: "two-tenants", name: "Two", email: "two@example.com" });
+    await db.insert(member).values([
+      { organizationId: "tenant-a", userId: "two-tenants", role: "member" },
+      { organizationId: "tenant-b", userId: "two-tenants", role: "member" },
+    ]);
+    const ownerB = callerFor({ userId: "owner-b", activeTenantId: "tenant-b" });
+    const attendant = callerFor({ userId: "attendant", activeTenantId: "tenant-b" });
+    const twoInB = callerFor({ userId: "two-tenants", activeTenantId: "tenant-b" });
+    const twoInA = callerFor({ userId: "two-tenants", activeTenantId: "tenant-a" });
+
+    expect(await attendant.tenancy.tour()).toEqual({ seen: false });
+    expect(await attendant.tenancy.markTourSeen()).toEqual({ ok: true });
+    expect(await attendant.tenancy.tour()).toEqual({ seen: true });
+    // Marking again changes nothing.
+    expect(await attendant.tenancy.markTourSeen()).toEqual({ ok: true });
+    expect(await attendant.tenancy.tour()).toEqual({ seen: true });
+    expect(await ownerB.tenancy.tour()).toEqual({ seen: false });
+
+    await twoInB.tenancy.markTourSeen();
+    expect(await twoInB.tenancy.tour()).toEqual({ seen: true });
+    expect(await twoInA.tenancy.tour()).toEqual({ seen: false });
+    expect(await ownerB.tenancy.tour()).toEqual({ seen: false });
+
+    expect(
+      await codeOf(callByPath(ownerB, "tenancy.markTourSeen", { memberId: "someone-else" })),
+    ).toBe("BAD_REQUEST");
+    expect(await ownerB.tenancy.tour()).toEqual({ seen: false });
   });
 
   test("Contact deletion refuses non-owners and foreign Contacts, and authorizes the owner", async () => {

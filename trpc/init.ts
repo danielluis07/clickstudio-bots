@@ -14,6 +14,7 @@ import type { BotActivation, BotSandbox, ReplyAllowance } from "@/modules/bot";
 import type { createChannelService } from "@/modules/channels";
 import {
   resolveTenantScope,
+  type MemberTour,
   type TenantScope,
   type createTenantRepository,
 } from "@/modules/tenancy";
@@ -43,6 +44,8 @@ export type TRPCContext = {
   // The scope's Member's own Alert preferences.
   alertPreferences: (scope: TenantScope) => MemberAlertPreferences;
   tenants: (scope: TenantScope) => ReturnType<typeof createTenantRepository>;
+  // Whether the scope's Member has seen the Tour, in the scope's Tenant.
+  tour: (scope: TenantScope) => MemberTour;
   channels: Pick<ReturnType<typeof createChannelService>, "getChannel">;
   // The public identifiers the browser needs to open Meta's Embedded Signup,
   // or null while WhatsApp is not configured.

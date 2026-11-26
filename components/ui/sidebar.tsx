@@ -34,6 +34,10 @@ type SidebarContextProps = {
   setOpen: (open: boolean) => void;
   openMobile: boolean;
   setOpenMobile: (open: boolean) => void;
+  // Keeps the mobile panel from closing by itself and lets the rest of the
+  // page take focus and clicks, for an overlay drawn above it (the Tour).
+  keepMobileOpen: boolean;
+  setKeepMobileOpen: (keep: boolean) => void;
   isMobile: boolean;
   toggleSidebar: () => void;
 };
@@ -64,6 +68,7 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile();
   const [openMobile, setOpenMobile] = React.useState(false);
+  const [keepMobileOpen, setKeepMobileOpen] = React.useState(false);
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -114,9 +119,11 @@ function SidebarProvider({
       isMobile,
       openMobile,
       setOpenMobile,
+      keepMobileOpen,
+      setKeepMobileOpen,
       toggleSidebar,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar],
+    [state, open, setOpen, isMobile, openMobile, setOpenMobile, keepMobileOpen, toggleSidebar],
   );
 
   return (
@@ -155,7 +162,7 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset";
   collapsible?: "offcanvas" | "icon" | "none";
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+  const { isMobile, state, openMobile, setOpenMobile, keepMobileOpen } = useSidebar();
 
   if (collapsible === "none") {
     return (
@@ -174,7 +181,15 @@ function Sidebar({
 
   if (isMobile) {
     return (
-      <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
+      <Sheet
+        open={openMobile}
+        onOpenChange={(next) => {
+          if (next || !keepMobileOpen) setOpenMobile(next);
+        }}
+        modal={!keepMobileOpen}
+        disablePointerDismissal={keepMobileOpen}
+        {...props}
+      >
         <SheetContent
           dir={dir}
           data-sidebar="sidebar"

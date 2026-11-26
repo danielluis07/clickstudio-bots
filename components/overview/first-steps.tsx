@@ -30,7 +30,7 @@ export function FirstSteps({ isOwner }: { isOwner: boolean }) {
     Boolean,
   ).length;
   return (
-    <DashboardRailSection title="Primeiros passos" aside={`${done} de 5`}>
+    <DashboardRailSection title="Primeiros passos" aside={`${done} de 5`} tour="first-steps">
       <ol className="flex flex-col">
         <FirstStep label="WhatsApp" done={status.connected}>
           <span className="text-sm">

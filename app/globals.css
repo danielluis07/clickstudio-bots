@@ -182,3 +182,161 @@
     list-style-type: decimal;
   }
 }
+
+/* The Tour's popover (components/tour/dashboard-tour.tsx): driver.js
+   restyled as a shadcn popover card. */
+.driver-popover.dashboard-tour {
+  font-family: var(--font-sans);
+  color: var(--popover-foreground);
+  background-color: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.1),
+    0 4px 6px -4px rgb(0 0 0 / 0.1);
+  min-width: min(18rem, calc(100vw - 2rem));
+  max-width: min(22rem, calc(100vw - 2rem));
+  padding: 1rem;
+
+  & .driver-popover-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.4;
+    padding-right: 1.75rem;
+  }
+
+  & .driver-popover-description {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--muted-foreground);
+  }
+
+  & .driver-popover-close-btn {
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: var(--radius-md);
+    color: var(--muted-foreground);
+    line-height: 1.75rem;
+  }
+
+  & .driver-popover-close-btn:hover,
+  & .driver-popover-close-btn:focus-visible {
+    color: var(--foreground);
+    background-color: var(--accent);
+  }
+
+  & .driver-popover-footer {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  & .driver-popover-progress-text {
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums;
+  }
+
+  & .driver-popover-navigation-btns {
+    gap: 0.375rem;
+  }
+
+  & .driver-popover-navigation-btns button + button {
+    margin-inline-start: 0;
+  }
+
+  & .driver-popover-footer-btn,
+  & .driver-popover-skip-btn {
+    all: unset;
+    box-sizing: border-box;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    height: 2rem;
+    padding: 0 0.75rem;
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  & .driver-popover-footer-btn:focus-visible,
+  & .driver-popover-skip-btn:focus-visible {
+    outline: 3px solid color-mix(in oklch, var(--ring) 50%, transparent);
+  }
+
+  & .driver-popover-skip-btn {
+    margin-inline-end: auto;
+    color: var(--muted-foreground);
+  }
+
+  & .driver-popover-skip-btn:hover {
+    color: var(--foreground);
+    background-color: var(--accent);
+  }
+
+  & .driver-popover-prev-btn {
+    border: 1px solid var(--border);
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  & .driver-popover-prev-btn:hover {
+    background-color: var(--accent);
+  }
+
+  & .driver-popover-next-btn {
+    background-color: var(--primary);
+    color: var(--primary-foreground);
+  }
+
+  & .driver-popover-next-btn:hover {
+    background-color: color-mix(in oklch, var(--primary) 85%, transparent);
+  }
+
+  & .driver-popover-arrow {
+    border-color: var(--popover);
+  }
+
+  & .driver-popover-arrow-side-left {
+    border-top-color: transparent;
+    border-bottom-color: transparent;
+    border-right-color: transparent;
+  }
+
+  & .driver-popover-arrow-side-right {
+    border-top-color: transparent;
+    border-bottom-color: transparent;
+    border-left-color: transparent;
+  }
+
+  & .driver-popover-arrow-side-top {
+    border-bottom-color: transparent;
+    border-left-color: transparent;
+    border-right-color: transparent;
+  }
+
+  & .driver-popover-arrow-side-bottom {
+    border-top-color: transparent;
+    border-left-color: transparent;
+    border-right-color: transparent;
+  }
+}
+
+/* Under reduced motion the Tour fades nothing, and the sidebar opens and
+   closes without sliding while it runs (driver.js marks the body). */
+@media (prefers-reduced-motion: reduce) {
+  .driver-fade .driver-overlay,
+  .driver-fade .driver-popover {
+    animation: none;
+  }
+
+  .driver-active [data-slot="sidebar-gap"],
+  .driver-active [data-slot="sidebar-container"],
+  .driver-active [data-slot="sheet-content"],
+  .driver-active [data-slot="sheet-overlay"] {
+    transition: none;
+  }
+}

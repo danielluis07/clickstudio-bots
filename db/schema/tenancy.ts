@@ -35,6 +35,8 @@ export const member = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     role: text("role", { enum: memberRoles }).notNull().default("member"),
+    // When the Member first skipped or finished the Tour; null until then.
+    tourSeenAt: timestamp("tour_seen_at", { withTimezone: true }),
     ...timestamps(),
   },
   (t) => [

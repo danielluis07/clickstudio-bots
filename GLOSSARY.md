@@ -103,3 +103,9 @@ _Avoid_: Blocked topic, forbidden subject
 **Handoff topic**:
 A subject that always makes the Bot hand the Conversation to the Tenant's Members.
 _Avoid_: Escalation topic, transfer topic
+
+## Dashboard
+
+**Tour**:
+A one-time guided walk through the dashboard that shows a Member what each area is for, tailored to their role. It changes nothing. A Member sees it by themselves once, on their first visit, and can replay it whenever they like. Distinct from Primeiros passos, which gets the Bot live.
+_Avoid_: Onboarding, tutorial, walkthrough, first steps

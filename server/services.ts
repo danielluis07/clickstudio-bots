@@ -3,6 +3,7 @@ import { systemClock } from "@/platform/clock";
 import { env } from "@/platform/env";
 import {
   createMemberManagement,
+  createMemberTour,
   createTenantOnboarding,
   createTenantRepository,
   createTenantLifecycle,
@@ -103,6 +104,7 @@ export const memberAlerts = (scope: TenantScope) => createMemberAlerts(base, sco
 
 export const memberAlertPreferences = (scope: TenantScope) =>
   createMemberAlertPreferences(base, scope);
+export const memberTour = (scope: TenantScope) => createMemberTour(base, scope);
 export const conversationStats = createConversationStats({
   ...base,
   readBusinessHours: async (scope) => (await readBotSettings(db, scope)).hours,

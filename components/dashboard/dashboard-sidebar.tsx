@@ -1,6 +1,7 @@
 import { SignOutButton } from "@/components/app-shell/sign-out-button";
 import { DashboardNavigation } from "@/components/dashboard/dashboard-navigation";
 import { DashboardSidebarTenant } from "@/components/dashboard/dashboard-sidebar-tenant";
+import { TourReplayButton } from "@/components/tour/tour-replay-button";
 import {
   Sidebar,
   SidebarContent,
@@ -21,6 +22,9 @@ export function DashboardSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <TourReplayButton />
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SignOutButton inSidebar />
           </SidebarMenuItem>
