@@ -1,7 +1,8 @@
-import { and, eq, isNotNull, isNull, lte, not, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lte, not, sql } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import { organization } from "@/db/schema";
-import type { TenantScope } from "@/modules/tenancy";
+import { isPlatformAdmin } from "@/modules/identity";
+import { forbidden, recordAdminActivity, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
 
 export const trialDays = 30;
@@ -70,6 +71,61 @@ export const createBilling = ({
       return suspended.length;
     },
 
+    // Every Tenant's Trial end and Suspended state, for the platform
+    // administrator to pick the one to extend.
+    async trials(actorId: string) {
+      if (!(await isPlatformAdmin(db, actorId))) return forbidden;
+      if (!enabled) return { ok: false as const, error: "billing_disabled" as const };
+      const tenants = await db
+        .select({
+          id: organization.id,
+          name: organization.name,
+          trialEndsAt: organization.trialEndsAt,
+          suspendedAt: organization.suspendedAt,
+        })
+        .from(organization)
+        .orderBy(asc(organization.name), asc(organization.id));
+      return {
+        ok: true as const,
+        tenants: tenants.map(({ suspendedAt, ...tenant }) => ({
+          ...tenant,
+          suspended: Boolean(suspendedAt),
+        })),
+      };
+    },
+
+    // The platform administrator moves one Tenant's Trial end to a later
+    // instant. A Tenant Suspended because its Trial ended returns to normal at
+    // once. A Tenant with an active Subscription has no Trial left to extend.
+    async extendTrial(actorId: string, tenantId: string, trialEndsAt: Date) {
+      if (!(await isPlatformAdmin(db, actorId))) return forbidden;
+      if (!enabled) return { ok: false as const, error: "billing_disabled" as const };
+      const now = clock.now();
+      if (trialEndsAt <= now) return { ok: false as const, error: "not_future" as const };
+      return db.transaction(async (tx) => {
+        const [extended] = await tx
+          .update(organization)
+          .set({ trialEndsAt, suspendedAt: null })
+          .where(and(eq(organization.id, tenantId), not(hasActiveSubscription)))
+          .returning({ name: organization.name });
+        if (!extended) {
+          const [found] = await tx
+            .select({ id: organization.id })
+            .from(organization)
+            .where(eq(organization.id, tenantId));
+          return found
+            ? { ok: false as const, error: "subscribed" as const }
+            : { ok: false as const, error: "not_found" as const };
+        }
+        await recordAdminActivity(
+          tx,
+          { tenantId, adminId: actorId },
+          { action: "trial.extended", at: now },
+        );
+        return { ok: true as const, tenantName: extended.name, trialEndsAt };
+      });
+    },
+
     // What the scope's Tenant's Members see of billing.
     async status(scope: TenantScope) {
       if (!enabled) return { trialEndsAt: null, suspended: false };
@@ -86,3 +142,9 @@ export const createBilling = ({
 };
 
 export type Billing = ReturnType<typeof createBilling>;
+
+// One row of the platform administrator's list of Trials.
+export type TenantTrial = Extract<
+  Awaited<ReturnType<Billing["trials"]>>,
+  { ok: true }
+>["tenants"][number];

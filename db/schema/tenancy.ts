@@ -90,6 +90,7 @@ export const memberActivityActions = [
   "behaviour_settings.saved",
   "capture_settings.saved",
   "link_settings.saved",
+  "trial.extended",
 ] as const;
 
 // Append-only: a trigger refuses every update, and every delete while the

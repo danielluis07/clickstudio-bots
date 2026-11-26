@@ -1,6 +1,7 @@
+import { AdminTrials } from "@/components/admin/admin-trials";
 import { CreateTenantForm } from "@/components/admin/create-tenant-form";
 
-export function AdminTenants() {
+export function AdminTenants({ actorId }: { actorId: string }) {
   return (
     <div className="flex flex-col gap-8">
       <h1 className="text-3xl font-semibold tracking-tight">Administração</h1>
@@ -16,6 +17,7 @@ export function AdminTenants() {
         </div>
         <CreateTenantForm />
       </section>
+      <AdminTrials actorId={actorId} />
     </div>
   );
 }

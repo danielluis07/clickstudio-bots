@@ -1,7 +1,8 @@
 # Billing
 
 Issues: [#253](https://github.com/danielluis07/clickstudio-bots/issues/253) (parent),
-[#255](https://github.com/danielluis07/clickstudio-bots/issues/255) (switch, Trial and Suspended).
+[#255](https://github.com/danielluis07/clickstudio-bots/issues/255) (switch, Trial and Suspended),
+[#256](https://github.com/danielluis07/clickstudio-bots/issues/256) (extending a Trial).
 Decision: [ADR 0012](adr/0012-mercado-pago-subscriptions-with-card-payment-brick.md).
 Terms: `GLOSSARY.md` → Billing.
 
@@ -22,6 +23,7 @@ With the switch **off**:
 - Members see no billing banner, and the billing page (`/painel/assinatura`)
   is not found.
 - `bun run billing:launch` refuses to run.
+- `/admin` shows no Trials, and extending one is refused.
 
 ## The Trial
 
@@ -29,6 +31,23 @@ Each Tenant has a Trial end (`organization.trial_ends_at`):
 
 - A Tenant created while billing is on gets its creation time + 30 days.
 - A Tenant created while billing is off gets none until launch.
+
+## Extending a Trial
+
+The platform administrator extends one Tenant's Trial from `/admin`, under
+"Períodos de teste" (`extendTrial` in `modules/billing/billing.ts`). They pick
+the Trial's last day, and the Trial ends at the following midnight in
+Brasília. The new end must be in the future. A Tenant with an active
+Subscription has no Trial to extend and is refused; until #257 the check is
+the same stub the sweep uses.
+
+Extending also lifts the Tenant's suspension at once, so its Bot replies
+again with no sweep needed. Today a Trial ending is the only reason a Tenant
+is Suspended. When the Grace period arrives (a failed charge), its suspension
+comes with a Subscription, and #258 must keep extending from lifting it.
+
+Each extension is recorded in the activity log as `trial.extended`, with the
+administrator as actor ([Member activity](member-activity.md)).
 
 ## Launching
 

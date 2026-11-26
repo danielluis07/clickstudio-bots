@@ -68,3 +68,10 @@ export const startOfLocalDay = (at: Date) => {
   const offset = local - Math.floor(at.getTime() / 1000) * 1000;
   return new Date(Date.UTC(year, month - 1, day) - offset);
 };
+
+// The instant the São Paulo day after `day` ("YYYY-MM-DD") begins: the end of
+// that whole day. Noon UTC of the next day is always inside it.
+export const endOfLocalDate = (day: string) => {
+  const [year, month, date] = day.split("-").map(Number);
+  return startOfLocalDay(new Date(Date.UTC(year, month - 1, date + 1, 12)));
+};

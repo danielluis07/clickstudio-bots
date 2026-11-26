@@ -161,7 +161,10 @@ Tenant row while waiting for another, and the order across rows can't
 deadlock. A statement that meets a Tenant row held `for update`
 (cancellation, an invitation) waits for that transaction and nothing else.
 A new Tenant's Trial end is part of its own insert in `createTenant` and adds
-no lock.
+no lock. Extending a Trial (`extendTrial`) updates one Tenant row in a
+transaction, then inserts its activity entry, which waits for nothing
+([member activity entries](#member-activity-entries)); it holds that one row
+and no other lock.
 
 ## Every lock
 
