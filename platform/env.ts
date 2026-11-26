@@ -49,6 +49,21 @@ export const env = createEnv({
     ANTHROPIC_API_KEY: z.string().min(1).optional(),
     AI_GATEWAY_API_KEY: z.string().min(1).optional(),
     AI_MODEL_ID: z.string().trim().min(1).optional(),
+    // Tenant billing (ADR 0012). Off in production until launch; dev and
+    // preview run with it on and Mercado Pago test credentials.
+    BILLING_ENABLED: z.stringbool().default(false),
+    // The shapes catch a public key and access token pasted into each other's
+    // place: a public key is a prefixed UUID, an access token is not.
+    MERCADO_PAGO_ACCESS_TOKEN: z
+      .string()
+      .regex(/^(APP_USR|TEST)-\d+-/, "Expected a Mercado Pago access token")
+      .optional(),
+    MERCADO_PAGO_PUBLIC_KEY: z
+      .string()
+      .regex(/^(APP_USR|TEST)-[0-9a-f]{8}-[0-9a-f]{4}-/, "Expected a Mercado Pago public key")
+      .optional(),
+    // Secret signature of the app's webhook, for checking `x-signature`.
+    MERCADO_PAGO_WEBHOOK_SECRET: z.string().min(1).optional(),
   },
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
@@ -74,5 +89,9 @@ export const env = createEnv({
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     AI_GATEWAY_API_KEY: process.env.AI_GATEWAY_API_KEY,
     AI_MODEL_ID: process.env.AI_MODEL_ID,
+    BILLING_ENABLED: process.env.BILLING_ENABLED,
+    MERCADO_PAGO_ACCESS_TOKEN: process.env.MERCADO_PAGO_ACCESS_TOKEN,
+    MERCADO_PAGO_PUBLIC_KEY: process.env.MERCADO_PAGO_PUBLIC_KEY,
+    MERCADO_PAGO_WEBHOOK_SECRET: process.env.MERCADO_PAGO_WEBHOOK_SECRET,
   },
 });
