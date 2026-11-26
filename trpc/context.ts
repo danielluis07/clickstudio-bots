@@ -12,6 +12,7 @@ import {
   handoffControls,
   memberAlertPreferences,
   memberAlerts,
+  memberTour,
   notifier,
   realtime,
   replyService,
@@ -37,6 +38,7 @@ export const contextForSession = (session: Session): TRPCContext => ({
   alerts: memberAlerts,
   alertPreferences: memberAlertPreferences,
   tenants: tenantRepository,
+  tour: memberTour,
   channels: channelService,
   signupConfig: getWhatsAppSignupConfig,
   session: session

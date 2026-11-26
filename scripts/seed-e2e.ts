@@ -1,6 +1,6 @@
-import { like } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import { db } from "@/db";
-import { channel, organization, signInAttempt, user } from "@/db/schema";
+import { channel, member, organization, signInAttempt, user } from "@/db/schema";
 import { recordInboundTextMessage } from "@/modules/conversations";
 import { createPlatformAdmin } from "@/modules/identity";
 import { createTenantOnboarding } from "@/modules/tenancy";
@@ -69,6 +69,12 @@ const seedTenant = async (input: {
     password,
   });
   if (!accepted.ok) throw new Error(`Could not accept for ${input.name}: ${accepted.error}`);
+  // The flows start on the Painel, where a new owner's Tour would cover it.
+  // tour.e2e.ts brings the Tour back for itself.
+  await db
+    .update(member)
+    .set({ tourSeenAt: new Date() })
+    .where(eq(member.organizationId, tenantId));
 
   const context = { tenantId, wabaId: input.wabaId, phoneNumberId: input.phoneNumberId };
   await db.insert(channel).values({

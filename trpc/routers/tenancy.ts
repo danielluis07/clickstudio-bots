@@ -10,4 +10,16 @@ export const tenancyRouter = createTRPCRouter({
       const tenant = await ctx.tenants(ctx.scope).getTenant();
       return tenant && { ...tenant, role: ctx.scope.role };
     }),
+
+  // Whether the Tour has opened by itself for the last time: the Member
+  // skipped or finished it in this Tenant.
+  tour: tenantProcedure
+    .input(z.strictObject({}).optional())
+    .query(async ({ ctx }) => ({ seen: await ctx.tour(ctx.scope).seen() })),
+
+  // Writes only the caller's own membership in the current Tenant.
+  markTourSeen: tenantProcedure.input(z.strictObject({}).optional()).mutation(async ({ ctx }) => {
+    await ctx.tour(ctx.scope).markSeen();
+    return { ok: true as const };
+  }),
 });

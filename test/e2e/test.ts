@@ -36,6 +36,20 @@ const resetSignInAttempts = async () => {
   }
 };
 
+// Makes the owner new to the Tour again, as a Member who just joined.
+export const resetTour = async (email: string) => {
+  const client = new Client({ connectionString: e2eDatabaseUrl() });
+  await client.connect();
+  try {
+    await client.query(
+      `update member set tour_seen_at = null where user_id = (select id from "user" where email = $1)`,
+      [email],
+    );
+  } finally {
+    await client.end();
+  }
+};
+
 export const signIn = async (page: Page, email: string, password: string) => {
   await resetSignInAttempts();
   await page.goto("/entrar");

@@ -1,0 +1,47 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "f5819b5e-ec6a-4baf-9c1e-39f45dfe4367",
+  "prevIds": [
+    "7b44b5cf-5b4f-441e-bb8c-a776544cb71d"
+  ],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "member",
+        "tour_seen_at"
+      ],
+      "writes": [
+        "s|col|public.member.tour_seen_at",
+        "n|col|public.member.tour_seen_at",
+        "e|col|public.member.tour_seen_at"
+      ],
+      "reads": [
+        "n|tbl|public.member",
+        "n|sch|public"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "member",
+        "name": "tour_seen_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

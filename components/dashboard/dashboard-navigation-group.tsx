@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useId, useState, type ReactNode } from "react";
 import { DashboardNavigationItem } from "@/components/dashboard/dashboard-navigation-item";
+import { TourTarget } from "@/components/tour/tour-target";
 import {
   SidebarMenuButton,
   SidebarMenuItem,
@@ -14,12 +15,16 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import type { TourTargetId } from "@/modules/tenancy/hooks";
 
 type DashboardNavigationGroupProps = {
   // The group's first page, opened from the icon-only sidebar.
   href: string;
   label: string;
-  items: { href: string; label: string }[];
+  // `tour` is a box the Tour highlights, over `rows` items from this one.
+  items: { href: string; label: string; tour?: { id: TourTargetId; rows: number } }[];
+  // Shows the pages whatever the Member chose, as while the Tour runs.
+  forceOpen?: boolean;
   children: ReactNode;
 };
 
@@ -29,6 +34,7 @@ export function DashboardNavigationGroup({
   href,
   label,
   items,
+  forceOpen = false,
   children,
 }: DashboardNavigationGroupProps) {
   const pathname = usePathname();
@@ -41,6 +47,7 @@ export function DashboardNavigationGroup({
     setWasInGroup(inGroup);
     if (inGroup) setOpen(true);
   }
+  const expanded = open || forceOpen;
 
   // The icon-only sidebar has no room for the pages, so the icon opens the first.
   if (state === "collapsed" && !isMobile) {
@@ -56,23 +63,24 @@ export function DashboardNavigationGroup({
       <SidebarMenuButton
         type="button"
         isActive={inGroup}
-        aria-expanded={open}
-        aria-controls={open ? listId : undefined}
+        aria-expanded={expanded}
+        aria-controls={expanded ? listId : undefined}
         onClick={() => setOpen(!open)}
       >
         {children}
         <span>{label}</span>
         <ChevronRightIcon
           aria-hidden="true"
-          className={cn("ml-auto transition-transform", open && "rotate-90")}
+          className={cn("ml-auto transition-transform", expanded && "rotate-90")}
         />
       </SidebarMenuButton>
-      {open && (
+      {expanded && (
         <SidebarMenuSub id={listId}>
           {items.map((item) => {
             const isActive = pathname === item.href;
             return (
               <SidebarMenuSubItem key={item.href}>
+                {item.tour && <TourTarget id={item.tour.id} rows={item.tour.rows} />}
                 <SidebarMenuSubButton
                   render={<Link href={item.href} />}
                   isActive={isActive}

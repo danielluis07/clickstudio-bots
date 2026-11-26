@@ -27,3 +27,4 @@ export { tenantOperationLeaseMs, tenantRecoveryDays } from "@/modules/tenancy/li
 export { pruneCanceledTenants } from "@/modules/tenancy/retention";
 export { createTenantExport, type TenantExportFile } from "@/modules/tenancy/export";
 export { recordMemberActivity, type MemberActivityAction } from "@/modules/tenancy/activity";
+export { createMemberTour, type MemberTour } from "@/modules/tenancy/tour";
