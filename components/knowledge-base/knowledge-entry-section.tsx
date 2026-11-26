@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { PlusIcon } from "lucide-react";
 import { EditableKnowledgeEntry } from "@/components/knowledge-base/editable-knowledge-entry";
 import { KnowledgeEntryView } from "@/components/knowledge-base/knowledge-entry-view";
@@ -14,9 +15,16 @@ type KnowledgeEntrySectionProps = {
     open: (target: KnowledgeEntryTarget) => void;
     remove: (entryId: string) => Promise<void>;
   };
+  // Another owner control beside "Adicionar", with a line describing it.
+  extraAction?: { control: ReactNode; description: string };
 };
 
-export function KnowledgeEntrySection({ kind, entries, controls }: KnowledgeEntrySectionProps) {
+export function KnowledgeEntrySection({
+  kind,
+  entries,
+  controls,
+  extraAction,
+}: KnowledgeEntrySectionProps) {
   const labels = knowledgeEntryLabels[kind];
   const headingId = `base-${kind}`;
 
@@ -37,19 +45,25 @@ export function KnowledgeEntrySection({ kind, entries, controls }: KnowledgeEntr
             </span>
           </h2>
           <p className="text-sm text-muted-foreground">{labels.description}</p>
+          {extraAction && (
+            <p className="text-xs text-muted-foreground">{extraAction.description}</p>
+          )}
         </div>
-        {controls && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => controls.open({ kind })}
-            disabled={controls.pending}
-          >
-            <PlusIcon data-icon="inline-start" />
-            {labels.add}
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {extraAction?.control}
+          {controls && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => controls.open({ kind })}
+              disabled={controls.pending}
+            >
+              <PlusIcon data-icon="inline-start" />
+              {labels.add}
+            </Button>
+          )}
+        </div>
       </div>
       {entries.length === 0 ? (
         <Empty className="border p-6">

@@ -2,6 +2,7 @@ export {
   entryEditorLabel,
   knowledgeEntryLabels,
 } from "@/modules/knowledge-base/hooks/entry-labels";
+export { importFileAccept, importFileDescription } from "@/modules/knowledge-base/import-limits";
 export { useKnowledgeEntryForm } from "@/modules/knowledge-base/hooks/use-knowledge-entry-form";
 export {
   useKnowledgeBaseEditor,

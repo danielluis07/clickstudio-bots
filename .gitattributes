@@ -1,1 +1,3 @@
 * text=auto eol=lf
+# Import fixtures are kept byte for byte (the TXT one has Windows line breaks).
+test/fixtures/knowledge-base/** binary

@@ -3,7 +3,9 @@
 import { refresh } from "next/cache";
 import {
   entryTitleMaxLength,
+  importFileTooLargeMessage,
   knowledgeBaseCharacterCap,
+  pasteTextInstead,
   type KnowledgeEntryKind,
 } from "@/modules/knowledge-base";
 import { formatCount } from "@/platform/format";
@@ -61,4 +63,48 @@ export async function deleteKnowledgeEntryAction(entryId: string): Promise<FormS
   const scope = await requireTenantScope();
   const result = await knowledgeBaseEditor.deleteEntry(scope, entryId);
   return toFormState(result, saveErrorMessages, "Item excluído da base de conhecimento.");
+}
+
+const importErrorMessages = {
+  forbidden: saveErrorMessages.forbidden,
+  no_text: `Não encontramos texto neste arquivo. PDFs digitalizados ou feitos de imagens não podem ser lidos. ${pasteTextInstead}`,
+  unreadable: `Não conseguimos ler este arquivo. Ele pode estar danificado ou protegido por senha. ${pasteTextInstead}`,
+  too_large: importFileTooLargeMessage,
+  unsupported: "Envie um arquivo PDF, DOCX ou TXT.",
+} as const;
+
+// Adds the text of the form's `file` as a new Text section. The file itself
+// is read in memory and discarded.
+export async function importKnowledgeFileAction(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const scope = await requireTenantScope();
+  const file = formData.get("file");
+  if (!(file instanceof File))
+    return { status: "error", message: "Escolha um arquivo para importar." };
+
+  const result = await knowledgeBaseEditor.importFile(scope, {
+    name: file.name,
+    bytes: new Uint8Array(await file.arrayBuffer()),
+  });
+  if (result.ok) {
+    refresh();
+    return {
+      status: "success",
+      message: `Arquivo importado como a seção “${result.title}”. Revise o texto: o Bot já usa esta seção na próxima resposta.`,
+    };
+  }
+  if (result.error === "over_cap") {
+    if (result.sectionSize > knowledgeBaseCharacterCap)
+      return {
+        status: "error",
+        message: `O texto deste arquivo tem ${formatCount(result.sectionSize)} caracteres, mais que o limite de ${formatCount(knowledgeBaseCharacterCap)} de toda a base de conhecimento. Copie apenas os trechos necessários e cole em uma nova seção.`,
+      };
+    return {
+      status: "error",
+      message: `Com o texto deste arquivo, a base de conhecimento ficaria com ${formatCount(result.size)} caracteres, acima do limite de ${formatCount(knowledgeBaseCharacterCap)}. Remova outros itens ou cole apenas o trecho necessário em uma nova seção.`,
+    };
+  }
+  return { status: "error", message: importErrorMessages[result.error] };
 }
