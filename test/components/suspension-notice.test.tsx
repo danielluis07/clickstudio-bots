@@ -13,7 +13,7 @@ test("the owner of a Suspended Tenant is told the Bot stopped and offered the bi
   expect(banner).toContain("O Bot parou de responder: o período de teste terminou");
   expect(banner).toContain("As conversas, os dados e as respostas da equipe continuam funcionando");
   expect(banner).toContain('href="/painel/assinatura"');
-  expect(banner).toContain("Assinar o plano");
+  expect(banner).toContain(">Assine o plano</a> para o Bot voltar a responder na hora.");
 });
 
 test("other Members of a Suspended Tenant see the banner without the call to action", () => {
