@@ -281,6 +281,10 @@ the alerts matter most then. Each run:
    Mercado Pago is unreachable it still Suspends from what is stored and the
    task is reported as failed. With billing off it Suspends nobody, lifts any
    suspension and calls nothing. See [Billing](billing.md).
+   Then (`cancel-canceled-tenant-subscriptions`), with billing on or off,
+   cancels at Mercado Pago up to 100 Subscriptions of canceled Tenants that
+   aren't cancelled yet, so one the cancel command couldn't cancel is
+   retried. It stops at the first failed call.
 5. Re-enqueues up to 100 inbox events still `pending` five minutes after they
    were received, oldest first. An event whose job already failed waits until
    35 minutes after its last failure or replay, so QStash's own retries come

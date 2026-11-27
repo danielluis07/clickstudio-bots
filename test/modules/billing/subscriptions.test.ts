@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { eq } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import { member, organization, user } from "@/db/schema";
 import { createBilling, planAmountCents } from "@/modules/billing";
@@ -112,6 +113,7 @@ test("an owner on Trial subscribes: the Subscription is active and the first cha
     available: true,
     canSubscribe: false,
     canChangeCard: true,
+    canCancel: true,
     subscription: {
       active: true,
       status: "authorized",
@@ -119,6 +121,7 @@ test("an owner on Trial subscribes: the Subscription is active and the first cha
       amountCents: 9990,
       nextChargeAt: new Date("2026-12-31T12:00:00Z"),
       graceEndsAt: null,
+      paidUntil: null,
       card: { brand: "visa", lastFour: null },
     },
   });
@@ -770,4 +773,194 @@ test("a Tenant with an active Subscription has no Trial to extend", async () => 
   expect(
     await billing().extendTrial(adminId, "tenant", new Date(clock.now().getTime() + 40 * day)),
   ).toEqual({ ok: false, error: "subscribed" });
+});
+
+// An owner whose first monthly charge went through on the Trial end: paid up
+// to 2027-01-31T12:00Z.
+const paidForJanuary = async () => {
+  const owner = await subscribedAtTrialEnd();
+  expect(gateway.runCharges()).toEqual(["preapproval-1"]);
+  await billing().receiveNotification({
+    type: "subscription_preapproval",
+    id: "preapproval-1",
+  });
+  return owner;
+};
+
+test("an owner cancels: Mercado Pago never charges again, and the Bot stops at the end of the month already paid for", async () => {
+  const owner = await paidForJanuary();
+  clock.advance(10 * day);
+
+  expect(await billing().cancelSubscription(owner)).toEqual({
+    ok: true,
+    endsAt: new Date("2027-01-31T12:00:00Z"),
+  });
+  expect(gateway.updates).toEqual([{ id: "preapproval-1", change: { status: "cancelled" } }]);
+  expect(await billing().checkout(owner)).toMatchObject({
+    canSubscribe: true,
+    canChangeCard: false,
+    canCancel: false,
+    subscription: {
+      active: false,
+      status: "cancelled",
+      paidUntil: new Date("2027-01-31T12:00:00Z"),
+    },
+  });
+
+  clock.set(new Date(new Date("2027-01-31T12:00:00Z").getTime() - 1));
+  await billing().sweep();
+  expect(await suspended(owner)).toBe(false);
+
+  clock.advance(1);
+  await billing().sweep();
+  expect(await suspended(owner)).toBe(true);
+  clock.advance(60 * day);
+  expect(gateway.runCharges()).toEqual([]);
+});
+
+test("subscribing again before the paid month ends charges only when it ends", async () => {
+  const owner = await paidForJanuary();
+  clock.advance(10 * day);
+  await billing().cancelSubscription(owner);
+  clock.advance(5 * day);
+
+  expect(await billing().subscribe(owner, card)).toMatchObject({
+    ok: true,
+    firstChargeAt: new Date("2027-01-31T12:00:00Z"),
+  });
+  expect(gateway.created[1].startDate).toEqual(new Date("2027-01-31T12:00:00Z"));
+  expect(await billing().checkout(owner)).toMatchObject({
+    subscription: { active: true, paidUntil: null },
+  });
+  expect(gateway.runCharges()).toEqual([]);
+
+  clock.set(new Date("2027-01-31T12:00:00Z"));
+  expect(gateway.runCharges()).toEqual(["preapproval-2"]);
+  await billing().sweep();
+  expect(await suspended(owner)).toBe(false);
+});
+
+test("cancelling during the Trial keeps the Bot until the Trial ends, and is never charged", async () => {
+  const owner = await seedMember("owner");
+  await billing().launch();
+  await billing().subscribe(owner, card);
+  clock.advance(10 * day);
+
+  expect(await billing().cancelSubscription(owner)).toEqual({
+    ok: true,
+    endsAt: new Date("2026-12-31T12:00:00Z"),
+  });
+  clock.advance(20 * day);
+  expect(gateway.runCharges()).toEqual([]);
+  await billing().sweep();
+  expect(await suspended(owner)).toBe(true);
+});
+
+test("cancelling with a charge overdue keeps the Bot only until the Grace period ends, and subscribing again charges at once", async () => {
+  const owner = await subscribedAtTrialEnd();
+  charge("refused", "rejected");
+  await billing().receiveNotification({ type: "payment", id: "refused" });
+  clock.advance(2 * day);
+
+  expect(await billing().cancelSubscription(owner)).toEqual({
+    ok: true,
+    endsAt: new Date("2027-01-07T12:00:00Z"),
+  });
+  expect(await billing().checkout(owner)).toMatchObject({
+    subscription: { paidUntil: null },
+  });
+  expect(await billing().subscribe(owner, card)).toMatchObject({
+    ok: true,
+    firstChargeAt: null,
+  });
+});
+
+test("a charge whose notification was lost still counts as paid when the owner cancels", async () => {
+  const owner = await subscribedAtTrialEnd();
+  gateway.runCharges();
+  clock.advance(3 * day);
+
+  expect(await billing().cancelSubscription(owner)).toEqual({
+    ok: true,
+    endsAt: new Date("2027-01-31T12:00:00Z"),
+  });
+});
+
+test("only an owner cancels, and only a Subscription that isn't cancelled", async () => {
+  const owner = await seedMember("owner");
+  const admin = await seedMember("admin");
+  await billing().launch();
+
+  expect(await billing().cancelSubscription(owner)).toEqual({
+    ok: false,
+    error: "no_subscription",
+  });
+  await billing().subscribe(owner, card);
+  expect(await billing().cancelSubscription(admin)).toEqual({
+    ok: false,
+    error: "forbidden",
+  });
+  expect(await billing().cancelSubscription(owner)).toMatchObject({ ok: true });
+  expect(await billing().cancelSubscription(owner)).toEqual({
+    ok: false,
+    error: "no_subscription",
+  });
+  expect(gateway.updates).toHaveLength(1);
+});
+
+const cancelTenant = (id: string) =>
+  db.update(organization).set({ canceledAt: clock.now() }).where(eq(organization.id, id));
+
+test("a canceled Tenant's Subscription is cancelled at Mercado Pago and never charged again, even with billing off", async () => {
+  const owner = await paidForJanuary();
+  const other = await seedOtherTenant();
+  await billing().subscribe(other, card);
+  await cancelTenant("tenant");
+
+  expect(await billing(false).cancelForCanceledTenants()).toBe(1);
+  expect(gateway.updates).toEqual([{ id: "preapproval-1", change: { status: "cancelled" } }]);
+  expect(await billing().checkout(owner)).toMatchObject({
+    subscription: {
+      status: "cancelled",
+      paidUntil: new Date("2027-01-31T12:00:00Z"),
+    },
+  });
+
+  // Nothing left to cancel.
+  expect(await billing().cancelForCanceledTenants()).toBe(0);
+  clock.advance(60 * day);
+  expect(gateway.runCharges()).toEqual(["preapproval-2"]);
+});
+
+test("with Mercado Pago down, a canceled Tenant's Subscription is cancelled on a later run", async () => {
+  const owner = await paidForJanuary();
+  await cancelTenant("tenant");
+  const updateSubscription = gateway.updateSubscription;
+  gateway.updateSubscription = async () => {
+    throw new Error("Mercado Pago is down");
+  };
+
+  await expect(billing().cancelForCanceledTenants()).rejects.toThrow("Mercado Pago is down");
+  expect(await billing().checkout(owner)).toMatchObject({
+    subscription: { status: "authorized" },
+  });
+
+  gateway.updateSubscription = updateSubscription;
+  clock.advance(30 * 60_000);
+  expect(await billing().cancelForCanceledTenants()).toBe(1);
+  clock.advance(60 * day);
+  expect(gateway.runCharges()).toEqual([]);
+});
+
+test("with Mercado Pago down, cancelling fails and changes nothing", async () => {
+  const owner = await paidForJanuary();
+  gateway.updateSubscription = async () => {
+    throw new Error("Mercado Pago is down");
+  };
+
+  await expect(billing().cancelSubscription(owner)).rejects.toThrow("Mercado Pago is down");
+  expect(await billing().checkout(owner)).toMatchObject({
+    canSubscribe: false,
+    subscription: { status: "authorized", paidUntil: null },
+  });
 });

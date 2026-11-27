@@ -26,6 +26,11 @@ export const subscription = pgTable("subscription", {
   // The Grace period's end: 7 days after a failed monthly charge, null while
   // no charge is overdue. A successful charge clears it.
   graceEndsAt: timestamp("grace_ends_at", { withTimezone: true }),
+  // Set when the owner (or a canceled Tenant) cancels: the end of the Trial
+  // or of the month already paid for, until which the cancelled Subscription
+  // still pays for the Plan. Null for one Mercado Pago cancelled itself, and
+  // when cancelled with a charge overdue (the Grace period then decides).
+  paidUntil: timestamp("paid_until", { withTimezone: true }),
   // The latest successful charge seen, so a failure from before it (a
   // replayed notification) starts no Grace period.
   lastChargedAt: timestamp("last_charged_at", { withTimezone: true }),

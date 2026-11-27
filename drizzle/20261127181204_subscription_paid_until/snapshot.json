@@ -1,0 +1,47 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "d58e9875-ab55-4785-ac44-70389bbf4ec8",
+  "prevIds": [
+    "c446a302-7c58-4d26-a373-ca349fedd470"
+  ],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "subscription",
+        "paid_until"
+      ],
+      "writes": [
+        "s|col|public.subscription.paid_until",
+        "n|col|public.subscription.paid_until",
+        "e|col|public.subscription.paid_until"
+      ],
+      "reads": [
+        "n|tbl|public.subscription",
+        "n|sch|public"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subscription",
+        "name": "paid_until",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

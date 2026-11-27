@@ -1,4 +1,4 @@
-import type { BillingCheckout } from "@/modules/billing";
+import { billingBotActiveUntil, type BillingCheckout } from "@/modules/billing";
 import { formatDate } from "@/platform/format";
 
 // What subscribing does now, or what the owner is waiting for.
@@ -6,7 +6,13 @@ export function BillingGuidance({ checkout }: { checkout: BillingCheckout }) {
   const { subscription, suspended, trialEndsAt } = checkout;
   let text: string;
   const canChangeCardHere = checkout.canChangeCard && checkout.available;
-  if (subscription?.graceEndsAt && canChangeCardHere) {
+  const cancelled = subscription?.status === "cancelled";
+  const botActiveUntil = billingBotActiveUntil(checkout);
+  if (cancelled && subscription.paidUntil && botActiveUntil) {
+    text = `Assinatura cancelada. O Bot continua respondendo até ${formatDate(botActiveUntil)}. Para continuar depois disso, assine de novo abaixo: a primeira cobrança só acontece nesse dia.`;
+  } else if (cancelled && botActiveUntil) {
+    text = `Assinatura cancelada com uma cobrança pendente. O Bot para de responder em ${formatDate(botActiveUntil)}. Ao assinar de novo, o cartão é cobrado na hora.`;
+  } else if (subscription?.graceEndsAt && canChangeCardHere) {
     text = suspended
       ? "A cobrança foi recusada e o Bot parou de responder. Troque o cartão abaixo: o Bot volta assim que o Mercado Pago aprovar a cobrança no novo cartão."
       : `A última cobrança foi recusada. Troque o cartão abaixo para o Mercado Pago cobrar no novo cartão; sem isso, o Bot para de responder em ${formatDate(subscription.graceEndsAt)}.`;

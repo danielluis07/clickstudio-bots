@@ -5,14 +5,16 @@ Issues: [#253](https://github.com/danielluis07/clickstudio-bots/issues/253) (par
 [#256](https://github.com/danielluis07/clickstudio-bots/issues/256) (extending a Trial),
 [#257](https://github.com/danielluis07/clickstudio-bots/issues/257) (subscribing),
 [#258](https://github.com/danielluis07/clickstudio-bots/issues/258) (failed charges, Grace period, reconciliation),
-[#259](https://github.com/danielluis07/clickstudio-bots/issues/259) (changing the card).
+[#259](https://github.com/danielluis07/clickstudio-bots/issues/259) (changing the card),
+[#260](https://github.com/danielluis07/clickstudio-bots/issues/260) (cancelling).
 Decision: [ADR 0012](adr/0012-mercado-pago-subscriptions-with-card-payment-brick.md).
 Terms: `GLOSSARY.md` → Billing.
 
 Code: `modules/billing/` (the domain, and the `SubscriptionGateway` port in
 `gateway.ts`), `platform/mercado-pago.ts` (the Mercado Pago adapter and the
 webhook signature check), `server/mercado-pago-webhook.ts` (the webhook route)
-and `server/billing-subscription.ts` (the subscribe and change-card actions).
+and `server/billing-subscription.ts` (the subscribe, change-card and cancel
+actions).
 
 ## The switch
 
@@ -161,6 +163,45 @@ amount at once or waits for the next retry, so nothing is charged by us: the
 next retry charges the new card, and that charge ends the Grace period and
 any suspension like any successful charge (see below). The owner is told the
 overdue charge will be made on the new card at Mercado Pago's next try.
+
+## Cancelling
+
+**The owner cancels** from "Cancelar assinatura" on the billing page, shown
+only to the owner and only for a Subscription that isn't `cancelled`, after a
+confirmation (`billing.cancelSubscription`). The `preapproval` is cancelled at
+once (`PUT /preapproval/{id}` with `status: "cancelled"`), so Mercado Pago
+never charges it again. There are no refunds for part of a month: the Tenant
+keeps its Bot until the end of the month already paid for, and the next sweep
+run after that Suspends it.
+
+That date is stored in `subscription.paid_until`. Before cancelling,
+`GET /preapproval/{id}` is read and applied, so a charge whose webhook was
+lost still counts, and its `next_payment_date` becomes `paid_until`: the
+Trial end for a Subscription made during the Trial, otherwise the end of the
+month the last charge paid for. A `cancelled` Subscription with `paid_until`
+in the future still pays for the Plan (`paysForPlan`). With a charge overdue
+nothing is paid for: `paid_until` stays null and the Bot stops when the
+[Grace period](#grace-period) ends. A Subscription Mercado Pago cancelled by
+itself gets no `paid_until` either.
+
+After cancelling, the billing page shows "Bot ativo até" with the date the
+Bot stops, and the card form again. **Subscribing again before that date**
+sets `start_date` to `paid_until` (or the Trial end, whichever is later), so
+the new Subscription's first charge is on the day the paid month ends, and
+nothing is charged twice. With a charge overdue, subscribing again charges at
+once, as while Suspended.
+
+If Mercado Pago can't be reached, nothing changes, `billing_cancel_failed` is
+reported, and the owner is asked to try again.
+
+**A canceled Tenant** (`organization.canceled_at`, `bun run tenant:cancel`)
+has its Subscription cancelled immediately (`cancelForCanceledTenants`), with
+billing on or off: the cancel command does it right after canceling the
+Tenant, and exits with code 2 if Mercado Pago fails. The sweep's
+`cancel-canceled-tenant-subscriptions` task then retries every 30 minutes
+until it succeeds, so a failure is never dropped. `paid_until` is kept as for
+an owner's cancellation, so a Tenant reactivated within its recovery window
+keeps its Bot for the month it paid for, and then must subscribe again.
 
 ## Mercado Pago notifications
 

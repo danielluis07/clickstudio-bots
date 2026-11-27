@@ -37,6 +37,12 @@ const changeCardErrorMessages = {
   no_subscription: "Este negócio não tem uma assinatura para trocar o cartão.",
 } as const;
 
+const cancelErrorMessages = {
+  forbidden: "Apenas o responsável pelo negócio pode cancelar a assinatura.",
+  unavailable: errorMessages.unavailable,
+  no_subscription: "Este negócio não tem uma assinatura para cancelar.",
+} as const;
+
 // Subscribes the owner's Tenant with the card token from the Card Payment
 // Brick. `billing.subscribe` re-checks that the caller may.
 export const createSubscribeAction =
@@ -73,7 +79,7 @@ export const createSubscribeAction =
     if (result.firstChargeAt)
       return {
         status: "success",
-        message: `Assinatura feita. A primeira cobrança será em ${formatDate(result.firstChargeAt)}, quando o teste termina.`,
+        message: `Assinatura feita. A primeira cobrança será em ${formatDate(result.firstChargeAt)}, ${result.afterPaidMonth ? "quando termina o mês já pago" : "quando o teste termina"}.`,
       };
     return {
       status: "success",
@@ -116,5 +122,38 @@ export const createChangeCardAction =
       message: result.overdue
         ? "Cartão alterado. A cobrança pendente será feita no novo cartão quando o Mercado Pago tentar de novo."
         : "Cartão alterado. As próximas cobranças serão feitas no novo cartão.",
+    };
+  };
+
+// Cancels the owner's Subscription, after the billing page's confirmation.
+// `billing.cancelSubscription` re-checks that the caller may.
+export const createCancelSubscriptionAction =
+  ({
+    billing,
+    requireTenantScope,
+    diagnostics,
+  }: {
+    billing: Pick<Billing, "cancelSubscription">;
+    requireTenantScope: () => Promise<TenantScope>;
+    diagnostics?: Diagnostics;
+  }) =>
+  async (): Promise<FormState> => {
+    const scope = await requireTenantScope();
+
+    let result: Awaited<ReturnType<Billing["cancelSubscription"]>>;
+    try {
+      result = await billing.cancelSubscription(scope);
+    } catch (error) {
+      await reportError(diagnostics, "billing_cancel_failed", error, {
+        tenantId: scope.tenantId,
+      });
+      return { status: "error", message: unreachableMessage };
+    }
+    if (!result.ok) return { status: "error", message: cancelErrorMessages[result.error] };
+    return {
+      status: "success",
+      message: result.endsAt
+        ? `Assinatura cancelada. O Mercado Pago não cobra mais o cartão, e o Bot continua respondendo até ${formatDate(result.endsAt)}.`
+        : "Assinatura cancelada. O Mercado Pago não cobra mais o cartão.",
     };
   };

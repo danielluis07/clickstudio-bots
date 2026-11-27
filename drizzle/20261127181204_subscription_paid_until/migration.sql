@@ -1,0 +1,1 @@
+ALTER TABLE "subscription" ADD COLUMN "paid_until" timestamp with time zone;

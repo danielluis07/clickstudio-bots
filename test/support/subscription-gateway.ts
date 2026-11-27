@@ -16,6 +16,10 @@ export type TestSubscriptionGateway = SubscriptionGateway & {
   // In the order Mercado Pago made them.
   authorizedPayments: Map<string, { subscriptionId: string; paymentId: string | null }>;
   rejectNext(): void;
+  // Mercado Pago's monthly billing: charges every `authorized` Subscription
+  // whose charge is due, approved, and moves its next charge a month ahead.
+  // Returns the Subscriptions it charged. A cancelled one is never charged.
+  runCharges(): string[];
 };
 
 // Mercado Pago in memory. A created Subscription is `authorized` at once, paid
@@ -50,6 +54,38 @@ export const createTestSubscriptionGateway = (clock: Clock): TestSubscriptionGat
     authorizedPayments,
     rejectNext: () => {
       reject = true;
+    },
+    runCharges() {
+      const now = clock.now();
+      const charged: string[] = [];
+      for (const record of subscriptions.values()) {
+        if (record.status !== "authorized" || !record.nextChargeAt || record.nextChargeAt > now)
+          continue;
+        const paymentId = `payment-${payments.size + 1}`;
+        payments.set(paymentId, {
+          id: paymentId,
+          status: "approved",
+          amountCents: record.amountCents,
+          createdAt: now,
+          approvedAt: now,
+          subscriptionId: record.id,
+          externalReference: null,
+        });
+        authorizedPayments.set(`invoice-${authorizedPayments.size + 1}`, {
+          subscriptionId: record.id,
+          paymentId,
+        });
+        const nextChargeAt = new Date(record.nextChargeAt);
+        nextChargeAt.setUTCMonth(nextChargeAt.getUTCMonth() + 1);
+        subscriptions.set(record.id, {
+          ...record,
+          nextChargeAt,
+          lastCharge: { at: now, amountCents: record.amountCents },
+          modifiedAt: now,
+        });
+        charged.push(record.id);
+      }
+      return charged;
     },
     async createSubscription(subscription) {
       created.push(subscription);

@@ -5,7 +5,11 @@ import type { BrickCard } from "@/modules/billing";
 import type { FormState } from "@/server/actions/form-state";
 import { requireAdmin, requireTenantScope } from "@/server/auth/guards";
 import { createExtendTrialAction } from "@/server/billing-administration";
-import { createChangeCardAction, createSubscribeAction } from "@/server/billing-subscription";
+import {
+  createCancelSubscriptionAction,
+  createChangeCardAction,
+  createSubscribeAction,
+} from "@/server/billing-subscription";
 import { billing, diagnostics } from "@/server/services";
 
 // Called by the Card Payment Brick with its token; never with card data.
@@ -20,6 +24,17 @@ export async function subscribeAction(
 // "Alterar cartão", called by the Card Payment Brick with its token.
 export async function changeCardAction(input: BrickCard): Promise<FormState> {
   const state = await createChangeCardAction({ billing, requireTenantScope, diagnostics })(input);
+  if (state.status === "success") refresh();
+  return state;
+}
+
+// Called after the billing page's confirmation.
+export async function cancelSubscriptionAction(): Promise<FormState> {
+  const state = await createCancelSubscriptionAction({
+    billing,
+    requireTenantScope,
+    diagnostics,
+  })();
   if (state.status === "success") refresh();
   return state;
 }
