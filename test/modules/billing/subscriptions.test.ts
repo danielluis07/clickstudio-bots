@@ -111,6 +111,7 @@ test("an owner on Trial subscribes: the Subscription is active and the first cha
     suspended: false,
     available: true,
     canSubscribe: false,
+    canChangeCard: true,
     subscription: {
       active: true,
       status: "authorized",
@@ -118,6 +119,7 @@ test("an owner on Trial subscribes: the Subscription is active and the first cha
       amountCents: 9990,
       nextChargeAt: new Date("2026-12-31T12:00:00Z"),
       graceEndsAt: null,
+      card: { brand: "visa", lastFour: null },
     },
   });
 
@@ -624,12 +626,135 @@ test("a Subscription that Mercado Pago doesn't authorize at once is cancelled, n
   expect(await billing().checkout(owner)).toMatchObject({ subscription: null });
 });
 
+test("an owner changes the card: the same Subscription keeps its amount and next charge, and shows the new card masked", async () => {
+  const owner = await seedMember("owner");
+  await billing().launch();
+  await billing().subscribe(owner, { ...card, lastFourDigits: "3311" });
+  expect(await billing().checkout(owner)).toMatchObject({
+    canChangeCard: true,
+    subscription: { card: { brand: "visa", lastFour: "3311" } },
+  });
+  clock.advance(10 * day);
+
+  expect(
+    await billing().changeCard(owner, { cardToken: "new-card-token", lastFourDigits: "5682" }),
+  ).toEqual({ ok: true, overdue: false });
+  expect(gateway.cardChanges).toEqual([
+    { id: "preapproval-1", cardToken: "new-card-token", resume: false },
+  ]);
+  expect(await billing().checkout(owner)).toMatchObject({
+    canSubscribe: false,
+    canChangeCard: true,
+    subscription: {
+      active: true,
+      amountCents: 9990,
+      nextChargeAt: new Date("2026-12-31T12:00:00Z"),
+      card: { brand: "master", lastFour: "5682" },
+    },
+  });
+});
+
+test("during a Grace period, a charge on the new card ends it, even after the sweep Suspended the Tenant", async () => {
+  const owner = await subscribedAtTrialEnd();
+  charge("refused", "rejected");
+  await billing().receiveNotification({ type: "payment", id: "refused" });
+  clock.advance(7 * day);
+  await billing().sweep();
+  expect(await suspended(owner)).toBe(true);
+
+  expect(await billing().changeCard(owner, { cardToken: "new-card-token" })).toEqual({
+    ok: true,
+    overdue: true,
+  });
+  clock.advance(60_000);
+  charge("retry-on-new-card", "approved");
+  await billing().receiveNotification({ type: "payment", id: "retry-on-new-card" });
+
+  expect(await suspended(owner)).toBe(false);
+  expect(await billing().checkout(owner)).toMatchObject({
+    subscription: { graceEndsAt: null, card: { brand: "master", lastFour: null } },
+  });
+});
+
+test("a paused Subscription is resumed with the new card", async () => {
+  const owner = await seedMember("owner");
+  await billing().launch();
+  await billing().subscribe(owner, card);
+  gateway.subscriptions.set("preapproval-1", {
+    ...gateway.subscriptions.get("preapproval-1")!,
+    status: "paused",
+    modifiedAt: new Date(clock.now().getTime() + 1),
+  });
+  await billing().receiveNotification({ type: "subscription_preapproval", id: "preapproval-1" });
+  clock.advance(60_000);
+
+  expect(await billing().changeCard(owner, { cardToken: "new-card-token" })).toMatchObject({
+    ok: true,
+  });
+  expect(gateway.cardChanges).toEqual([
+    { id: "preapproval-1", cardToken: "new-card-token", resume: true },
+  ]);
+  expect(await billing().checkout(owner)).toMatchObject({
+    subscription: { active: true, status: "authorized" },
+  });
+});
+
+test("a refused new card keeps the old one", async () => {
+  const owner = await seedMember("owner");
+  await billing().launch();
+  await billing().subscribe(owner, { ...card, lastFourDigits: "3311" });
+  gateway.rejectNext();
+
+  expect(
+    await billing().changeCard(owner, { cardToken: "new-card-token", lastFourDigits: "5682" }),
+  ).toEqual({ ok: false, error: "card_rejected" });
+  expect(await billing().checkout(owner)).toMatchObject({
+    subscription: { active: true, card: { brand: "visa", lastFour: "3311" } },
+  });
+});
+
+test("only an owner changes the card, and only of a Subscription that isn't cancelled", async () => {
+  const owner = await seedMember("owner");
+  await billing().launch();
+  expect(await billing().checkout(owner)).toMatchObject({ canChangeCard: false });
+  expect(await billing().changeCard(owner, { cardToken: "new-card-token" })).toEqual({
+    ok: false,
+    error: "no_subscription",
+  });
+
+  await billing().subscribe(owner, card);
+  for (const role of ["admin", "member"] as const) {
+    const scope = await seedMember(role);
+    expect(await billing().changeCard(scope, { cardToken: "new-card-token" })).toEqual({
+      ok: false,
+      error: "forbidden",
+    });
+  }
+
+  gateway.subscriptions.set("preapproval-1", {
+    ...gateway.subscriptions.get("preapproval-1")!,
+    status: "cancelled",
+    modifiedAt: new Date(clock.now().getTime() + 1),
+  });
+  await billing().receiveNotification({ type: "subscription_preapproval", id: "preapproval-1" });
+  expect(await billing().checkout(owner)).toMatchObject({ canChangeCard: false });
+  expect(await billing().changeCard(owner, { cardToken: "new-card-token" })).toEqual({
+    ok: false,
+    error: "no_subscription",
+  });
+  expect(gateway.cardChanges).toEqual([]);
+});
+
 test("without Mercado Pago configured the page says so and subscribing is refused", async () => {
   const owner = await seedMember("owner");
   const unconfigured = createBilling({ db, clock, enabled: true });
 
   expect(await unconfigured.checkout(owner)).toMatchObject({ ok: true, available: false });
   expect(await unconfigured.subscribe(owner, card)).toEqual({ ok: false, error: "unavailable" });
+  expect(await unconfigured.changeCard(owner, { cardToken: "new-card-token" })).toEqual({
+    ok: false,
+    error: "unavailable",
+  });
 });
 
 test("a Tenant with an active Subscription has no Trial to extend", async () => {

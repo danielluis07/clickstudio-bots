@@ -1,0 +1,81 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "c446a302-7c58-4d26-a373-ca349fedd470",
+  "prevIds": [
+    "4aaa7dc8-c03b-4989-98e2-8fac3633948c"
+  ],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "subscription",
+        "card_brand"
+      ],
+      "writes": [
+        "s|col|public.subscription.card_brand",
+        "n|col|public.subscription.card_brand",
+        "e|col|public.subscription.card_brand"
+      ],
+      "reads": [
+        "n|tbl|public.subscription",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "subscription",
+        "card_last_four"
+      ],
+      "writes": [
+        "s|col|public.subscription.card_last_four",
+        "n|col|public.subscription.card_last_four",
+        "e|col|public.subscription.card_last_four"
+      ],
+      "reads": [
+        "n|tbl|public.subscription",
+        "n|sch|public"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subscription",
+        "name": "card_brand",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subscription",
+        "name": "card_last_four",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

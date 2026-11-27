@@ -3,7 +3,7 @@ import type { Database } from "@/db/database";
 import { member, organization, user } from "@/db/schema";
 import { createBilling, type Billing } from "@/modules/billing";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
-import { createSubscribeAction } from "@/server/billing-subscription";
+import { createChangeCardAction, createSubscribeAction } from "@/server/billing-subscription";
 import { createTestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestDiagnostics } from "@/test/support/diagnostics";
@@ -28,6 +28,11 @@ const actionAs = (scope: TenantScope, diagnostics = createTestDiagnostics()) =>
   createSubscribeAction({ billing, requireTenantScope: async () => scope, diagnostics });
 
 const card = { cardToken: "card-token", payerEmail: "pagamentos@sorriso.example" };
+
+const changeCardAs = (scope: TenantScope, diagnostics = createTestDiagnostics()) =>
+  createChangeCardAction({ billing, requireTenantScope: async () => scope, diagnostics });
+
+const newCard = { cardToken: "new-card-token", lastFourDigits: "5682" };
 
 beforeEach(async () => {
   db = await createTestDatabase();
@@ -114,4 +119,92 @@ test("an unreachable Mercado Pago is reported and the owner asked to try again",
     message: "Não foi possível falar com o Mercado Pago agora. Tente de novo em alguns minutos.",
   });
   expect(diagnostics.alerts.map(({ kind }) => kind)).toEqual(["billing_subscribe_failed"]);
+});
+
+test("the Brick's last 4 digits are kept with the card, and anything else in their place is dropped", async () => {
+  const owner = await seedMember("owner");
+  await actionAs(owner)({ ...card, lastFourDigits: "3311" });
+  expect(await billing.checkout(owner)).toMatchObject({
+    subscription: { card: { brand: "visa", lastFour: "3311" } },
+  });
+
+  expect(await changeCardAs(owner)({ ...newCard, lastFourDigits: "4111 1111" })).toMatchObject({
+    status: "success",
+  });
+  expect(await billing.checkout(owner)).toMatchObject({
+    subscription: { card: { brand: "master", lastFour: null } },
+  });
+});
+
+test("changing the card authenticates before reading its input", async () => {
+  const action = createChangeCardAction({
+    billing,
+    requireTenantScope: async () => {
+      throw new Error("Unauthorized");
+    },
+  });
+  await expect(action(newCard)).rejects.toThrow("Unauthorized");
+});
+
+test("an owner who changes the card is told so, and during a Grace period that the overdue charge is retried on it", async () => {
+  const owner = await seedMember("owner");
+  await actionAs(owner)(card);
+  expect(await changeCardAs(owner)(newCard)).toEqual({
+    status: "success",
+    message: "Cartão alterado. As próximas cobranças serão feitas no novo cartão.",
+  });
+
+  clock.advance(30 * day);
+  gateway.payments.set("refused", {
+    id: "refused",
+    status: "rejected",
+    amountCents: 9990,
+    createdAt: clock.now(),
+    approvedAt: null,
+    subscriptionId: "preapproval-1",
+    externalReference: null,
+  });
+  await billing.receiveNotification({ type: "payment", id: "refused" });
+  expect(await changeCardAs(owner)(newCard)).toEqual({
+    status: "success",
+    message:
+      "Cartão alterado. A cobrança pendente será feita no novo cartão quando o Mercado Pago tentar de novo.",
+  });
+});
+
+test("card change refusals and bad input come back in pt-BR", async () => {
+  const owner = await seedMember("owner");
+  expect(await changeCardAs(owner)(newCard)).toEqual({
+    status: "error",
+    message: "Este negócio não tem uma assinatura para trocar o cartão.",
+  });
+  await actionAs(owner)(card);
+
+  expect(await changeCardAs(owner)({ lastFourDigits: "5682" })).toEqual({
+    status: "error",
+    message: "Preencha os dados do cartão.",
+  });
+  expect(await changeCardAs(await seedMember("member"))(newCard)).toEqual({
+    status: "error",
+    message: "Apenas o responsável pelo negócio pode alterar o cartão.",
+  });
+  gateway.rejectNext();
+  expect(await changeCardAs(owner)(newCard)).toEqual({
+    status: "error",
+    message: "O Mercado Pago recusou o cartão. Confira os dados ou use outro cartão.",
+  });
+});
+
+test("an unreachable Mercado Pago during a card change is reported and the owner asked to try again", async () => {
+  const owner = await seedMember("owner");
+  await actionAs(owner)(card);
+  const diagnostics = createTestDiagnostics();
+  gateway.changeCard = async () => {
+    throw new Error("Mercado Pago unavailable");
+  };
+  expect(await changeCardAs(owner, diagnostics)(newCard)).toEqual({
+    status: "error",
+    message: "Não foi possível falar com o Mercado Pago agora. Tente de novo em alguns minutos.",
+  });
+  expect(diagnostics.alerts.map(({ kind }) => kind)).toEqual(["billing_change_card_failed"]);
 });

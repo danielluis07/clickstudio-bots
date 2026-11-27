@@ -8,7 +8,8 @@ import type { Clock } from "@/platform/clock";
 
 export type TestSubscriptionGateway = SubscriptionGateway & {
   created: NewProviderSubscription[];
-  updates: { id: string; change: { status?: "cancelled"; cardToken?: string } }[];
+  updates: { id: string; change: { status: "cancelled" } }[];
+  cardChanges: { id: string; cardToken: string; resume: boolean }[];
   // Mercado Pago's own records, which tests change to simulate its side.
   subscriptions: Map<string, ProviderSubscription>;
   payments: Map<string, ProviderPayment>;
@@ -17,15 +18,22 @@ export type TestSubscriptionGateway = SubscriptionGateway & {
   rejectNext(): void;
 };
 
-// Mercado Pago in memory. A created Subscription is `authorized` at once, and
-// its first charge is on its start date, or now without one.
+// Mercado Pago in memory. A created Subscription is `authorized` at once, paid
+// by a Visa, and its first charge is on its start date, or now without one. A
+// changed card is a Mastercard.
 export const createTestSubscriptionGateway = (clock: Clock): TestSubscriptionGateway => {
   const created: NewProviderSubscription[] = [];
   const updates: TestSubscriptionGateway["updates"] = [];
+  const cardChanges: TestSubscriptionGateway["cardChanges"] = [];
   const subscriptions = new Map<string, ProviderSubscription>();
   const payments = new Map<string, ProviderPayment>();
   const authorizedPayments: TestSubscriptionGateway["authorizedPayments"] = new Map();
   let reject = false;
+  const rejected = () => {
+    const was = reject;
+    reject = false;
+    return was;
+  };
 
   const found = <T>(records: Map<string, T>, id: string) => {
     const record = records.get(id);
@@ -36,6 +44,7 @@ export const createTestSubscriptionGateway = (clock: Clock): TestSubscriptionGat
   return {
     created,
     updates,
+    cardChanges,
     subscriptions,
     payments,
     authorizedPayments,
@@ -44,10 +53,7 @@ export const createTestSubscriptionGateway = (clock: Clock): TestSubscriptionGat
     },
     async createSubscription(subscription) {
       created.push(subscription);
-      if (reject) {
-        reject = false;
-        return { ok: false, error: "rejected" };
-      }
+      if (rejected()) return { ok: false, error: "rejected" };
       const record = {
         id: `preapproval-${created.length}`,
         status: "authorized",
@@ -56,6 +62,7 @@ export const createTestSubscriptionGateway = (clock: Clock): TestSubscriptionGat
         nextChargeAt: subscription.startDate ?? clock.now(),
         lastCharge: null,
         modifiedAt: clock.now(),
+        cardBrand: "visa",
       };
       subscriptions.set(record.id, record);
       return { ok: true, subscription: structuredClone(record) };
@@ -66,11 +73,24 @@ export const createTestSubscriptionGateway = (clock: Clock): TestSubscriptionGat
       const record = found(subscriptions, id);
       const updated = {
         ...record,
-        status: change.status ?? record.status,
+        status: change.status,
         modifiedAt: clock.now(),
       };
       subscriptions.set(id, updated);
       return structuredClone(updated);
+    },
+    async changeCard(id, { cardToken, resume }) {
+      if (rejected()) return { ok: false, error: "rejected" };
+      cardChanges.push({ id, cardToken, resume });
+      const record = found(subscriptions, id);
+      const updated = {
+        ...record,
+        status: resume ? "authorized" : record.status,
+        cardBrand: "master",
+        modifiedAt: clock.now(),
+      };
+      subscriptions.set(id, updated);
+      return { ok: true, subscription: structuredClone(updated) };
     },
     fetchPayment: async (id) => found(payments, id),
     fetchAuthorizedPayment: async (id) => found(authorizedPayments, id),

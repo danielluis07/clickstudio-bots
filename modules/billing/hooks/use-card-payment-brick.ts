@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import type { BrickCard } from "@/modules/billing/subscriptions";
 
 // Mercado Pago's browser SDK, which renders the Card Payment Brick inside its
 // own iframe and turns the card into a token there (ADR 0012): card data
@@ -44,9 +45,11 @@ const loadSdk = () => {
 };
 
 // Renders the Card Payment Brick into the element with `containerId`, for a
-// credit card in one installment. `onSubmit` receives the card token; its
-// promise settles the Brick's button (a rejection shows the Brick's error).
-// `payerEmail` is the Brick's initial email: changing it doesn't remount.
+// credit card in one installment. `onSubmit` receives the card token and the
+// last 4 digits from the Brick's `AdditionalData`; its promise
+// settles the Brick's button (a rejection shows the Brick's error). A critical
+// Brick error, like a failed load, makes `status` "failed". `payerEmail` is
+// the Brick's initial email: changing it doesn't remount.
 export const useCardPaymentBrick = ({
   publicKey,
   amountCents,
@@ -56,7 +59,7 @@ export const useCardPaymentBrick = ({
   publicKey: string;
   amountCents: number;
   payerEmail: string;
-  onSubmit: (cardToken: string) => Promise<void>;
+  onSubmit: (card: BrickCard) => Promise<void>;
 }) => {
   const containerId = `card-payment-${useId().replace(/[^A-Za-z0-9]/g, "")}`;
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
@@ -88,9 +91,18 @@ export const useCardPaymentBrick = ({
             },
             callbacks: {
               onReady: () => setStatus("ready"),
-              onSubmit: ({ token }: { token: string }) => submit.current(token),
-              // Field errors are shown inside the Brick.
-              onError: () => {},
+              onSubmit: (
+                { token }: { token: string },
+                additionalData?: { lastFourDigits?: string },
+              ) =>
+                submit.current({
+                  cardToken: token,
+                  lastFourDigits: additionalData?.lastFourDigits ?? null,
+                }),
+              // Field errors are shown inside the Brick, in pt-BR.
+              onError: (error: { type?: string }) => {
+                if (error.type === "critical" && !cancelled) setStatus("failed");
+              },
             },
           });
         if (cancelled) created.unmount();
