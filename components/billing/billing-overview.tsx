@@ -5,7 +5,7 @@ import { SubscribeForm } from "@/components/billing/subscribe-form";
 import { SubscriptionCardSection } from "@/components/billing/subscription-card-section";
 import { DashboardPage } from "@/components/dashboard/dashboard-page";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { billingBotActiveUntil, type BillingCheckout } from "@/modules/billing";
+import type { BillingCheckout } from "@/modules/billing";
 
 // The owner's billing page. The card form shows until the Tenant has a
 // Subscription that isn't cancelled; from then on, its card and "Alterar
@@ -46,7 +46,7 @@ export function BillingOverview({
           />
         )}
         {checkout.canCancel && checkout.available && checkout.subscription && (
-          <CancelSubscription botActiveUntil={billingBotActiveUntil(checkout)} />
+          <CancelSubscription botActiveUntil={checkout.subscription.botActiveUntil} />
         )}
       </div>
     </DashboardPage>

@@ -30,10 +30,10 @@ export function BillingSummary({ checkout }: { checkout: BillingCheckout }) {
           caption={suspended ? "O Bot parou de responder" : undefined}
         />
       )}
-      {subscription?.paidUntil && !suspended ? (
+      {subscription?.status === "cancelled" && subscription.botActiveUntil ? (
         <StatTile
           label="Bot ativo até"
-          value={formatDate(subscription.paidUntil)}
+          value={formatDate(subscription.botActiveUntil)}
           caption="Assinatura cancelada. Não haverá novas cobranças."
         />
       ) : subscription?.graceEndsAt && !suspended ? (

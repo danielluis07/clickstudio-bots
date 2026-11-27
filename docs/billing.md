@@ -182,7 +182,10 @@ month the last charge paid for. A `cancelled` Subscription with `paid_until`
 in the future still pays for the Plan (`paysForPlan`). With a charge overdue
 nothing is paid for: `paid_until` stays null and the Bot stops when the
 [Grace period](#grace-period) ends. A Subscription Mercado Pago cancelled by
-itself gets no `paid_until` either.
+itself, or one cancelled while the Tenant is Suspended, gets no `paid_until`
+either. `paid_until` is written before Mercado Pago is called and kept if the
+call fails: it only counts once the status is `cancelled`, so a cancellation
+Mercado Pago made but answered too late still keeps the paid month.
 
 After cancelling, the billing page shows "Bot ativo até" with the date the
 Bot stops, and the card form again. **Subscribing again before that date**

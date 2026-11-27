@@ -1,4 +1,4 @@
-import { billingBotActiveUntil, type BillingCheckout } from "@/modules/billing";
+import type { BillingCheckout } from "@/modules/billing";
 import { formatDate } from "@/platform/format";
 
 // What subscribing does now, or what the owner is waiting for.
@@ -7,7 +7,7 @@ export function BillingGuidance({ checkout }: { checkout: BillingCheckout }) {
   let text: string;
   const canChangeCardHere = checkout.canChangeCard && checkout.available;
   const cancelled = subscription?.status === "cancelled";
-  const botActiveUntil = billingBotActiveUntil(checkout);
+  const botActiveUntil = subscription?.botActiveUntil;
   if (cancelled && subscription.paidUntil && botActiveUntil) {
     text = `Assinatura cancelada. O Bot continua respondendo até ${formatDate(botActiveUntil)}. Para continuar depois disso, assine de novo abaixo: a primeira cobrança só acontece nesse dia.`;
   } else if (cancelled && botActiveUntil) {

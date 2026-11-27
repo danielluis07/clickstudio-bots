@@ -122,6 +122,7 @@ test("an owner on Trial subscribes: the Subscription is active and the first cha
       nextChargeAt: new Date("2026-12-31T12:00:00Z"),
       graceEndsAt: null,
       paidUntil: null,
+      botActiveUntil: new Date("2026-12-31T12:00:00Z"),
       card: { brand: "visa", lastFour: null },
     },
   });
@@ -950,6 +951,50 @@ test("with Mercado Pago down, a canceled Tenant's Subscription is cancelled on a
   expect(await billing().cancelForCanceledTenants()).toBe(1);
   clock.advance(60 * day);
   expect(gateway.runCharges()).toEqual([]);
+});
+
+test("a cancel that Mercado Pago made but answered too late keeps the paid month", async () => {
+  const owner = await paidForJanuary();
+  clock.advance(10 * day);
+  const updateSubscription = gateway.updateSubscription;
+  gateway.updateSubscription = async (id, change) => {
+    await updateSubscription(id, change);
+    throw new Error("Mercado Pago timed out");
+  };
+
+  await expect(billing().cancelSubscription(owner)).rejects.toThrow("Mercado Pago timed out");
+  await billing().receiveNotification({ type: "subscription_preapproval", id: "preapproval-1" });
+  expect(await billing().checkout(owner)).toMatchObject({
+    subscription: {
+      status: "cancelled",
+      paidUntil: new Date("2027-01-31T12:00:00Z"),
+      botActiveUntil: new Date("2027-01-31T12:00:00Z"),
+    },
+  });
+  await billing().sweep();
+  expect(await suspended(owner)).toBe(false);
+});
+
+test("a Suspended Tenant that cancels keeps no paid period", async () => {
+  const owner = await subscribedAtTrialEnd();
+  charge("refused", "rejected");
+  await billing().receiveNotification({ type: "payment", id: "refused" });
+  clock.advance(8 * day);
+  await billing().sweep();
+  // Mercado Pago gave up on the card but left a charge date ahead.
+  gateway.subscriptions.set("preapproval-1", {
+    ...gateway.subscriptions.get("preapproval-1")!,
+    status: "paused",
+    nextChargeAt: new Date("2027-01-31T12:00:00Z"),
+    modifiedAt: clock.now(),
+  });
+
+  expect(await billing().cancelSubscription(owner)).toEqual({ ok: true, endsAt: null });
+  expect(await billing().checkout(owner)).toMatchObject({
+    suspended: true,
+    subscription: { paidUntil: null, botActiveUntil: null },
+  });
+  expect(await billing().subscribe(owner, card)).toMatchObject({ ok: true, firstChargeAt: null });
 });
 
 test("with Mercado Pago down, cancelling fails and changes nothing", async () => {
