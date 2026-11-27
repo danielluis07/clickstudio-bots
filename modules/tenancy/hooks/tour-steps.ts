@@ -86,7 +86,7 @@ const ownerSteps: TourStep[] = [
     inSidebar: true,
     title: "Base de conhecimento",
     description:
-      "Perguntas frequentes e seções de texto sobre o seu negócio. O Bot responde somente com o que estiver aqui.",
+      "Perguntas frequentes e seções de texto sobre o seu negócio. Escreva cada uma ou importe o texto de um arquivo PDF, DOCX ou TXT que você já tenha. O Bot responde somente com o que estiver aqui.",
   },
   {
     id: "bot-profile",
