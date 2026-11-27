@@ -207,7 +207,10 @@ stored as a Charge with one `INSERT ... ON CONFLICT (mercado_pago_id) DO
 UPDATE ... WHERE provider_modified_at <= ...` outside any transaction, before
 the `subscription` row's updates. Its foreign key takes `for key share` on the
 Tenant row (rank 2), and a conflict locks that one `subscription_charge` row
-(rank 4); the statement holds nothing else and ends at once.
+(rank 4); the statement holds nothing else and ends at once. A payment of a
+Subscription since replaced updates its stored Charge with one `UPDATE`
+outside any transaction, locking that one `subscription_charge` row (rank 4)
+and nothing else.
 Tenant deletion cascades into `subscription` and `subscription_charge` under
 the Tenant row it already holds `for update`.
 

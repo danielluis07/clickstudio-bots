@@ -264,8 +264,15 @@ payment id, whatever its status. A retry is a new payment, so a refused charge
 that is later approved shows both attempts. A later status of the same payment
 (a refund, a chargeback) replaces the stored one unless a newer state is
 already stored (the payment's `date_last_updated`), so out-of-order
-notifications never roll a refund back. The card check, below the
-Subscription's amount, isn't listed.
+notifications never roll a refund back. A payment of a Subscription the owner
+has since replaced still updates its stored Charge, so a late refund shows,
+though nothing new is stored for it. The card check, below the Subscription's
+amount, isn't listed.
+
+The history starts with the first payment notified after this change: there
+is no backfill, since billing wasn't live before it. If both the refusal's and
+the retry's notifications are lost, the sweep recovers only the latest
+payment, so the refusal is missing from the history.
 
 There is no nota fiscal. Mercado Pago emails its own receipt to the payer
 email.

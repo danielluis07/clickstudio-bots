@@ -143,6 +143,27 @@ test("a refunded charge shows as refunded, and an older read of it changes nothi
   });
 });
 
+test("a charge of a Subscription since replaced still shows its refund", async () => {
+  const owner = await subscribedOwner();
+  charge("first-month", "approved");
+  await notifyPayment("first-month");
+  // The owner cancels, and once the paid month ends subscribes again.
+  await billing().cancelSubscription(owner);
+  clock.advance(32 * day);
+  await billing().subscribe(owner, { cardToken: "new-card", payerEmail: "novo@sorriso.example" });
+
+  gateway.payments.set("first-month", {
+    ...gateway.payments.get("first-month")!,
+    status: "refunded",
+    modifiedAt: clock.now(),
+  });
+  await notifyPayment("first-month");
+
+  expect(await billing().charges(owner)).toMatchObject({
+    charges: [{ id: "first-month", status: "refunded" }],
+  });
+});
+
 test("a refused charge that is later approved shows both attempts, newest first", async () => {
   const owner = await subscribedOwner();
   charge("refused", "rejected");
