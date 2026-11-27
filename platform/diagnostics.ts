@@ -25,6 +25,7 @@ export const errorClasses = [
   "ZodError",
   "TRPCError",
   "WhatsAppRequestError",
+  "MercadoPagoRequestError",
   "RetryableError",
   "ReservationRaceError",
   "CredentialRejectedError",
@@ -72,6 +73,8 @@ export const diagnosticKinds = [
   "trpc_procedure_failed",
   "diagnostic_delivery_failed",
   "database_connection_lost",
+  "billing_notification_failed",
+  "billing_subscribe_failed",
 ] as const;
 
 export type DiagnosticKind = (typeof diagnosticKinds)[number];
@@ -290,6 +293,9 @@ export const describeError = (error: unknown): Omit<Diagnostic, "kind"> => {
       for (const key of ["httpStatus", "metaCode", "metaSubcode", "fbtraceId"] as const)
         if (facts[key] === undefined) Object.assign(facts, { [key]: fieldOf(link, key) });
     }
+    const httpStatus = fieldOf(link, "httpStatus");
+    if (link.name === "MercadoPagoRequestError" && typeof httpStatus === "number")
+      facts.providerStatus ??= httpStatus;
     // AI SDK APICallError and AI Gateway errors both expose `statusCode`.
     const statusCode = fieldOf(link, "statusCode");
     if (

@@ -19,7 +19,8 @@ import {
   type BurstWait,
 } from "@/modules/bot";
 import { RetryableError } from "@/platform/retryable";
-import { createBilling } from "@/modules/billing";
+import { createBilling, planAmountCents } from "@/modules/billing";
+import { createTestSubscriptionGateway } from "@/test/support/subscription-gateway";
 import { createPlatformAdmin } from "@/modules/identity";
 import { createTestClock } from "@/test/support/clock";
 import { eq, sql } from "drizzle-orm";
@@ -1227,6 +1228,47 @@ test("extending a Suspended Tenant's Trial lets its Bot answer again", async () 
 
   model.script({ text: "O corte custa R$ 80." });
   clock.advance(2 * 60_000);
+  await worker.sweep();
+  expect(queue.take()).toEqual([{ type: "run-bot-turn", conversationId }]);
+  await worker.run(conversationId);
+  expect(sender.sent.map(({ text }) => text)).toEqual(["O corte custa R$ 80."]);
+});
+
+test("a Suspended owner subscribes, and its Bot answers again once Mercado Pago approves the charge", async () => {
+  const { scope, clock, model, sender, queue, activation, conversationId, worker } = await setup();
+  await activation.activate(scope);
+  const launchedAt = createTestClock(new Date(clock.now().getTime() - 30 * 24 * 60 * 60_000));
+  await createBilling({ db, clock: launchedAt, enabled: true }).launch();
+  const gateway = createTestSubscriptionGateway(clock);
+  const billing = createBilling({
+    db,
+    clock,
+    enabled: true,
+    subscriptions: { gateway, appUrl: "https://bots.example.com" },
+  });
+  await billing.sweep();
+  await worker.run(conversationId);
+  expect(sender.sent).toEqual([]);
+
+  expect(
+    await billing.subscribe(scope, { cardToken: "card-token", payerEmail: "dona@example.com" }),
+  ).toMatchObject({ ok: true, firstChargeAt: null });
+  // Subscribed but not yet paid: still Suspended.
+  clock.advance(2 * 60_000);
+  await worker.sweep();
+  expect(queue.take()).toEqual([]);
+
+  gateway.payments.set("payment-1", {
+    id: "payment-1",
+    status: "approved",
+    amountCents: planAmountCents,
+    approvedAt: clock.now(),
+    subscriptionId: "preapproval-1",
+    externalReference: null,
+  });
+  await billing.receiveNotification({ type: "payment", id: "payment-1" });
+
+  model.script({ text: "O corte custa R$ 80." });
   await worker.sweep();
   expect(queue.take()).toEqual([{ type: "run-bot-turn", conversationId }]);
   await worker.run(conversationId);

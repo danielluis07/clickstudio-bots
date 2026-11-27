@@ -53,6 +53,15 @@ export const subprocessors = [
     source: "https://ably.com/data-protection",
   },
   {
+    name: "Mercado Pago",
+    purpose: "Cobrança da assinatura mensal do contratante por cartão de crédito.",
+    categories:
+      "E-mail do pagador, identificador do negócio, valor e situação da assinatura e das cobranças. Os dados do cartão são digitados no formulário do Mercado Pago e não passam pelos nossos servidores. Sem dados de contatos ou conversas.",
+    location:
+      "Brasil, com eventuais transferências internacionais conforme a Declaração de Privacidade do Mercado Pago.",
+    source: "https://www.mercadopago.com.br/privacidade",
+  },
+  {
     name: "Sentry",
     purpose: "Diagnóstico de erros do serviço.",
     categories:

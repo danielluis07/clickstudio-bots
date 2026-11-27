@@ -370,7 +370,7 @@ describe("tRPC router", () => {
     }
   });
 
-  test("the Suspended banner shows to every Member, with the call to action for the owner only, and never with billing off", async () => {
+  test("the Suspended banner shows to every Member, with the call to action for the owner only, and never with billing off; only the owner is offered the billing page", async () => {
     const clock = createTestClock(new Date("2026-12-01T12:00:00Z"));
     const launchedAt = createTestClock(new Date("2026-11-01T12:00:00Z"));
     const ownerB = { userId: "owner-b", activeTenantId: "tenant-b" };
@@ -378,6 +378,7 @@ describe("tRPC router", () => {
     expect(await callerFor(ownerB, clock).billing.status()).toEqual({
       suspended: false,
       isOwner: true,
+      billingPage: true,
     });
 
     await createBilling({ db, clock: launchedAt, enabled: true }).launch();
@@ -386,14 +387,17 @@ describe("tRPC router", () => {
       expect(await callerFor(ownerB, clock).billing.status()).toEqual({
         suspended: true,
         isOwner: true,
+        billingPage: true,
       });
       expect(await callerFor(attendant, clock).billing.status()).toEqual({
         suspended: true,
         isOwner: false,
+        billingPage: false,
       });
       expect(await callerFor(ownerB, clock, () => signupConfig, false).billing.status()).toEqual({
         suspended: false,
         isOwner: true,
+        billingPage: false,
       });
     } finally {
       await createBilling({ db, clock, enabled: false }).sweep();

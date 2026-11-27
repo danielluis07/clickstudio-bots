@@ -1,4 +1,5 @@
 import { BookOpenIcon, LayoutDashboardIcon, MessagesSquareIcon, SettingsIcon } from "lucide-react";
+import { BillingNavigationItem } from "@/components/billing/billing-navigation-item";
 import { DashboardBotNavigation } from "@/components/dashboard/dashboard-bot-navigation";
 import { DashboardNavigationItem } from "@/components/dashboard/dashboard-navigation-item";
 import { SidebarGroup, SidebarMenu } from "@/components/ui/sidebar";
@@ -33,6 +34,7 @@ export function DashboardNavigation() {
           >
             <SettingsIcon aria-hidden="true" />
           </DashboardNavigationItem>
+          <BillingNavigationItem />
         </SidebarMenu>
       </nav>
     </SidebarGroup>

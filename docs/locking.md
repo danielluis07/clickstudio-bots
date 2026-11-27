@@ -36,7 +36,7 @@ one table in ascending id.
 | 1 | wamid lock (`tenantId:wamid`) | advisory |
 | 2 | Tenant row (`organization`) | `for share` or `for update` |
 | 3 | Contact address lock (`contact:<sha256(tenantId:phone)>`) | advisory |
-| 4 | Rows owned by the Tenant, from owner to owned. Inbox side: Contact → Conversation → Message → Alert. Tenancy side: Channel, Invitation → User → Member → Alert preference, Knowledge entry | row |
+| 4 | Rows owned by the Tenant, from owner to owned. Inbox side: Contact → Conversation → Message → Alert. Tenancy side: Channel, Invitation → User → Member → Alert preference, Knowledge entry, Subscription | row |
 | 5 | Reply usage row (`bot_reply_usage`, Tenant and month) | row |
 
 Why this order:
@@ -161,7 +161,7 @@ other's upsert and nothing else, which is what makes the count exact. The daily
 prune deletes only rows whose window has ended. `acceptInvitation` counts its
 attempt before its transaction opens, so it adds no rank.
 
-### Billing's Tenant row updates
+### Billing's Tenant row and Subscription updates
 
 Billing (`modules/billing/billing.ts`; see [Billing](billing.md)) writes the
 Trial end and the Suspended state on Tenant rows with single `UPDATE`
@@ -177,6 +177,19 @@ no lock. Extending a Trial (`extendTrial`) updates one Tenant row in a
 transaction, then inserts its activity entry, which waits for nothing
 ([member activity entries](#member-activity-entries)); it holds that one row
 and no other lock.
+
+Subscriptions (`modules/billing/subscriptions.ts`) take no lock across a
+Mercado Pago call. `subscribe` creates the `preapproval` first, then stores it
+with one `INSERT ... ON CONFLICT (tenant_id) DO UPDATE ... WHERE status =
+'cancelled'` outside any transaction. Its foreign key takes `for key share` on
+the Tenant row (rank 2), and a conflict locks the Tenant's `subscription` row
+(rank 4); the statement holds nothing else and ends at once. Of two subscribes
+at once, the second waits for the first's row and then skips it, and its
+`preapproval` is cancelled after the statement. A Mercado Pago notification
+writes with single `UPDATE`s outside any transaction: the `subscription` row
+(rank 4), then, for an approved charge, the one Tenant row's `suspended_at`
+(rank 2), never both at once. Tenant deletion cascades into `subscription`
+under the Tenant row it already holds `for update`.
 
 ## Every lock
 
@@ -272,6 +285,7 @@ Ranks are those of the [ordering rule](#the-ordering-rule).
 | Invitation (`inviteMember`) | Tenant row `for update` (2) → Invitation rows (4) |
 | Invitation accepted (`acceptInvitation`) | Tenant row `for share` (2) → Invitation row → new User → new Member (4) |
 | Knowledge entry saved or imported from a file (`saveWithinCap`) | Tenant row `for update` (2) → Knowledge entry (4) |
+| Subscription stored (`subscribe`'s upsert, one statement outside a transaction) | Tenant row `for key share` through the foreign key (2) → the Tenant's Subscription row on a conflict (4) |
 
 ### Exceptions
 
