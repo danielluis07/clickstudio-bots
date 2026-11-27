@@ -70,6 +70,7 @@ export const createTestSubscriptionGateway = (clock: Clock): TestSubscriptionGat
           approvedAt: now,
           subscriptionId: record.id,
           externalReference: null,
+          modifiedAt: now,
         });
         authorizedPayments.set(`invoice-${authorizedPayments.size + 1}`, {
           subscriptionId: record.id,

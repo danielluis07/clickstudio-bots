@@ -73,6 +73,7 @@ const charge = (id: string, status: "approved" | "rejected", amountCents = planA
     approvedAt: status === "approved" ? clock.now() : null,
     subscriptionId: "preapproval-1",
     externalReference: null,
+    modifiedAt: clock.now(),
   });
 
 const suspended = async (scope: TenantScope) => (await billing().status(scope)).suspended;
@@ -153,6 +154,7 @@ test("a Suspended owner is charged now, and the suspension ends once Mercado Pag
     approvedAt: clock.now(),
     subscriptionId: "preapproval-1",
     externalReference: null,
+    modifiedAt: clock.now(),
   });
   await billing().receiveNotification({ type: "payment", id: "payment-1" });
   expect((await billing().status(owner)).suspended).toBe(false);
@@ -179,6 +181,7 @@ test("an approved authorized payment ends the suspension too", async () => {
     // The payment itself doesn't name the Subscription; its invoice does.
     subscriptionId: null,
     externalReference: null,
+    modifiedAt: clock.now(),
   });
   gateway.authorizedPayments.set("invoice-1", {
     subscriptionId: "preapproval-1",
@@ -221,6 +224,7 @@ test("a payment that names only the Tenant ends the suspension", async () => {
     approvedAt: clock.now(),
     subscriptionId: null,
     externalReference: "tenant",
+    modifiedAt: clock.now(),
   });
   await billing().receiveNotification({ type: "payment", id: "payment-1" });
   expect((await billing().status(owner)).suspended).toBe(false);
@@ -241,6 +245,7 @@ test("a charge that doesn't pay for the Plan leaves the Tenant Suspended", async
     approvedAt: new Date(suspendedAt.getTime() + 60_000),
     subscriptionId: "preapproval-1",
     externalReference: null,
+    modifiedAt: new Date(suspendedAt.getTime() + 60_000),
   };
   gateway.payments.set("refused", { ...payment, id: "refused", status: "rejected" });
   // Mercado Pago's small card check, refunded.

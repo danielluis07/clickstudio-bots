@@ -122,6 +122,10 @@ _Avoid_: Free period, test, demo
 A Tenant's standing agreement to pay for the Plan every month by credit card, set up and cancelled only by its owner.
 _Avoid_: Payment, signature, membership, plan
 
+**Charge**:
+One attempt by Mercado Pago to take a Subscription's monthly price from the card, approved or refused, and later perhaps refunded. A refused Charge that is retried is a new Charge. The owner sees every Charge in the payment history.
+_Avoid_: Payment, invoice, transaction
+
 **Grace period**:
 The 7 days after a failed monthly charge during which the Tenant keeps its Bot while the charge is retried.
 _Avoid_: Overdue period, tolerance

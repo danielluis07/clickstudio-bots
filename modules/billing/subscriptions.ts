@@ -1,6 +1,19 @@
-import { and, asc, eq, isNotNull, isNull, lt, lte, ne, notExists, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  ne,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { Database } from "@/db/database";
-import { organization, subscription } from "@/db/schema";
+import { organization, subscription, subscriptionCharge } from "@/db/schema";
 import { isPlatformAdmin } from "@/modules/identity";
 import { forbidden, isOwner, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
@@ -237,9 +250,31 @@ export const createSubscriptions = ({
     if (row) await recordCharge(row, provider.lastCharge);
   };
 
+  // Stores the Charge for the owner's payment history, unless a newer state
+  // of it is already stored. The card check, below the Subscription's amount,
+  // is no Charge.
+  const storeCharge = async (row: OurSubscription, payment: ProviderPayment) => {
+    if (payment.amountCents < row.amountCents) return;
+    const values = {
+      status: payment.status,
+      amountCents: payment.amountCents,
+      chargedAt: payment.createdAt,
+      providerModifiedAt: payment.modifiedAt,
+    };
+    await db
+      .insert(subscriptionCharge)
+      .values({ tenantId: row.tenantId, mercadoPagoId: payment.id, ...values })
+      .onConflictDoUpdate({
+        target: subscriptionCharge.mercadoPagoId,
+        set: values,
+        setWhere: lte(subscriptionCharge.providerModifiedAt, payment.modifiedAt),
+      });
+  };
+
   // A charge of one of our Subscriptions: an approved one may end the Grace
   // period and the suspension, a rejected one starts the Grace period.
   const applyPayment = async (row: OurSubscription, payment: ProviderPayment) => {
+    await storeCharge(row, payment);
     if (payment.status === "approved" && payment.approvedAt)
       await recordCharge(row, { at: payment.approvedAt, amountCents: payment.amountCents });
     else if (payment.status === "rejected")
@@ -335,6 +370,23 @@ export const createSubscriptions = ({
               : null,
         },
       };
+    },
+
+    // The owner's payment history: every Charge of the scope's Tenant,
+    // newest first, refusals and refunds included.
+    async charges(scope: TenantScope) {
+      if (!(await canManage(scope))) return forbidden;
+      const charges = await db
+        .select({
+          id: subscriptionCharge.mercadoPagoId,
+          status: subscriptionCharge.status,
+          amountCents: subscriptionCharge.amountCents,
+          chargedAt: subscriptionCharge.chargedAt,
+        })
+        .from(subscriptionCharge)
+        .where(eq(subscriptionCharge.tenantId, scope.tenantId))
+        .orderBy(desc(subscriptionCharge.chargedAt), desc(subscriptionCharge.mercadoPagoId));
+      return { ok: true as const, charges };
     },
 
     // Subscribes the scope's Tenant with a card token from the Brick. During

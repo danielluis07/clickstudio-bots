@@ -9,6 +9,23 @@ const billingSubscriptionStatusLabels: Record<string, string> = {
 export const billingSubscriptionStatusLabel = (status: string) =>
   billingSubscriptionStatusLabels[status] ?? "Em análise";
 
+// Mercado Pago's payment statuses, as owners read a Charge in the payment
+// history.
+const billingChargeStatusLabels: Record<string, string> = {
+  approved: "Aprovado",
+  authorized: "Autorizado",
+  pending: "Pendente",
+  in_process: "Em análise",
+  in_mediation: "Em disputa",
+  rejected: "Recusado",
+  cancelled: "Cancelado",
+  refunded: "Estornado",
+  charged_back: "Contestado",
+};
+
+export const billingChargeStatusLabel = (status: string) =>
+  billingChargeStatusLabels[status] ?? "Em análise";
+
 // Mercado Pago's card brands (`payment_method_id`), as owners know them.
 const billingCardBrandLabels: Record<string, string> = {
   visa: "Visa",

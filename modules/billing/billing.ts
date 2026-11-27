@@ -168,6 +168,12 @@ export type Billing = ReturnType<typeof createBilling>;
 // What the billing page shows its owner.
 export type BillingCheckout = Extract<Awaited<ReturnType<Billing["checkout"]>>, { ok: true }>;
 
+// One Charge in the owner's payment history.
+export type BillingCharge = Extract<
+  Awaited<ReturnType<Billing["charges"]>>,
+  { ok: true }
+>["charges"][number];
+
 // One row of the platform administrator's list of Trials.
 export type TenantTrial = Extract<
   Awaited<ReturnType<Billing["trials"]>>,

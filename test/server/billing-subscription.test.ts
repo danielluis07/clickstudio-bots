@@ -167,6 +167,7 @@ test("an owner who changes the card is told so, and during a Grace period that t
     approvedAt: null,
     subscriptionId: "preapproval-1",
     externalReference: null,
+    modifiedAt: clock.now(),
   });
   await billing.receiveNotification({ type: "payment", id: "refused" });
   expect(await changeCardAs(owner)(newCard)).toEqual({

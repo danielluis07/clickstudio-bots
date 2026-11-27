@@ -4,11 +4,16 @@ export {
   createBilling,
   trialDays,
   type Billing,
+  type BillingCharge,
   type BillingCheckout,
   type TenantTrial,
 } from "@/modules/billing/billing";
 export { planAmountCents, type BrickCard } from "@/modules/billing/subscriptions";
-export { billingCardLabel, billingSubscriptionStatusLabel } from "@/modules/billing/labels";
+export {
+  billingCardLabel,
+  billingChargeStatusLabel,
+  billingSubscriptionStatusLabel,
+} from "@/modules/billing/labels";
 export type {
   NewProviderSubscription,
   ProviderPayment,
