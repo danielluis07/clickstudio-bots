@@ -3,7 +3,8 @@
 Issues: [#253](https://github.com/danielluis07/clickstudio-bots/issues/253) (parent),
 [#255](https://github.com/danielluis07/clickstudio-bots/issues/255) (switch, Trial and Suspended),
 [#256](https://github.com/danielluis07/clickstudio-bots/issues/256) (extending a Trial),
-[#257](https://github.com/danielluis07/clickstudio-bots/issues/257) (subscribing).
+[#257](https://github.com/danielluis07/clickstudio-bots/issues/257) (subscribing),
+[#258](https://github.com/danielluis07/clickstudio-bots/issues/258) (failed charges, Grace period, reconciliation).
 Decision: [ADR 0012](adr/0012-mercado-pago-subscriptions-with-card-payment-brick.md).
 Terms: `GLOSSARY.md` → Billing.
 
@@ -48,9 +49,11 @@ Brasília. The new end must be in the future. A Tenant with an active
 Subscription has no Trial to extend and is refused.
 
 Extending also lifts the Tenant's suspension at once, so its Bot replies
-again with no sweep needed. Today a Trial ending is the only reason a Tenant
-is Suspended. When the Grace period arrives (a failed charge), its suspension
-comes with a Subscription, and #258 must keep extending from lifting it.
+again with no sweep needed. A Tenant Suspended after its Grace period still
+has its `authorized` Subscription, so extending is refused for it and only a
+successful charge lifts that suspension. Once Mercado Pago has cancelled or
+paused that Subscription, extending is no longer refused, as for any Tenant
+without an active Subscription.
 
 Each extension is recorded in the activity log as `trial.extended`, with the
 administrator as actor ([Member activity](member-activity.md)).
@@ -73,8 +76,13 @@ it again changes nothing.
 
 The sweep's `enforce-billing` task ([the sweep](inbox-operations.md#the-sweep))
 marks a Tenant Suspended (`organization.suspended_at`) once its Trial has ended
-and it has no active Subscription (one whose Mercado Pago status is
-`authorized`). Canceled Tenants are left alone.
+and it doesn't pay for the Plan (`paysForPlan` in
+`modules/billing/subscriptions.ts`). A Tenant pays for the Plan while it has
+a Subscription whose Mercado Pago status is `authorized` and no overdue
+charge, or a [Grace period](#grace-period) still running. So a Tenant is
+Suspended when its Trial ends without a Subscription, when its Grace period
+ends unpaid, and when Mercado Pago cancels or pauses its Subscription (at the
+end of the Grace period if one is running). Canceled Tenants are left alone.
 
 While a Tenant is Suspended:
 
@@ -163,9 +171,76 @@ owner as a refused card.
      `last_charged_amount`, read on every `subscription_preapproval`
      notification.
 
+5. **A refused charge starts the Grace period** (below). It arrives as a
+   `rejected` payment, through either payment signal above.
+
 Anything but 200 makes Mercado Pago retry (every 15 minutes, then less
 often), so a failed fetch answers 500 and is reported as
 `billing_notification_failed`. Unconfigured, the route answers 503.
+
+## Grace period
+
+When a monthly charge is refused, the Tenant gets 7 days (`graceDays`) while
+Mercado Pago retries the card. Its Bot keeps replying. The end is stored in
+`subscription.grace_ends_at`: the refused payment's `date_created` + 7 days.
+
+- **It starts** on a `rejected` payment for at least the Subscription's
+  amount (a refused card check doesn't count). It starts only once, only if
+  the refusal is newer than the last successful charge
+  (`subscription.last_charged_at`, so a replayed refusal starts nothing), and
+  not while the Tenant is already Suspended.
+- **It ends** with a successful charge made after it started: a retry, or a
+  charge on a new card ("Alterar cartão", #259). The charge clears
+  `grace_ends_at` and lifts a suspension that began before it. Each of the
+  three charge signals counts.
+- **When it ends unpaid**, the next sweep run Suspends the Tenant (at most 30
+  minutes later). A retry that succeeds after that still ends the suspension,
+  and so does one that succeeded in time but was reported only after the
+  sweep had Suspended the Tenant.
+- **If Mercado Pago cancels or pauses** the Subscription once its retries are
+  used up, the Tenant keeps its Bot until the Grace period ends and is then
+  Suspended.
+
+While a Grace period is running, the billing page shows "Bot ativo até" with
+its end. Subscribing again over a cancelled Subscription starts with no
+Grace period.
+
+## Reconciliation
+
+Webhooks can be lost, so before it enforces anything the sweep's
+`enforce-billing` task re-reads from Mercado Pago (`reconcile` in
+`modules/billing/subscriptions.ts`) what a notification would have said.
+To keep each run cheap (ADR 0011), it reads only `authorized` Subscriptions
+whose charge is due (`next_charge_at` has passed: a successful charge moves
+it a month ahead) or that have a Grace period. A Subscription on Trial,
+already charged this month, cancelled or paused costs nothing, and with
+billing off nothing is read.
+
+For each one, three calls:
+
+1. `GET /preapproval/{id}`: the status (a cancellation or pause Mercado Pago
+   made), the next charge and `summarized.last_charged_date`, applied as a
+   `subscription_preapproval` notification would be;
+2. `GET /authorized_payments/search?preapproval_id=…`: the newest monthly
+   charge;
+3. `GET /v1/payments/{id}` for its payment, applied as a payment
+   notification would be. A refusal starts the Grace period and an approval
+   ends it.
+
+The writes are the same idempotent ones as for notifications, so a sweep
+that runs while a webhook arrives changes nothing more. A run re-reads at
+most 100 Subscriptions, the ones re-read longest ago first
+(`subscription.reconciled_at`). The first failed call ends the run: Mercado
+Pago is likely down, and waiting out a 10-second timeout per Subscription
+would use up the sweep's 60-second limit before the Bot's own recovery. The
+failed Subscription goes to the back of the queue, so it doesn't block the
+others next run. Either way the task still Suspends from what is stored,
+then reports `sweep_task_failed`.
+
+A Tenant Suspended after its Grace period keeps an `authorized`
+Subscription with a Grace period until Mercado Pago cancels or pauses it,
+so it is re-read every run. That costs three Mercado Pago calls and no extra
+database work, and it is how a late retry with a lost webhook is found.
 
 ## Mercado Pago setup
 
@@ -224,3 +299,33 @@ Node SDK's source:
   it against a real test charge.
 - **Sandbox payer email**: the docs don't say whether it must belong to a
   test user. If the sandbox refuses the owner's email, use the test buyer's.
+
+Checked on 2026-11-27, for the Grace period and reconciliation:
+
+- **Retries**: the docs only say "automatic retries if a payment is
+  rejected". They give no count, no window, and don't say whether Mercado
+  Pago cancels or pauses the Subscription when retries run out, or whether
+  `next_payment_date` moves after a refusal. The Grace period therefore
+  depends on none of these: it is 7 days from the refusal, whatever Mercado
+  Pago does, and both cancelled and paused are handled. If `next_payment_date`
+  does move after a refusal whose webhook is lost, the sweep stops seeing
+  the charge as due and finds the refusal only at the next charge date or
+  through a later notification.
+- **`summarized.last_charged_date` and `last_charged_amount`**: the docs
+  don't say whether they count only successful charges. They are read as a
+  successful charge, as since #257. Confirm on a refused renewal that they
+  don't move.
+- **A paused Subscription**: the owner can't subscribe again over it (only a
+  `cancelled` one is replaced), so a Tenant Suspended with one needs
+  "Alterar cartão" (#259) or a cancellation.
+- **Which webhook a refusal fires**: not documented. The adapter treats a
+  `rejected` payment as the refusal, whether it arrives as `payment` or
+  through `subscription_authorized_payment`. Confirm it in the sandbox with
+  a renewal charge that is refused.
+- **`summarized.semaphore`**: only the value `green` appears, with no
+  meanings, so it isn't used.
+- **Invoice search order**: `GET /authorized_payments/search` takes
+  `preapproval_id` but documents no sort. The adapter picks the newest by
+  `date_created`, and when there is more than one page it reads the last page
+  (`offset`, `limit`), assuming the oldest come first. Confirm this on a
+  Subscription with many charges.

@@ -1,4 +1,4 @@
-import { and, eq, lte, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lt, lte, notExists, or, sql } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import { organization, subscription } from "@/db/schema";
 import { isPlatformAdmin } from "@/modules/identity";
@@ -19,12 +19,37 @@ const planReason = "ClickStudio Bots: plano mensal";
 const activeStatus = "authorized";
 const cancelledStatus = "cancelled";
 
+// The Grace period (ADR 0012): how long after a failed monthly charge the
+// Tenant keeps its Bot while Mercado Pago retries.
+const graceDays = 7;
+const graceMs = graceDays * 24 * 60 * 60 * 1000;
+const graceEndFrom = (failedAt: Date) => new Date(failedAt.getTime() + graceMs);
+
 // Whether the Tenant row's Tenant has an active Subscription. For statements
 // on `organization`.
 export const hasActiveSubscription = sql<boolean>`exists(
   select 1 from ${subscription}
   where ${subscription.tenantId} = ${organization.id} and ${subscription.status} = ${activeStatus}
 )`;
+
+// Whether the Tenant row's Tenant pays for the Plan at `now`: its
+// Subscription is active with no charge overdue, or a failed charge's Grace
+// period is still running. A Subscription Mercado Pago cancels or pauses once
+// its retries are used up pays for nothing after its Grace period. For
+// statements on `organization`.
+export const paysForPlan = (now: Date) => sql<boolean>`exists(
+  select 1 from ${subscription}
+  where ${subscription.tenantId} = ${organization.id} and (
+    ${subscription.graceEndsAt} > ${now.toISOString()}::timestamptz
+    or (${subscription.status} = ${activeStatus} and ${subscription.graceEndsAt} is null)
+  )
+)`;
+
+// A charge attempt of a Subscription: when, and how much, in centavos.
+type Charge = { at: Date; amountCents: number };
+
+// How many Subscriptions one sweep run re-reads at most (ADR 0007).
+const reconcileBatch = 100;
 
 export type SubscriptionsConfig = {
   gateway: SubscriptionGateway;
@@ -92,17 +117,67 @@ export const createSubscriptions = ({
   };
   type OurSubscription = NonNullable<Awaited<ReturnType<typeof ourSubscription>>>;
 
-  // A successful charge of the Subscription's amount, made after the Tenant
-  // was Suspended, ends the suspension. The card check Mercado Pago makes when
-  // subscribing is smaller, and a charge from before the suspension (a
-  // replayed notification) settles nothing.
-  const liftSuspension = (row: OurSubscription, charge: { at: Date; amountCents: number }) =>
-    charge.amountCents < row.amountCents
+  // A successful charge of the Subscription's amount ends a Grace period that
+  // began before it, and the suspension that Grace period led to, even when
+  // the charge is reported only after the sweep Suspended the Tenant. Without
+  // a Grace period it ends a suspension that began before it. The card check
+  // Mercado Pago makes when subscribing is smaller, and a charge from before
+  // either (a replayed notification) settles nothing.
+  const recordCharge = async (row: OurSubscription, charge: Charge) => {
+    if (charge.amountCents < row.amountCents) return;
+    const ours = eq(subscription.mercadoPagoId, row.mercadoPagoId);
+    const endedGrace = await db
+      .update(subscription)
+      .set({ graceEndsAt: null })
+      .where(and(ours, lte(subscription.graceEndsAt, graceEndFrom(charge.at))))
+      .returning({ id: subscription.id });
+    await db
+      .update(subscription)
+      .set({ lastChargedAt: charge.at })
+      .where(
+        and(
+          ours,
+          or(isNull(subscription.lastChargedAt), lt(subscription.lastChargedAt, charge.at)),
+        ),
+      );
+    await db
+      .update(organization)
+      .set({ suspendedAt: null })
+      .where(
+        and(
+          eq(organization.id, row.tenantId),
+          endedGrace.length ? undefined : lte(organization.suspendedAt, charge.at),
+        ),
+      );
+  };
+
+  // A refused charge of the Subscription's amount starts its Grace period,
+  // unless one is already running, a later charge succeeded, or the Tenant is
+  // already Suspended (it has no Bot to keep).
+  const recordFailedCharge = (row: OurSubscription, failure: Charge) =>
+    failure.amountCents < row.amountCents
       ? undefined
       : db
-          .update(organization)
-          .set({ suspendedAt: null })
-          .where(and(eq(organization.id, row.tenantId), lte(organization.suspendedAt, charge.at)));
+          .update(subscription)
+          .set({ graceEndsAt: graceEndFrom(failure.at) })
+          .where(
+            and(
+              eq(subscription.mercadoPagoId, row.mercadoPagoId),
+              isNull(subscription.graceEndsAt),
+              or(isNull(subscription.lastChargedAt), lt(subscription.lastChargedAt, failure.at)),
+              notExists(
+                db
+                  .select({ id: organization.id })
+                  .from(organization)
+                  .where(
+                    and(
+                      eq(organization.id, subscription.tenantId),
+                      isNotNull(organization.suspendedAt),
+                    ),
+                  ),
+              ),
+            ),
+          );
 
   // Applies Mercado Pago's current state to the Subscription it names, unless
   // a newer state is already stored, and counts its latest charge.
@@ -124,15 +199,23 @@ export const createSubscriptions = ({
       );
     if (!provider.lastCharge) return;
     const row = await ourSubscription({ mercadoPagoId: provider.id });
-    if (row) await liftSuspension(row, provider.lastCharge);
+    if (row) await recordCharge(row, provider.lastCharge);
   };
 
-  // A payment of one of our Subscriptions: refreshes the Subscription, and an
-  // approved one may end the suspension.
+  // A charge of one of our Subscriptions: an approved one may end the Grace
+  // period and the suspension, a rejected one starts the Grace period.
+  const applyPayment = async (row: OurSubscription, payment: ProviderPayment) => {
+    if (payment.status === "approved" && payment.approvedAt)
+      await recordCharge(row, { at: payment.approvedAt, amountCents: payment.amountCents });
+    else if (payment.status === "rejected")
+      await recordFailedCharge(row, { at: payment.createdAt, amountCents: payment.amountCents });
+  };
+
+  // A payment notification: refreshes the Subscription, then applies the
+  // payment.
   const settle = async (row: OurSubscription, payment: ProviderPayment) => {
     await applySubscription(await config!.gateway.fetchSubscription(row.mercadoPagoId));
-    if (payment.status === "approved" && payment.approvedAt)
-      await liftSuspension(row, { at: payment.approvedAt, amountCents: payment.amountCents });
+    await applyPayment(row, payment);
   };
 
   // The Subscription a payment charged: the one it names, else (since that
@@ -169,6 +252,9 @@ export const createSubscriptions = ({
           payerEmail: stored.payerEmail,
           amountCents: stored.amountCents,
           nextChargeAt: stored.nextChargeAt,
+          // Set while a failed charge is overdue: the Bot stops on this date
+          // unless a charge succeeds first.
+          graceEndsAt: stored.graceEndsAt,
         },
       };
     },
@@ -209,6 +295,8 @@ export const createSubscriptions = ({
         amountCents: provider.amountCents,
         nextChargeAt: provider.nextChargeAt,
         providerModifiedAt: provider.modifiedAt,
+        graceEndsAt: null,
+        lastChargedAt: null,
       };
       let stored: { id: string } | undefined;
       try {
@@ -252,6 +340,46 @@ export const createSubscriptions = ({
         const payment = await gateway.fetchPayment(id);
         const row = await subscriptionOfPayment(payment);
         if (row) await settle(row, payment);
+      }
+    },
+
+    // Run by the sweep before it enforces deadlines: re-reads from Mercado
+    // Pago what a lost notification would have told us. To keep each run
+    // cheap (ADR 0011) it reads only active Subscriptions whose charge is due
+    // (a successful one moves the next charge a month ahead) or that have a
+    // Grace period; one on Trial, already charged this month, or cancelled
+    // costs nothing. At most `reconcileBatch` per run, the ones re-read
+    // longest ago first. The first failure ends the run and is rethrown:
+    // Mercado Pago is likely down, and waiting out each call's timeout would
+    // use up the sweep's time limit. The failed one goes to the back, so it
+    // doesn't block the others next run.
+    async reconcile() {
+      if (!config) return;
+      const { gateway } = config;
+      const due = await db
+        .select({
+          tenantId: subscription.tenantId,
+          mercadoPagoId: subscription.mercadoPagoId,
+          amountCents: subscription.amountCents,
+        })
+        .from(subscription)
+        .where(
+          and(
+            eq(subscription.status, activeStatus),
+            or(isNotNull(subscription.graceEndsAt), lte(subscription.nextChargeAt, clock.now())),
+          ),
+        )
+        .orderBy(sql`${subscription.reconciledAt} asc nulls first`, asc(subscription.id))
+        .limit(reconcileBatch);
+      for (const row of due) {
+        await db
+          .update(subscription)
+          .set({ reconciledAt: clock.now() })
+          .where(eq(subscription.mercadoPagoId, row.mercadoPagoId));
+        await applySubscription(await gateway.fetchSubscription(row.mercadoPagoId));
+        const latestCharge = await gateway.fetchLatestAuthorizedPayment(row.mercadoPagoId);
+        if (latestCharge?.paymentId)
+          await applyPayment(row, await gateway.fetchPayment(latestCharge.paymentId));
       }
     },
   };

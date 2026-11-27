@@ -47,6 +47,7 @@ const paymentSchema = z.object({
   id: z.union([z.number(), z.string()]),
   status: z.string().min(1),
   transaction_amount: z.coerce.number(),
+  date_created: z.string().min(1),
   date_approved: z.string().nullish(),
   external_reference: z.string().nullish(),
   // Where Mercado Pago names the preapproval a charge belongs to. Not in the
@@ -62,6 +63,11 @@ const paymentSchema = z.object({
 const authorizedPaymentSchema = z.object({
   preapproval_id: z.string().min(1),
   payment: z.object({ id: z.union([z.number(), z.string()]) }).nullish(),
+});
+
+const authorizedPaymentSearchSchema = z.object({
+  paging: z.object({ total: z.number(), limit: z.number() }),
+  results: z.array(authorizedPaymentSchema.extend({ date_created: z.string().min(1) })),
 });
 
 const toSubscription = (body: unknown) => {
@@ -168,6 +174,7 @@ export const createMercadoPagoGateway = ({
         id: String(payment.id),
         status: payment.status,
         amountCents: centsOf(payment.transaction_amount),
+        createdAt: new Date(payment.date_created),
         approvedAt: dateOf(payment.date_approved),
         subscriptionId:
           payment.point_of_interaction?.transaction_data?.subscription_id ||
@@ -185,6 +192,32 @@ export const createMercadoPagoGateway = ({
         subscriptionId: found.preapproval_id,
         paymentId: found.payment ? String(found.payment.id) : null,
       };
+    },
+
+    // `GET /authorized_payments/search?preapproval_id=` documents no sort, so
+    // the newest is picked by `date_created`. When there is more than one
+    // page, the last page is read instead (`offset`/`limit`, as Mercado
+    // Pago's other searches take them), assuming the oldest come first.
+    // Confirm the order against a real Subscription with many charges.
+    async fetchLatestAuthorizedPayment(subscriptionId: string) {
+      const path = `/authorized_payments/search?${new URLSearchParams({
+        preapproval_id: resourceId(subscriptionId),
+      })}`;
+      let page = authorizedPaymentSearchSchema.parse(await call("GET", path));
+      const { total, limit } = page.paging;
+      if (total > page.results.length && limit > 0)
+        page = authorizedPaymentSearchSchema.parse(
+          await call("GET", `${path}&offset=${Math.max(0, total - limit)}&limit=${limit}`),
+        );
+      const [latest] = page.results.toSorted(
+        (a, b) => Date.parse(b.date_created) - Date.parse(a.date_created),
+      );
+      return latest
+        ? {
+            subscriptionId: latest.preapproval_id,
+            paymentId: latest.payment ? String(latest.payment.id) : null,
+          }
+        : null;
     },
   };
 };

@@ -7,6 +7,7 @@ import type { Clock } from "@/platform/clock";
 import {
   createSubscriptions,
   hasActiveSubscription,
+  paysForPlan,
   type SubscriptionsConfig,
 } from "@/modules/billing/subscriptions";
 
@@ -28,9 +29,15 @@ export const createBilling = ({
   subscriptions?: SubscriptionsConfig | null;
 }) => {
   const trialEndFrom = (start: Date) => new Date(start.getTime() + trialMs);
+  const { reconcile, ...subscriptionActions } = createSubscriptions({
+    db,
+    clock,
+    enabled,
+    config: subscriptions,
+  });
 
   return {
-    ...createSubscriptions({ db, clock, enabled, config: subscriptions }),
+    ...subscriptionActions,
 
     // A new Tenant's Trial end: 30 days from its creation while billing is
     // on, none while it is off (the launch action sets it later).
@@ -50,9 +57,13 @@ export const createBilling = ({
     },
 
     // Run by the sweep (ADR 0007): Suspends every Tenant whose Trial has ended
-    // without an active Subscription. A canceled Tenant is left alone, being
-    // already stopped for its own reason. With billing off it Suspends nobody
-    // and lifts any suspension left from when it was on.
+    // and that doesn't pay for the Plan: no active Subscription, or a Grace
+    // period that ended with the charge unpaid. A canceled Tenant is left
+    // alone, being already stopped for its own reason. With billing off it
+    // Suspends nobody and lifts any suspension left from when it was on.
+    // First it reconciles Subscriptions with Mercado Pago, so a lost
+    // notification doesn't Suspend a paying Tenant. With Mercado Pago down
+    // it still Suspends from what is stored, then reports the failure.
     async sweep() {
       if (!enabled) {
         await db
@@ -61,6 +72,10 @@ export const createBilling = ({
           .where(isNotNull(organization.suspendedAt));
         return 0;
       }
+      const reconcileFailure = await reconcile().then(
+        () => null,
+        (error: unknown) => ({ error }),
+      );
       const now = clock.now();
       const suspended = await db
         .update(organization)
@@ -70,10 +85,11 @@ export const createBilling = ({
             isNull(organization.suspendedAt),
             isNull(organization.canceledAt),
             lte(organization.trialEndsAt, now),
-            not(hasActiveSubscription),
+            not(paysForPlan(now)),
           ),
         )
         .returning({ id: organization.id });
+      if (reconcileFailure) throw reconcileFailure.error;
       return suspended.length;
     },
 

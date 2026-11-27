@@ -18,6 +18,15 @@ export const subscription = pgTable("subscription", {
   payerEmail: text("payer_email").notNull(),
   amountCents: integer("amount_cents").notNull(),
   nextChargeAt: timestamp("next_charge_at", { withTimezone: true }),
+  // The Grace period's end: 7 days after a failed monthly charge, null while
+  // no charge is overdue. A successful charge clears it.
+  graceEndsAt: timestamp("grace_ends_at", { withTimezone: true }),
+  // The latest successful charge seen, so a failure from before it (a
+  // replayed notification) starts no Grace period.
+  lastChargedAt: timestamp("last_charged_at", { withTimezone: true }),
+  // When the sweep last re-read it from Mercado Pago, so each run starts with
+  // the ones it re-read longest ago.
+  reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
   // Mercado Pago's `last_modified` for the state stored here. An older read
   // (webhooks arrive out of order) never overwrites a newer one.
   providerModifiedAt: timestamp("provider_modified_at", { withTimezone: true }).notNull(),
