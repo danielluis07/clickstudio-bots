@@ -1,6 +1,19 @@
-import { and, asc, eq, isNotNull, isNull, lt, lte, ne, notExists, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  ne,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { Database } from "@/db/database";
-import { organization, subscription } from "@/db/schema";
+import { organization, subscription, subscriptionCharge } from "@/db/schema";
 import { isPlatformAdmin } from "@/modules/identity";
 import { forbidden, isOwner, type TenantScope } from "@/modules/tenancy";
 import type { Clock } from "@/platform/clock";
@@ -48,8 +61,15 @@ export const paysForPlan = (now: Date) => sql<boolean>`exists(
   )
 )`;
 
-// A charge attempt of a Subscription: when, and how much, in centavos.
-type Charge = { at: Date; amountCents: number };
+// A Charge's outcome as it bears on the Subscription: when, and how much, in
+// centavos.
+type ChargeAttempt = { at: Date; amountCents: number };
+
+// Mercado Pago's card check when subscribing is smaller than the
+// Subscription's amount, and is no Charge: it settles nothing, starts no
+// Grace period and isn't in the payment history.
+const isCardCheck = (row: { amountCents: number }, amountCents: number) =>
+  amountCents < row.amountCents;
 
 // A card from the Card Payment Brick: its token, and the last 4 digits the
 // Brick showed, when it gives them, kept only to show the owner which card
@@ -158,8 +178,8 @@ export const createSubscriptions = ({
   // a Grace period it ends a suspension that began before it. The card check
   // Mercado Pago makes when subscribing is smaller, and a charge from before
   // either (a replayed notification) settles nothing.
-  const recordCharge = async (row: OurSubscription, charge: Charge) => {
-    if (charge.amountCents < row.amountCents) return;
+  const recordCharge = async (row: OurSubscription, charge: ChargeAttempt) => {
+    if (isCardCheck(row, charge.amountCents)) return;
     const ours = eq(subscription.mercadoPagoId, row.mercadoPagoId);
     const endedGrace = await db
       .update(subscription)
@@ -189,8 +209,8 @@ export const createSubscriptions = ({
   // A refused charge of the Subscription's amount starts its Grace period,
   // unless one is already running, a later charge succeeded, or the Tenant is
   // already Suspended (it has no Bot to keep).
-  const recordFailedCharge = (row: OurSubscription, failure: Charge) =>
-    failure.amountCents < row.amountCents
+  const recordFailedCharge = (row: OurSubscription, failure: ChargeAttempt) =>
+    isCardCheck(row, failure.amountCents)
       ? undefined
       : db
           .update(subscription)
@@ -237,9 +257,45 @@ export const createSubscriptions = ({
     if (row) await recordCharge(row, provider.lastCharge);
   };
 
+  // A payment's state as a stored Charge, and the guard that keeps an older
+  // read from overwriting a newer one.
+  const chargeValues = (payment: ProviderPayment) => ({
+    status: payment.status,
+    amountCents: payment.amountCents,
+    chargedAt: payment.createdAt,
+    providerModifiedAt: payment.modifiedAt,
+  });
+  const notNewerThan = (payment: ProviderPayment) =>
+    lte(subscriptionCharge.providerModifiedAt, payment.modifiedAt);
+
+  // Stores the Charge for the owner's payment history, unless a newer state
+  // of it is already stored.
+  const storeCharge = async (row: OurSubscription, payment: ProviderPayment) => {
+    if (isCardCheck(row, payment.amountCents)) return;
+    const values = chargeValues(payment);
+    await db
+      .insert(subscriptionCharge)
+      .values({ tenantId: row.tenantId, mercadoPagoId: payment.id, ...values })
+      .onConflictDoUpdate({
+        target: subscriptionCharge.mercadoPagoId,
+        set: values,
+        setWhere: notNewerThan(payment),
+      });
+  };
+
+  // A payment that is no longer one of our Subscriptions' (it charged one
+  // the owner has since replaced) still updates its stored Charge, so a
+  // later refund shows. It stores nothing new.
+  const refreshStoredCharge = (payment: ProviderPayment) =>
+    db
+      .update(subscriptionCharge)
+      .set(chargeValues(payment))
+      .where(and(eq(subscriptionCharge.mercadoPagoId, payment.id), notNewerThan(payment)));
+
   // A charge of one of our Subscriptions: an approved one may end the Grace
   // period and the suspension, a rejected one starts the Grace period.
   const applyPayment = async (row: OurSubscription, payment: ProviderPayment) => {
+    await storeCharge(row, payment);
     if (payment.status === "approved" && payment.approvedAt)
       await recordCharge(row, { at: payment.approvedAt, amountCents: payment.amountCents });
     else if (payment.status === "rejected")
@@ -335,6 +391,23 @@ export const createSubscriptions = ({
               : null,
         },
       };
+    },
+
+    // The owner's payment history: every Charge of the scope's Tenant,
+    // newest first, refusals and refunds included.
+    async charges(scope: TenantScope) {
+      if (!(await canManage(scope))) return forbidden;
+      const charges = await db
+        .select({
+          id: subscriptionCharge.mercadoPagoId,
+          status: subscriptionCharge.status,
+          amountCents: subscriptionCharge.amountCents,
+          chargedAt: subscriptionCharge.chargedAt,
+        })
+        .from(subscriptionCharge)
+        .where(eq(subscriptionCharge.tenantId, scope.tenantId))
+        .orderBy(desc(subscriptionCharge.chargedAt), desc(subscriptionCharge.mercadoPagoId));
+      return { ok: true as const, charges };
     },
 
     // Subscribes the scope's Tenant with a card token from the Brick. During
@@ -504,13 +577,16 @@ export const createSubscriptions = ({
         await applySubscription(await gateway.fetchSubscription(id));
       } else if (type === "subscription_authorized_payment") {
         const invoice = await gateway.fetchAuthorizedPayment(id);
+        if (!invoice.paymentId) return;
+        const payment = await gateway.fetchPayment(invoice.paymentId);
         const row = await ourSubscription({ mercadoPagoId: invoice.subscriptionId });
-        if (row && invoice.paymentId)
-          await settle(row, await gateway.fetchPayment(invoice.paymentId));
+        if (row) await settle(row, payment);
+        else await refreshStoredCharge(payment);
       } else if (type === "payment") {
         const payment = await gateway.fetchPayment(id);
         const row = await subscriptionOfPayment(payment);
         if (row) await settle(row, payment);
+        else await refreshStoredCharge(payment);
       }
     },
 

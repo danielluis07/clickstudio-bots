@@ -251,6 +251,32 @@ Anything but 200 makes Mercado Pago retry (every 15 minutes, then less
 often), so a failed fetch answers 500 and is reported as
 `billing_notification_failed`. Unconfigured, the route answers 503.
 
+## Payment history
+
+The billing page lists every Charge of the Tenant, newest first, with its
+date, amount in BRL and status (Aprovado, Recusado, Estornado, …). Only the
+owner sees it (`billing.charges`), and only their own Tenant's, under the same
+rule as the rest of the page.
+
+Each payment a notification or the sweep's reconciliation fetches for one of
+our Subscriptions is stored in `subscription_charge`, keyed by Mercado Pago's
+payment id, whatever its status. A retry is a new payment, so a refused charge
+that is later approved shows both attempts. A later status of the same payment
+(a refund, a chargeback) replaces the stored one unless a newer state is
+already stored (the payment's `date_last_updated`), so out-of-order
+notifications never roll a refund back. A payment of a Subscription the owner
+has since replaced still updates its stored Charge, so a late refund shows,
+though nothing new is stored for it. The card check, below the Subscription's
+amount, isn't listed.
+
+The history starts with the first payment notified after this change: there
+is no backfill, since billing wasn't live before it. If both the refusal's and
+the retry's notifications are lost, the sweep recovers only the latest
+payment, so the refusal is missing from the history.
+
+There is no nota fiscal. Mercado Pago emails its own receipt to the payer
+email.
+
 ## Grace period
 
 When a monthly charge is refused, the Tenant gets 7 days (`graceDays`) while

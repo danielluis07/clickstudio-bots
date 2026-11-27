@@ -1,21 +1,25 @@
 import { BillingGuidance } from "@/components/billing/billing-guidance";
 import { CancelSubscription } from "@/components/billing/cancel-subscription";
 import { BillingSummary } from "@/components/billing/billing-summary";
+import { ChargeHistory } from "@/components/billing/charge-history";
 import { SubscribeForm } from "@/components/billing/subscribe-form";
 import { SubscriptionCardSection } from "@/components/billing/subscription-card-section";
 import { DashboardPage } from "@/components/dashboard/dashboard-page";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import type { BillingCheckout } from "@/modules/billing";
+import type { BillingCharge, BillingCheckout } from "@/modules/billing";
 
 // The owner's billing page. The card form shows until the Tenant has a
 // Subscription that isn't cancelled; from then on, its card and "Alterar
 // cartão".
 export function BillingOverview({
   checkout,
+  charges,
   publicKey,
   defaultEmail,
 }: {
   checkout: BillingCheckout;
+  // The payment history, newest first.
+  charges: BillingCharge[];
   // Mercado Pago's public key, or null where it isn't configured.
   publicKey: string | null;
   defaultEmail: string;
@@ -45,6 +49,7 @@ export function BillingOverview({
             publicKey={checkout.available ? publicKey : null}
           />
         )}
+        {(checkout.subscription || charges.length > 0) && <ChargeHistory charges={charges} />}
         {checkout.canCancel && checkout.available && checkout.subscription && (
           <CancelSubscription botActiveUntil={checkout.subscription.botActiveUntil} />
         )}

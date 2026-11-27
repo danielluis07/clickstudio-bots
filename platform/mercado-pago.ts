@@ -52,6 +52,7 @@ const paymentSchema = z.object({
   transaction_amount: z.coerce.number(),
   date_created: z.string().min(1),
   date_approved: z.string().nullish(),
+  date_last_updated: z.string().nullish(),
   external_reference: z.string().nullish(),
   // Where Mercado Pago names the preapproval a charge belongs to. Not in the
   // payments reference: confirm against a real subscription charge.
@@ -200,6 +201,7 @@ export const createMercadoPagoGateway = ({
           payment.metadata?.preapproval_id ||
           null,
         externalReference: payment.external_reference || null,
+        modifiedAt: new Date(payment.date_last_updated || payment.date_created),
       };
     },
 

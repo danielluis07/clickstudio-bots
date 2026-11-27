@@ -197,6 +197,7 @@ describe("Mercado Pago gateway", () => {
       transaction_amount: 99.9,
       date_created: "2026-12-01T09:59:58.000-03:00",
       date_approved: "2026-12-01T10:00:00.000-03:00",
+      date_last_updated: "2026-12-03T08:00:00.000-03:00",
       external_reference: "tenant",
       point_of_interaction: { transaction_data: { subscription_id: preapproval.id } },
     };
@@ -214,6 +215,7 @@ describe("Mercado Pago gateway", () => {
       approvedAt: new Date("2026-12-01T13:00:00Z"),
       subscriptionId: preapproval.id,
       externalReference: "tenant",
+      modifiedAt: new Date("2026-12-03T11:00:00Z"),
     });
     expect((await gateway.fetchPayment("2")).subscriptionId).toBeNull();
     expect(requests[0].url).toBe("https://api.mercadopago.com/v1/payments/1234567890");

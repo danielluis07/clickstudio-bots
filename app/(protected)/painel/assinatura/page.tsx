@@ -14,13 +14,17 @@ export const metadata: Metadata = {
 // administrator sees the page (ADR 0012). `checkout` refuses everyone else.
 export default async function BillingPage() {
   const scope = await requireTenantScope();
-  const checkout = await billing.checkout(scope);
-  if (!checkout.ok) notFound();
-  const session = await getCurrentSession();
+  const [checkout, history, session] = await Promise.all([
+    billing.checkout(scope),
+    billing.charges(scope),
+    getCurrentSession(),
+  ]);
+  if (!checkout.ok || !history.ok) notFound();
 
   return (
     <BillingOverview
       checkout={checkout}
+      charges={history.charges}
       publicKey={env.MERCADO_PAGO_PUBLIC_KEY ?? null}
       defaultEmail={session?.user.email ?? ""}
     />

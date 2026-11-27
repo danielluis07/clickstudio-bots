@@ -36,7 +36,7 @@ one table in ascending id.
 | 1 | wamid lock (`tenantId:wamid`) | advisory |
 | 2 | Tenant row (`organization`) | `for share` or `for update` |
 | 3 | Contact address lock (`contact:<sha256(tenantId:phone)>`) | advisory |
-| 4 | Rows owned by the Tenant, from owner to owned. Inbox side: Contact → Conversation → Message → Alert. Tenancy side: Channel, Invitation → User → Member → Alert preference, Knowledge entry, Subscription | row |
+| 4 | Rows owned by the Tenant, from owner to owned. Inbox side: Contact → Conversation → Message → Alert. Tenancy side: Channel, Invitation → User → Member → Alert preference, Knowledge entry, Subscription, Charge | row |
 | 5 | Reply usage row (`bot_reply_usage`, Tenant and month) | row |
 
 Why this order:
@@ -202,8 +202,17 @@ writes the `subscription` row's `paid_until` (and, for canceled Tenants,
 `reconciled_at`) with single `UPDATE`s outside any transaction, then calls
 Mercado Pago and applies the returned state. The canceled-Tenant query joins
 `organization` without locking it.
-Tenant deletion cascades into `subscription` under the Tenant row it already
-holds `for update`.
+Each payment a notification or the sweep's reconciliation applies is first
+stored as a Charge with one `INSERT ... ON CONFLICT (mercado_pago_id) DO
+UPDATE ... WHERE provider_modified_at <= ...` outside any transaction, before
+the `subscription` row's updates. Its foreign key takes `for key share` on the
+Tenant row (rank 2), and a conflict locks that one `subscription_charge` row
+(rank 4); the statement holds nothing else and ends at once. A payment of a
+Subscription since replaced updates its stored Charge with one `UPDATE`
+outside any transaction, locking that one `subscription_charge` row (rank 4)
+and nothing else.
+Tenant deletion cascades into `subscription` and `subscription_charge` under
+the Tenant row it already holds `for update`.
 
 ## Every lock
 

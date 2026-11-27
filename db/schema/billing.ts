@@ -1,4 +1,4 @@
-import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { organization } from "@/db/schema/tenancy";
 import { id, timestamps } from "@/db/columns";
 
@@ -42,3 +42,28 @@ export const subscription = pgTable("subscription", {
   providerModifiedAt: timestamp("provider_modified_at", { withTimezone: true }).notNull(),
   ...timestamps(),
 });
+
+// One Charge of a Tenant's Subscription: a Mercado Pago payment, kept up to
+// date by its notifications, for the owner's payment history. Written only by
+// `modules/billing`. A retried charge is a new payment, so a refusal and the
+// retry that succeeded are two rows. The card check is not stored.
+export const subscriptionCharge = pgTable(
+  "subscription_charge",
+  {
+    id: id(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    mercadoPagoId: text("mercado_pago_id").notNull().unique(),
+    // Mercado Pago's own status: `approved`, `rejected`, `refunded`, …
+    status: text("status").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    // When the charge was attempted.
+    chargedAt: timestamp("charged_at", { withTimezone: true }).notNull(),
+    // Mercado Pago's `date_last_updated` for the state stored here. An older
+    // read (notifications arrive out of order) never overwrites a newer one.
+    providerModifiedAt: timestamp("provider_modified_at", { withTimezone: true }).notNull(),
+    ...timestamps(),
+  },
+  (t) => [index("subscription_charge_tenant_charged_at_idx").on(t.tenantId, t.chargedAt)],
+);

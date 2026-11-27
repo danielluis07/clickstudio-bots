@@ -1266,6 +1266,7 @@ test("a Suspended owner subscribes, and its Bot answers again once Mercado Pago 
     approvedAt: clock.now(),
     subscriptionId: "preapproval-1",
     externalReference: null,
+    modifiedAt: clock.now(),
   });
   await billing.receiveNotification({ type: "payment", id: "payment-1" });
 

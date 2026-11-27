@@ -35,6 +35,9 @@ export type ProviderPayment = {
   // The payment's external reference: a Tenant's id on our Subscriptions'
   // charges, when the provider copies it there.
   externalReference: string | null;
+  // When the provider last changed it (a refund, say), so an older read
+  // never overwrites a newer one.
+  modifiedAt: Date;
 };
 
 export type NewProviderSubscription = {
