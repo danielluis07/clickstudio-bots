@@ -1,0 +1,81 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "03087b28-3850-4e3e-bec4-59c365718294",
+  "prevIds": [
+    "f24e8dd1-7a24-477b-aa01-4294a53c421d"
+  ],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "subscription",
+        "grace_ends_at"
+      ],
+      "writes": [
+        "s|col|public.subscription.grace_ends_at",
+        "n|col|public.subscription.grace_ends_at",
+        "e|col|public.subscription.grace_ends_at"
+      ],
+      "reads": [
+        "n|tbl|public.subscription",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "subscription",
+        "last_charged_at"
+      ],
+      "writes": [
+        "s|col|public.subscription.last_charged_at",
+        "n|col|public.subscription.last_charged_at",
+        "e|col|public.subscription.last_charged_at"
+      ],
+      "reads": [
+        "n|tbl|public.subscription",
+        "n|sch|public"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subscription",
+        "name": "grace_ends_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subscription",
+        "name": "last_charged_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

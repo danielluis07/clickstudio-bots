@@ -155,6 +155,7 @@ describe("Mercado Pago gateway", () => {
       id: 1234567890,
       status: "approved",
       transaction_amount: 99.9,
+      date_created: "2026-12-01T09:59:58.000-03:00",
       date_approved: "2026-12-01T10:00:00.000-03:00",
       external_reference: "tenant",
       point_of_interaction: { transaction_data: { subscription_id: preapproval.id } },
@@ -169,6 +170,7 @@ describe("Mercado Pago gateway", () => {
       id: "1234567890",
       status: "approved",
       amountCents: 9990,
+      createdAt: new Date("2026-12-01T12:59:58Z"),
       approvedAt: new Date("2026-12-01T13:00:00Z"),
       subscriptionId: preapproval.id,
       externalReference: "tenant",
@@ -193,6 +195,43 @@ describe("Mercado Pago gateway", () => {
       paymentId: "1234567890",
     });
     expect(requests[0].url).toBe("https://api.mercadopago.com/authorized_payments/6114264375");
+  });
+
+  test("finds a Subscription's most recent authorized payment, past the first page", async () => {
+    const invoice = (id: number, created: string, paymentId: number | null) => ({
+      id,
+      type: "scheduled",
+      preapproval_id: preapproval.id,
+      date_created: created,
+      payment: paymentId ? { id: paymentId, status: "rejected" } : null,
+    });
+    const { gateway, requests } = gatewayAnswering((request) => {
+      const url = new URL(request.url);
+      if (url.searchParams.get("preapproval_id") === "none")
+        return Response.json({ paging: { offset: 0, limit: 20, total: 0 }, results: [] });
+      return url.searchParams.get("offset") === "5"
+        ? Response.json({
+            paging: { offset: 5, limit: 20, total: 25 },
+            results: [
+              invoice(25, "2027-01-31T12:00:00.000-03:00", 3),
+              invoice(24, "2026-12-31T12:00:00.000-03:00", 2),
+            ],
+          })
+        : Response.json({
+            paging: { offset: 0, limit: 20, total: 25 },
+            results: [invoice(1, "2025-01-31T12:00:00.000-03:00", 1)],
+          });
+    });
+
+    expect(await gateway.fetchLatestAuthorizedPayment(preapproval.id)).toEqual({
+      subscriptionId: preapproval.id,
+      paymentId: "3",
+    });
+    expect(requests.map(({ url }) => url)).toEqual([
+      `https://api.mercadopago.com/authorized_payments/search?preapproval_id=${preapproval.id}`,
+      `https://api.mercadopago.com/authorized_payments/search?preapproval_id=${preapproval.id}&offset=5&limit=20`,
+    ]);
+    expect(await gateway.fetchLatestAuthorizedPayment("none")).toBeNull();
   });
 
   test("refuses an id that could leave its path", async () => {

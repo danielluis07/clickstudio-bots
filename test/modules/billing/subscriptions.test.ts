@@ -44,6 +44,30 @@ const seedMember = async (
 
 const card = { cardToken: "card-token", payerEmail: "pagamentos@sorriso.example" };
 
+// An owner who subscribed during the Trial, now at the Trial end: the day of
+// the first monthly charge (2026-12-31T12:00Z).
+const subscribedAtTrialEnd = async () => {
+  const owner = await seedMember("owner");
+  await billing().launch();
+  await billing().subscribe(owner, card);
+  clock.advance(30 * day);
+  return owner;
+};
+
+// A charge of the Subscription, made now, in Mercado Pago's records.
+const charge = (id: string, status: "approved" | "rejected", amountCents = planAmountCents) =>
+  gateway.payments.set(id, {
+    id,
+    status,
+    amountCents,
+    createdAt: clock.now(),
+    approvedAt: status === "approved" ? clock.now() : null,
+    subscriptionId: "preapproval-1",
+    externalReference: null,
+  });
+
+const suspended = async (scope: TenantScope) => (await billing().status(scope)).suspended;
+
 beforeEach(async () => {
   db = await createTestDatabase();
   clock = createTestClock(new Date("2026-12-01T12:00:00Z"));
@@ -85,6 +109,7 @@ test("an owner on Trial subscribes: the Subscription is active and the first cha
       payerEmail: "pagamentos@sorriso.example",
       amountCents: 9990,
       nextChargeAt: new Date("2026-12-31T12:00:00Z"),
+      graceEndsAt: null,
     },
   });
 
@@ -110,6 +135,7 @@ test("a Suspended owner is charged now, and the suspension ends once Mercado Pag
     id: "payment-1",
     status: "approved",
     amountCents: planAmountCents,
+    createdAt: clock.now(),
     approvedAt: clock.now(),
     subscriptionId: "preapproval-1",
     externalReference: null,
@@ -134,6 +160,7 @@ test("an approved authorized payment ends the suspension too", async () => {
     id: "payment-1",
     status: "approved",
     amountCents: planAmountCents,
+    createdAt: clock.now(),
     approvedAt: clock.now(),
     // The payment itself doesn't name the Subscription; its invoice does.
     subscriptionId: null,
@@ -176,6 +203,7 @@ test("a payment that names only the Tenant ends the suspension", async () => {
     id: "payment-1",
     status: "approved",
     amountCents: planAmountCents,
+    createdAt: clock.now(),
     approvedAt: clock.now(),
     subscriptionId: null,
     externalReference: "tenant",
@@ -195,6 +223,7 @@ test("a charge that doesn't pay for the Plan leaves the Tenant Suspended", async
   const payment = {
     status: "approved",
     amountCents: planAmountCents,
+    createdAt: new Date(suspendedAt.getTime() + 60_000),
     approvedAt: new Date(suspendedAt.getTime() + 60_000),
     subscriptionId: "preapproval-1",
     externalReference: null,
@@ -240,6 +269,227 @@ test("a preapproval notification stores Mercado Pago's current state, and an old
   await billing().receiveNotification({ type: "subscription_preapproval", id: "someone-else" });
   await billing().receiveNotification({ type: "merchant_order", id: "1" });
   expect(await billing().checkout(owner)).toMatchObject({ subscription: { status: "cancelled" } });
+});
+
+test("a failed charge starts a 7-day Grace period: the Bot keeps replying, and the sweep Suspends once it ends unpaid", async () => {
+  const owner = await subscribedAtTrialEnd();
+
+  charge("payment-1", "rejected");
+  await billing().receiveNotification({ type: "payment", id: "payment-1" });
+  expect(await billing().checkout(owner)).toMatchObject({
+    subscription: { active: true, graceEndsAt: new Date("2027-01-07T12:00:00Z") },
+  });
+
+  clock.advance(7 * day - 1);
+  await billing().sweep();
+  expect(await suspended(owner)).toBe(false);
+
+  clock.advance(1);
+  await billing().sweep();
+  expect(await suspended(owner)).toBe(true);
+});
+
+test("a successful retry within the Grace period clears it, and replaying the refusal doesn't start it again", async () => {
+  const owner = await subscribedAtTrialEnd();
+  charge("refused", "rejected");
+  await billing().receiveNotification({ type: "payment", id: "refused" });
+
+  clock.advance(3 * day);
+  charge("retry", "approved");
+  await billing().receiveNotification({ type: "payment", id: "retry" });
+  expect(await billing().checkout(owner)).toMatchObject({ subscription: { graceEndsAt: null } });
+
+  await billing().receiveNotification({ type: "payment", id: "refused" });
+  expect(await billing().checkout(owner)).toMatchObject({ subscription: { graceEndsAt: null } });
+  clock.advance(5 * day);
+  await billing().sweep();
+  expect(await suspended(owner)).toBe(false);
+});
+
+test("a refused card check, or a refusal while Suspended, starts no Grace period", async () => {
+  const owner = await subscribedAtTrialEnd();
+  charge("card-check", "rejected", 100);
+  await billing().receiveNotification({ type: "payment", id: "card-check" });
+  expect(await billing().checkout(owner)).toMatchObject({ subscription: { graceEndsAt: null } });
+
+  // Suspended after a first Grace period, the next refusal changes nothing.
+  charge("refused", "rejected");
+  await billing().receiveNotification({ type: "payment", id: "refused" });
+  clock.advance(7 * day);
+  await billing().sweep();
+  expect(await suspended(owner)).toBe(true);
+  const { subscription } = (await billing().checkout(owner)) as {
+    subscription: { graceEndsAt: Date };
+  };
+  charge("refused-again", "rejected");
+  await billing().receiveNotification({ type: "payment", id: "refused-again" });
+  expect(await billing().checkout(owner)).toMatchObject({
+    subscription: { graceEndsAt: subscription.graceEndsAt },
+  });
+
+  // A late successful retry ends both.
+  clock.advance(day);
+  charge("late", "approved");
+  await billing().receiveNotification({ type: "payment", id: "late" });
+  expect(await suspended(owner)).toBe(false);
+  expect(await billing().checkout(owner)).toMatchObject({ subscription: { graceEndsAt: null } });
+});
+
+test("a failed charge reported through its authorized payment starts the Grace period too", async () => {
+  const owner = await subscribedAtTrialEnd();
+  charge("refused", "rejected");
+  gateway.payments.get("refused")!.subscriptionId = null;
+  gateway.authorizedPayments.set("invoice-1", {
+    subscriptionId: "preapproval-1",
+    paymentId: "refused",
+  });
+
+  await billing().receiveNotification({ type: "subscription_authorized_payment", id: "invoice-1" });
+  expect(await billing().checkout(owner)).toMatchObject({
+    subscription: { graceEndsAt: new Date("2027-01-07T12:00:00Z") },
+  });
+});
+
+test("a Subscription Mercado Pago cancels during the Grace period keeps the Bot until it ends", async () => {
+  const owner = await subscribedAtTrialEnd();
+  charge("refused", "rejected");
+  await billing().receiveNotification({ type: "payment", id: "refused" });
+
+  clock.advance(5 * day);
+  gateway.subscriptions.set("preapproval-1", {
+    ...gateway.subscriptions.get("preapproval-1")!,
+    status: "cancelled",
+    modifiedAt: clock.now(),
+  });
+  await billing().receiveNotification({ type: "subscription_preapproval", id: "preapproval-1" });
+  await billing().sweep();
+  expect(await suspended(owner)).toBe(false);
+
+  clock.advance(2 * day);
+  await billing().sweep();
+  expect(await suspended(owner)).toBe(true);
+});
+
+test("with the failure's webhook dropped, the sweep finds the refused charge and starts the Grace period", async () => {
+  const owner = await subscribedAtTrialEnd();
+  charge("refused", "rejected");
+  gateway.authorizedPayments.set("invoice-1", {
+    subscriptionId: "preapproval-1",
+    paymentId: "refused",
+  });
+
+  clock.advance(30 * 60_000);
+  await billing().sweep();
+  expect(await billing().checkout(owner)).toMatchObject({
+    subscription: { graceEndsAt: new Date("2027-01-07T12:00:00Z") },
+  });
+  expect(await suspended(owner)).toBe(false);
+});
+
+test("with the retry's webhook dropped, the sweep sees the charge and clears the Grace period", async () => {
+  const owner = await subscribedAtTrialEnd();
+  charge("refused", "rejected");
+  await billing().receiveNotification({ type: "payment", id: "refused" });
+
+  clock.advance(3 * day);
+  charge("retry", "approved");
+  gateway.authorizedPayments.set("invoice-1", { subscriptionId: "preapproval-1", paymentId: "retry" });
+  gateway.subscriptions.set("preapproval-1", {
+    ...gateway.subscriptions.get("preapproval-1")!,
+    nextChargeAt: new Date("2027-01-31T12:00:00Z"),
+    lastCharge: { at: clock.now(), amountCents: planAmountCents },
+    modifiedAt: clock.now(),
+  });
+  await billing().sweep();
+  expect(await billing().checkout(owner)).toMatchObject({
+    subscription: { graceEndsAt: null, nextChargeAt: new Date("2027-01-31T12:00:00Z") },
+  });
+
+  clock.advance(5 * day);
+  await billing().sweep();
+  expect(await suspended(owner)).toBe(false);
+});
+
+test("with the cancellation's webhook dropped, the sweep stores Mercado Pago's status and Suspends once the Grace period ends", async () => {
+  const owner = await subscribedAtTrialEnd();
+  charge("refused", "rejected");
+  await billing().receiveNotification({ type: "payment", id: "refused" });
+
+  clock.advance(7 * day);
+  gateway.subscriptions.set("preapproval-1", {
+    ...gateway.subscriptions.get("preapproval-1")!,
+    status: "cancelled",
+    modifiedAt: clock.now(),
+  });
+  await billing().sweep();
+  expect(await billing().checkout(owner)).toMatchObject({
+    subscription: { status: "cancelled" },
+  });
+  expect(await suspended(owner)).toBe(true);
+});
+
+test("the sweep fetches only Subscriptions with a charge due or a Grace period", async () => {
+  const fetched: string[] = [];
+  const fetchSubscription = gateway.fetchSubscription;
+  gateway.fetchSubscription = async (id) => {
+    fetched.push(id);
+    return fetchSubscription(id);
+  };
+  const owner = await seedMember("owner");
+  await billing().launch();
+  await billing().subscribe(owner, card);
+
+  // On Trial, the first charge is weeks away.
+  await billing().sweep();
+  expect(fetched).toEqual([]);
+
+  // Charged, the next charge is a month away.
+  clock.advance(30 * day);
+  await billing().sweep();
+  expect(fetched).toEqual(["preapproval-1"]);
+  gateway.subscriptions.set("preapproval-1", {
+    ...gateway.subscriptions.get("preapproval-1")!,
+    nextChargeAt: new Date("2027-01-31T12:00:00Z"),
+    lastCharge: { at: clock.now(), amountCents: planAmountCents },
+    modifiedAt: clock.now(),
+  });
+  clock.advance(30 * 60_000);
+  await billing().sweep();
+  await billing().sweep();
+  expect(fetched).toEqual(["preapproval-1", "preapproval-1"]);
+
+  // Cancelled, it is never charged again.
+  gateway.subscriptions.set("preapproval-1", {
+    ...gateway.subscriptions.get("preapproval-1")!,
+    status: "cancelled",
+    modifiedAt: clock.now(),
+  });
+  await billing().receiveNotification({ type: "subscription_preapproval", id: "preapproval-1" });
+  fetched.length = 0;
+  clock.advance(40 * day);
+  await billing().sweep();
+  expect(fetched).toEqual([]);
+});
+
+test("with Mercado Pago down, the sweep still Suspends and then reports the failure", async () => {
+  const owner = await subscribedAtTrialEnd();
+  gateway.fetchSubscription = async () => {
+    throw new Error("Mercado Pago is down");
+  };
+  // Trial ended, no Subscription: Suspended despite Mercado Pago being down.
+  await db.insert(organization).values({
+    id: "other",
+    name: "Outra",
+    slug: "other",
+    trialEndsAt: clock.now(),
+  });
+  await db.insert(user).values({ id: "other-owner", name: "Dona", email: "dona@outra.example" });
+  await db.insert(member).values({ organizationId: "other", userId: "other-owner", role: "owner" });
+  const other = (await resolveTenantScope(db, { userId: "other-owner" }))!;
+
+  await expect(billing().sweep()).rejects.toThrow("Mercado Pago is down");
+  expect(await suspended(owner)).toBe(false);
+  expect(await suspended(other)).toBe(true);
 });
 
 test("admins and members can't open the billing page or subscribe", async () => {

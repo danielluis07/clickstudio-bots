@@ -185,11 +185,15 @@ with one `INSERT ... ON CONFLICT (tenant_id) DO UPDATE ... WHERE status =
 the Tenant row (rank 2), and a conflict locks the Tenant's `subscription` row
 (rank 4); the statement holds nothing else and ends at once. Of two subscribes
 at once, the second waits for the first's row and then skips it, and its
-`preapproval` is cancelled after the statement. A Mercado Pago notification
-writes with single `UPDATE`s outside any transaction: the `subscription` row
-(rank 4), then, for an approved charge, the one Tenant row's `suspended_at`
-(rank 2), never both at once. Tenant deletion cascades into `subscription`
-under the Tenant row it already holds `for update`.
+`preapproval` is cancelled after the statement. A Mercado Pago notification, and
+the sweep's reconciliation of each Subscription it re-reads, write with
+single `UPDATE`s outside any transaction, after the Mercado Pago call that
+fed them: the `subscription` row (rank 4: its state, its Grace period, its
+last charge), then, for an approved charge, the one Tenant row's
+`suspended_at` (rank 2), never both at once. Starting a Grace period reads
+the Tenant row's `suspended_at` in a subquery, which takes no row lock.
+Tenant deletion cascades into `subscription` under the Tenant row it already
+holds `for update`.
 
 ## Every lock
 

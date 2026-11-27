@@ -12,6 +12,7 @@ export type TestSubscriptionGateway = SubscriptionGateway & {
   // Mercado Pago's own records, which tests change to simulate its side.
   subscriptions: Map<string, ProviderSubscription>;
   payments: Map<string, ProviderPayment>;
+  // In the order Mercado Pago made them.
   authorizedPayments: Map<string, { subscriptionId: string; paymentId: string | null }>;
   rejectNext(): void;
 };
@@ -73,5 +74,12 @@ export const createTestSubscriptionGateway = (clock: Clock): TestSubscriptionGat
     },
     fetchPayment: async (id) => found(payments, id),
     fetchAuthorizedPayment: async (id) => found(authorizedPayments, id),
+    // The one added last is the most recent.
+    async fetchLatestAuthorizedPayment(subscriptionId) {
+      const charges = [...authorizedPayments.values()].filter(
+        (charge) => charge.subscriptionId === subscriptionId,
+      );
+      return charges.length ? structuredClone(charges[charges.length - 1]) : null;
+    },
   };
 };

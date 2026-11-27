@@ -272,10 +272,14 @@ the alerts matter most then. Each run:
    [health](whatsapp-setup.md#channel-health), with the Tenant and the state
    as `operation`. For `credential_rejected` and `removed`, ask the owner to
    reconnect; for `banned` and `restricted`, the owner appeals to Meta.
-4. Enforces billing (`enforce-billing`): Suspends every Tenant whose Trial
-   has ended without an active Subscription, so its Bot stops replying. With
-   billing off it Suspends nobody and lifts any suspension. See
-   [Billing](billing.md).
+4. Enforces billing (`enforce-billing`): first re-checks with Mercado Pago
+   the active Subscriptions whose charge is due or that have a Grace period,
+   so a lost webhook doesn't leave a status wrong. Then Suspends every Tenant
+   whose Trial has ended without an active Subscription, or whose Grace
+   period ended with the charge unpaid, so its Bot stops replying. If
+   Mercado Pago is unreachable it still Suspends from what is stored and the
+   task is reported as failed. With billing off it Suspends nobody, lifts any
+   suspension and calls nothing. See [Billing](billing.md).
 5. Re-enqueues up to 100 inbox events still `pending` five minutes after they
    were received, oldest first. An event whose job already failed waits until
    35 minutes after its last failure or replay, so QStash's own retries come

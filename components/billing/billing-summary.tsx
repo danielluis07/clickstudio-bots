@@ -19,7 +19,9 @@ export function BillingSummary({ checkout }: { checkout: BillingCheckout }) {
         <StatTile
           label="Assinatura"
           value={billingSubscriptionStatusLabel(subscription.status)}
-          caption={`Recibos para ${subscription.payerEmail}`}
+          caption={
+            suspended ? "O Bot parou de responder" : `Recibos para ${subscription.payerEmail}`
+          }
         />
       ) : (
         <StatTile
@@ -28,7 +30,13 @@ export function BillingSummary({ checkout }: { checkout: BillingCheckout }) {
           caption={suspended ? "O Bot parou de responder" : undefined}
         />
       )}
-      {subscription?.active && subscription.nextChargeAt ? (
+      {subscription?.graceEndsAt && !suspended ? (
+        <StatTile
+          label="Bot ativo até"
+          value={formatDate(subscription.graceEndsAt)}
+          caption="A cobrança foi recusada. O Mercado Pago vai tentar de novo."
+        />
+      ) : subscription?.active && subscription.nextChargeAt ? (
         <StatTile label="Próxima cobrança" value={formatDate(subscription.nextChargeAt)} />
       ) : (
         <StatTile

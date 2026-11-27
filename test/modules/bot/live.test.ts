@@ -1262,6 +1262,7 @@ test("a Suspended owner subscribes, and its Bot answers again once Mercado Pago 
     id: "payment-1",
     status: "approved",
     amountCents: planAmountCents,
+    createdAt: clock.now(),
     approvedAt: clock.now(),
     subscriptionId: "preapproval-1",
     externalReference: null,

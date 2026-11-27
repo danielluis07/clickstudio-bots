@@ -23,6 +23,9 @@ export type ProviderPayment = {
   // The provider's own: `approved`, `rejected`, `refunded`, …
   status: string;
   amountCents: number;
+  // When the charge was attempted: a `rejected` one starts the Grace period
+  // from here.
+  createdAt: Date;
   approvedAt: Date | null;
   // The Subscription the payment charged, when the payment names it.
   subscriptionId: string | null;
@@ -58,4 +61,10 @@ export type SubscriptionGateway = {
   fetchPayment(id: string): Promise<ProviderPayment>;
   // One monthly charge of a Subscription, and the payment that settled it.
   fetchAuthorizedPayment(id: string): Promise<{ subscriptionId: string; paymentId: string | null }>;
+  // A Subscription's most recent monthly charge and its latest payment, or
+  // null before the first. The sweep reads it to recover a lost payment
+  // notification.
+  fetchLatestAuthorizedPayment(
+    subscriptionId: string,
+  ): Promise<{ subscriptionId: string; paymentId: string | null } | null>;
 };
