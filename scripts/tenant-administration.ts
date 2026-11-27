@@ -35,12 +35,18 @@ try {
     { createTenantLifecycle, createTenantExport },
     { systemClock },
     { createWhatsAppGateway },
+    { createBilling },
+    { createMercadoPagoGateway },
+    { env },
   ] = await Promise.all([
     import("@/db"),
     import("@/modules/identity"),
     import("@/modules/tenancy"),
     import("@/platform/clock"),
     import("@/server/whatsapp"),
+    import("@/modules/billing"),
+    import("@/platform/mercado-pago"),
+    import("@/platform/env"),
   ]);
   const actor = await createUserRepository(db).findByEmail(adminEmail.trim().toLowerCase());
   if (!actor) {
@@ -54,6 +60,31 @@ try {
       console.error(errorMessages[result.error]);
       process.exit(1);
     }
+    // A canceled Tenant is never charged again (ADR 0012). The sweep retries
+    // whatever Mercado Pago doesn't cancel now.
+    const subscriptionCancelled =
+      operation !== "cancel" ||
+      !env.MERCADO_PAGO_ACCESS_TOKEN ||
+      (await createBilling({
+        db,
+        clock: systemClock,
+        enabled: env.BILLING_ENABLED,
+        subscriptions: {
+          gateway: createMercadoPagoGateway({
+            accessToken: env.MERCADO_PAGO_ACCESS_TOKEN,
+          }),
+          appUrl: env.APP_URL,
+        },
+      })
+        .cancelForCanceledTenants()
+        .then(
+          () => true,
+          () => false,
+        ));
+    if (!subscriptionCancelled)
+      console.error(
+        "O cancelamento da assinatura no Mercado Pago falhou. A varredura tenta de novo a cada 30 minutos.",
+      );
     if ("channelDisconnected" in result && !result.channelDisconnected) {
       console.error(
         "Cancelamento registrado e Bot interrompido. A desconexão na Meta falhou; repita o comando ou aguarde a tarefa diária.",
@@ -65,6 +96,7 @@ try {
         ? "Cancelamento registrado. Os dados serão excluídos após 30 dias."
         : "Negócio reativado com os dados e as configurações preservados.",
     );
+    if (!subscriptionCancelled) process.exit(2);
   } else {
     const result = await createTenantExport(dependencies).export(
       actor.id,

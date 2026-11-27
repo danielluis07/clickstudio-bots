@@ -3,7 +3,11 @@ import type { Database } from "@/db/database";
 import { member, organization, user } from "@/db/schema";
 import { createBilling, type Billing } from "@/modules/billing";
 import { resolveTenantScope, type TenantScope } from "@/modules/tenancy";
-import { createChangeCardAction, createSubscribeAction } from "@/server/billing-subscription";
+import {
+  createCancelSubscriptionAction,
+  createChangeCardAction,
+  createSubscribeAction,
+} from "@/server/billing-subscription";
 import { createTestClock } from "@/test/support/clock";
 import { closeTestDatabase, createTestDatabase } from "@/test/support/database";
 import { createTestDiagnostics } from "@/test/support/diagnostics";
@@ -207,4 +211,75 @@ test("an unreachable Mercado Pago during a card change is reported and the owner
     message: "Não foi possível falar com o Mercado Pago agora. Tente de novo em alguns minutos.",
   });
   expect(diagnostics.alerts.map(({ kind }) => kind)).toEqual(["billing_change_card_failed"]);
+});
+
+const cancelAs = (scope: TenantScope, diagnostics = createTestDiagnostics()) =>
+  createCancelSubscriptionAction({
+    billing,
+    requireTenantScope: async () => scope,
+    diagnostics,
+  });
+
+test("cancelling authenticates first", async () => {
+  const action = createCancelSubscriptionAction({
+    billing,
+    requireTenantScope: async () => {
+      throw new Error("Unauthorized");
+    },
+  });
+  await expect(action()).rejects.toThrow("Unauthorized");
+});
+
+test("an owner who cancels is told the date the Bot stops, and subscribing again waits for it", async () => {
+  const owner = await seedMember("owner");
+  await actionAs(owner)(card);
+  clock.advance(10 * day);
+
+  expect(await cancelAs(owner)()).toEqual({
+    status: "success",
+    message:
+      "Assinatura cancelada. O Mercado Pago não cobra mais o cartão, e o Bot continua respondendo até 31/12/2026.",
+  });
+});
+
+test("subscribing again within the month already paid for says the first charge waits for its end", async () => {
+  const owner = await seedMember("owner");
+  await actionAs(owner)(card);
+  clock.advance(30 * day);
+  gateway.runCharges();
+  clock.advance(10 * day);
+  await cancelAs(owner)();
+
+  expect(await actionAs(owner)(card)).toEqual({
+    status: "success",
+    message:
+      "Assinatura feita. A primeira cobrança será em 31/01/2027, quando termina o mês já pago.",
+  });
+});
+
+test("cancelling refusals come back in pt-BR", async () => {
+  const owner = await seedMember("owner");
+  expect(await cancelAs(owner)()).toEqual({
+    status: "error",
+    message: "Este negócio não tem uma assinatura para cancelar.",
+  });
+  await actionAs(owner)(card);
+  expect(await cancelAs(await seedMember("member"))()).toEqual({
+    status: "error",
+    message: "Apenas o responsável pelo negócio pode cancelar a assinatura.",
+  });
+});
+
+test("an unreachable Mercado Pago while cancelling is reported and the owner asked to try again", async () => {
+  const owner = await seedMember("owner");
+  await actionAs(owner)(card);
+  const diagnostics = createTestDiagnostics();
+  gateway.updateSubscription = async () => {
+    throw new Error("Mercado Pago unavailable");
+  };
+  expect(await cancelAs(owner, diagnostics)()).toEqual({
+    status: "error",
+    message: "Não foi possível falar com o Mercado Pago agora. Tente de novo em alguns minutos.",
+  });
+  expect(diagnostics.alerts.map(({ kind }) => kind)).toEqual(["billing_cancel_failed"]);
 });

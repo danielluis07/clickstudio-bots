@@ -267,6 +267,12 @@ export const sweepRoute = createSweepRoute({
     // Before the Bot's own recovery, so a Tenant whose Trial just ended gets
     // no stranded turn re-enqueued in the same run.
     { name: "enforce-billing", run: () => billing.sweep() },
+    // With billing on or off: retries what the cancel command couldn't
+    // cancel at Mercado Pago.
+    {
+      name: "cancel-canceled-tenant-subscriptions",
+      run: () => billing.cancelForCanceledTenants(),
+    },
     { name: "requeue-inbox-events", run: async () => webhookInbox?.requeueStalled() },
     { name: "retry-failed-inbox-events", run: async () => webhookInbox?.retryFailed() },
     { name: "sweep-bot-turns", run: async () => liveBot?.sweep() },

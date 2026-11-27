@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, isNull, lt, lte, notExists, or, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lt, lte, ne, notExists, or, sql } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import { organization, subscription } from "@/db/schema";
 import { isPlatformAdmin } from "@/modules/identity";
@@ -34,8 +34,9 @@ export const hasActiveSubscription = sql<boolean>`exists(
 )`;
 
 // Whether the Tenant row's Tenant pays for the Plan at `now`: its
-// Subscription is active with no charge overdue, or a failed charge's Grace
-// period is still running. A Subscription Mercado Pago cancels or pauses once
+// Subscription is active with no charge overdue, a failed charge's Grace
+// period is still running, or it was cancelled by us with part of the month
+// already paid for left. A Subscription Mercado Pago cancels or pauses once
 // its retries are used up pays for nothing after its Grace period. For
 // statements on `organization`.
 export const paysForPlan = (now: Date) => sql<boolean>`exists(
@@ -43,6 +44,7 @@ export const paysForPlan = (now: Date) => sql<boolean>`exists(
   where ${subscription.tenantId} = ${organization.id} and (
     ${subscription.graceEndsAt} > ${now.toISOString()}::timestamptz
     or (${subscription.status} = ${activeStatus} and ${subscription.graceEndsAt} is null)
+    or (${subscription.status} = ${cancelledStatus} and ${subscription.paidUntil} > ${now.toISOString()}::timestamptz)
   )
 )`;
 
@@ -104,10 +106,32 @@ export const createSubscriptions = ({
   const canSubscribeOver = (stored: { status: string } | null) =>
     !stored || stored.status === cancelledStatus;
 
-  // Mercado Pago may still charge any Subscription that isn't cancelled, so
-  // its card can be changed, a paused one included.
-  const canChangeCardOf = (stored: { status: string } | null) =>
+  // Mercado Pago may still charge any Subscription that isn't cancelled, a
+  // paused one included, so its card can be changed and it can be cancelled.
+  const mayStillCharge = (stored: { status: string } | null) =>
     Boolean(stored) && stored!.status !== cancelledStatus;
+
+  // Until when the Tenant's Bot replies, as the owner should read it: for a
+  // cancelled Subscription, the end of the month already paid for or of its
+  // Grace period; for one still charged, the date it would be if cancelled
+  // now. Null once that is past or the Tenant is Suspended. Matches what
+  // `cancelKeepingPaidPeriod` stores and `paysForPlan` honours.
+  const botActiveUntil = (
+    stored: {
+      status: string;
+      nextChargeAt: Date | null;
+      graceEndsAt: Date | null;
+      paidUntil: Date | null;
+    },
+    suspended: boolean,
+  ) => {
+    if (suspended) return null;
+    const end =
+      stored.status === cancelledStatus
+        ? (stored.paidUntil ?? stored.graceEndsAt)
+        : (stored.graceEndsAt ?? stored.nextChargeAt);
+    return end && end > clock.now() ? end : null;
+  };
 
   // One of our Subscriptions, found by Mercado Pago's id or by its Tenant.
   // Another preapproval on the account matches nothing.
@@ -243,6 +267,32 @@ export const createSubscriptions = ({
   // only when nothing else is.
   const cancel = (id: string) => config!.gateway.updateSubscription(id, { status: "cancelled" });
 
+  // Cancels one of our Subscriptions at Mercado Pago, so it is never charged
+  // again, keeping what is already paid for. It re-reads Mercado Pago first,
+  // so a charge whose notification was lost still counts, and records the
+  // next charge date as the end of the Trial or of the month already paid
+  // for. With a charge overdue nothing is paid for, and the Grace period
+  // decides, and a Suspended Tenant has nothing paid for either. One Mercado
+  // Pago already cancelled is left as it is. `paid_until` is written before
+  // Mercado Pago is called and kept if the call fails: it counts only once
+  // the status is cancelled, so neither the cancellation's own notification
+  // nor a call that timed out after Mercado Pago cancelled loses the paid
+  // month. A cancel tried again recomputes it.
+  const cancelKeepingPaidPeriod = async (mercadoPagoId: string) => {
+    const current = await config!.gateway.fetchSubscription(mercadoPagoId);
+    await applySubscription(current);
+    if (current.status === cancelledStatus) return;
+    const ours = eq(subscription.mercadoPagoId, mercadoPagoId);
+    const [stored] = await db
+      .select({ graceEndsAt: subscription.graceEndsAt, suspendedAt: organization.suspendedAt })
+      .from(subscription)
+      .innerJoin(organization, eq(organization.id, subscription.tenantId))
+      .where(ours);
+    const paidUntil = stored?.graceEndsAt || stored?.suspendedAt ? null : current.nextChargeAt;
+    await db.update(subscription).set({ paidUntil }).where(ours);
+    await applySubscription(await cancel(mercadoPagoId));
+  };
+
   return {
     canManage,
 
@@ -250,15 +300,19 @@ export const createSubscriptions = ({
     async checkout(scope: TenantScope) {
       if (!(await canManage(scope))) return forbidden;
       const stored = await storedSubscription(scope.tenantId);
+      const state = await tenantState(scope.tenantId);
+      const cancelled = stored?.status === cancelledStatus;
       return {
         ok: true as const,
         planAmountCents,
-        ...(await tenantState(scope.tenantId)),
+        ...state,
         available: Boolean(config),
         // Whether the card form shows.
         canSubscribe: canSubscribeOver(stored),
         // Whether "Alterar cartão" shows.
-        canChangeCard: canChangeCardOf(stored),
+        canChangeCard: mayStillCharge(stored),
+        // Whether "Cancelar assinatura" shows.
+        canCancel: mayStillCharge(stored),
         subscription: stored && {
           active: stored.status === activeStatus,
           status: stored.status,
@@ -268,6 +322,12 @@ export const createSubscriptions = ({
           // Set while a failed charge is overdue: the Bot stops on this date
           // unless a charge succeeds first.
           graceEndsAt: stored.graceEndsAt,
+          // Set once cancelled by the owner: the end of the Trial or of the
+          // month already paid for.
+          paidUntil: cancelled ? stored.paidUntil : null,
+          // Until when the Bot replies once cancelled (or would, if cancelled
+          // now), or null.
+          botActiveUntil: botActiveUntil(stored, state.suspended),
           // The card that pays, or null when nothing is known of it.
           card:
             stored.cardBrand || stored.cardLastFour
@@ -284,11 +344,19 @@ export const createSubscriptions = ({
     async subscribe(scope: TenantScope, card: BrickCard & { payerEmail: string }) {
       if (!(await canManage(scope))) return forbidden;
       if (!config) return { ok: false as const, error: "unavailable" as const };
-      if (!canSubscribeOver(await storedSubscription(scope.tenantId)))
+      const previous = await storedSubscription(scope.tenantId);
+      if (!canSubscribeOver(previous))
         return { ok: false as const, error: "already_subscribed" as const };
 
+      // The first charge waits for the Trial end, or for the end of the month
+      // a cancelled Subscription already paid for, so nothing is charged twice.
       const { trialEndsAt, suspended } = await tenantState(scope.tenantId);
-      const startDate = !suspended && trialEndsAt && trialEndsAt > clock.now() ? trialEndsAt : null;
+      const ahead = (date: Date | null | undefined) =>
+        !suspended && date && date > clock.now() ? date : null;
+      const trialEnd = ahead(trialEndsAt);
+      const paidEnd = ahead(previous?.paidUntil);
+      const afterPaidMonth = Boolean(paidEnd && (!trialEnd || paidEnd > trialEnd));
+      const startDate = afterPaidMonth ? paidEnd : trialEnd;
       const created = await config.gateway.createSubscription({
         cardToken: card.cardToken,
         payerEmail: card.payerEmail,
@@ -316,6 +384,7 @@ export const createSubscriptions = ({
         providerModifiedAt: provider.modifiedAt,
         graceEndsAt: null,
         lastChargedAt: null,
+        paidUntil: null,
         cardBrand: provider.cardBrand,
         cardLastFour: card.lastFourDigits ?? null,
       };
@@ -340,7 +409,14 @@ export const createSubscriptions = ({
         await cancel(provider.id);
         return { ok: false as const, error: "already_subscribed" as const };
       }
-      return { ok: true as const, firstChargeAt: startDate, suspended };
+      return {
+        ok: true as const,
+        firstChargeAt: startDate,
+        // Whether the first charge waits for the month already paid for,
+        // rather than for the Trial end.
+        afterPaidMonth,
+        suspended,
+      };
     },
 
     // "Alterar cartão": the owner's new card from the Brick replaces the one
@@ -353,7 +429,7 @@ export const createSubscriptions = ({
       if (!(await canManage(scope))) return forbidden;
       if (!config) return { ok: false as const, error: "unavailable" as const };
       const stored = await storedSubscription(scope.tenantId);
-      if (!stored || !canChangeCardOf(stored))
+      if (!stored || !mayStillCharge(stored))
         return { ok: false as const, error: "no_subscription" as const };
 
       const changed = await config.gateway.changeCard(stored.mercadoPagoId, {
@@ -371,6 +447,50 @@ export const createSubscriptions = ({
       await applySubscription(changed.subscription);
       const after = await storedSubscription(scope.tenantId);
       return { ok: true as const, overdue: Boolean(after?.graceEndsAt) };
+    },
+
+    // The owner cancels the Subscription. Mercado Pago never charges it again,
+    // and the Tenant keeps its Bot until the end of the Trial or of the month
+    // already paid for (no refunds for part of a month), or of a running
+    // Grace period, and is then Suspended by the sweep. `endsAt` is that
+    // date, or null when the Bot has already stopped.
+    async cancelSubscription(scope: TenantScope) {
+      if (!(await canManage(scope))) return forbidden;
+      if (!config) return { ok: false as const, error: "unavailable" as const };
+      const stored = await storedSubscription(scope.tenantId);
+      if (!stored || stored.status === cancelledStatus)
+        return { ok: false as const, error: "no_subscription" as const };
+
+      await cancelKeepingPaidPeriod(stored.mercadoPagoId);
+      const after = await storedSubscription(scope.tenantId);
+      const { suspended } = await tenantState(scope.tenantId);
+      return { ok: true as const, endsAt: after && botActiveUntil(after, suspended) };
+    },
+
+    // A canceled Tenant (`organization.canceled_at`) is never charged again:
+    // its Subscription is cancelled at Mercado Pago, keeping the paid period
+    // in case the Tenant is reactivated. Run by the cancel command right away
+    // and by every sweep, with billing on or off, so one Mercado Pago failed
+    // to cancel is retried, not dropped. Like `reconcile`, the first failure
+    // ends the run and is rethrown, and the ones tried longest ago go first.
+    // Returns how many it cancelled.
+    async cancelForCanceledTenants() {
+      if (!config) return 0;
+      const due = await db
+        .select({ mercadoPagoId: subscription.mercadoPagoId })
+        .from(subscription)
+        .innerJoin(organization, eq(organization.id, subscription.tenantId))
+        .where(and(isNotNull(organization.canceledAt), ne(subscription.status, cancelledStatus)))
+        .orderBy(sql`${subscription.reconciledAt} asc nulls first`, asc(subscription.id))
+        .limit(reconcileBatch);
+      for (const { mercadoPagoId } of due) {
+        await db
+          .update(subscription)
+          .set({ reconciledAt: clock.now() })
+          .where(eq(subscription.mercadoPagoId, mercadoPagoId));
+        await cancelKeepingPaidPeriod(mercadoPagoId);
+      }
+      return due.length;
     },
 
     // A verified Mercado Pago notification. The body is only a signal: the

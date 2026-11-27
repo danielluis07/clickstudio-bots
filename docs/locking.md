@@ -196,6 +196,12 @@ the Tenant row's `suspended_at` in a subquery, which takes no row lock.
 Changing the card (`changeCard`) also calls Mercado Pago first, then writes
 the `subscription` row's card with one `UPDATE` outside any transaction, then
 applies the returned state as a notification would.
+Cancelling (`cancelSubscription`, and `cancelForCanceledTenants` for canceled
+Tenants) re-reads and applies the `preapproval` as a notification would, then
+writes the `subscription` row's `paid_until` (and, for canceled Tenants,
+`reconciled_at`) with single `UPDATE`s outside any transaction, then calls
+Mercado Pago and applies the returned state. The canceled-Tenant query joins
+`organization` without locking it.
 Tenant deletion cascades into `subscription` under the Tenant row it already
 holds `for update`.
 

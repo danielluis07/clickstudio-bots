@@ -1,4 +1,5 @@
 import { BillingGuidance } from "@/components/billing/billing-guidance";
+import { CancelSubscription } from "@/components/billing/cancel-subscription";
 import { BillingSummary } from "@/components/billing/billing-summary";
 import { SubscribeForm } from "@/components/billing/subscribe-form";
 import { SubscriptionCardSection } from "@/components/billing/subscription-card-section";
@@ -43,6 +44,9 @@ export function BillingOverview({
             subscription={checkout.subscription}
             publicKey={checkout.available ? publicKey : null}
           />
+        )}
+        {checkout.canCancel && checkout.available && checkout.subscription && (
+          <CancelSubscription botActiveUntil={checkout.subscription.botActiveUntil} />
         )}
       </div>
     </DashboardPage>
