@@ -41,6 +41,9 @@ const preapprovalSchema = z.object({
     })
     .nullish(),
   last_modified: z.string().min(1),
+  // The card's brand (`visa`, `master`, …). The preapproval reference
+  // returns no last digits of the card.
+  payment_method_id: z.string().nullish(),
 });
 
 const paymentSchema = z.object({
@@ -85,7 +88,14 @@ const toSubscription = (body: unknown) => {
         ? { at: lastChargedAt, amountCents: centsOf(lastChargedAmount) }
         : null,
     modifiedAt: new Date(preapproval.last_modified),
+    cardBrand: preapproval.payment_method_id || null,
   };
+};
+
+// A 4xx is Mercado Pago refusing the card or the request.
+const isRefusal = (error: unknown) => {
+  const status = error instanceof MercadoPagoRequestError ? error.httpStatus : undefined;
+  return Boolean(status && status >= 400 && status < 500);
 };
 
 // Subscriptions (`preapproval`) and the payments that settle them, on Mercado
@@ -147,10 +157,7 @@ export const createMercadoPagoGateway = ({
         });
         return { ok: true as const, subscription: toSubscription(created) };
       } catch (error) {
-        // A 4xx is Mercado Pago refusing the card or the request.
-        const status = error instanceof MercadoPagoRequestError ? error.httpStatus : undefined;
-        if (status && status >= 400 && status < 500)
-          return { ok: false as const, error: "rejected" as const };
+        if (isRefusal(error)) return { ok: false as const, error: "rejected" as const };
         throw error;
       }
     },
@@ -159,13 +166,25 @@ export const createMercadoPagoGateway = ({
       return toSubscription(await call("GET", `/preapproval/${resourceId(id)}`));
     },
 
-    async updateSubscription(id: string, change: { status?: "cancelled"; cardToken?: string }) {
+    async updateSubscription(id: string, change: { status: "cancelled" }) {
       return toSubscription(
-        await call("PUT", `/preapproval/${resourceId(id)}`, {
-          ...(change.status ? { status: change.status } : {}),
-          ...(change.cardToken ? { card_token_id: change.cardToken } : {}),
-        }),
+        await call("PUT", `/preapproval/${resourceId(id)}`, { status: change.status }),
       );
+    },
+
+    // "Alterar cartão do meio de pagamento primário": a PUT with the new
+    // `card_token_id`. `status: "authorized"` reactivates a paused one.
+    async changeCard(id: string, change: { cardToken: string; resume: boolean }) {
+      try {
+        const changed = await call("PUT", `/preapproval/${resourceId(id)}`, {
+          card_token_id: change.cardToken,
+          ...(change.resume ? { status: "authorized" } : {}),
+        });
+        return { ok: true as const, subscription: toSubscription(changed) };
+      } catch (error) {
+        if (isRefusal(error)) return { ok: false as const, error: "rejected" as const };
+        throw error;
+      }
     },
 
     async fetchPayment(id: string) {

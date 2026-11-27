@@ -18,6 +18,11 @@ export const subscription = pgTable("subscription", {
   payerEmail: text("payer_email").notNull(),
   amountCents: integer("amount_cents").notNull(),
   nextChargeAt: timestamp("next_charge_at", { withTimezone: true }),
+  // The card that pays it, for the owner to recognise: the brand Mercado Pago
+  // names (`visa`, `master`, …) and the last 4 digits the Card Payment Brick
+  // showed. Either may be null; never the card's number.
+  cardBrand: text("card_brand"),
+  cardLastFour: text("card_last_four"),
   // The Grace period's end: 7 days after a failed monthly charge, null while
   // no charge is overdue. A successful charge clears it.
   graceEndsAt: timestamp("grace_ends_at", { withTimezone: true }),

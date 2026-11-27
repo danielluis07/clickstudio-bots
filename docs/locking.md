@@ -193,6 +193,9 @@ last charge, and for the sweep `reconciled_at` before the calls), then, for
 an approved charge, the one Tenant row's
 `suspended_at` (rank 2), never both at once. Starting a Grace period reads
 the Tenant row's `suspended_at` in a subquery, which takes no row lock.
+Changing the card (`changeCard`) also calls Mercado Pago first, then writes
+the `subscription` row's card with one `UPDATE` outside any transaction, then
+applies the returned state as a notification would.
 Tenant deletion cascades into `subscription` under the Tenant row it already
 holds `for update`.
 

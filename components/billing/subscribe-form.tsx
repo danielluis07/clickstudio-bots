@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { CardPaymentBrickFrame } from "@/components/billing/card-payment-brick-frame";
 import { FormMessage } from "@/components/forms/form-message";
 import { FormRow } from "@/components/forms/form-row";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useCardPaymentBrick } from "@/modules/billing/hooks";
 import { idleFormState, type FormState } from "@/server/actions/form-state";
 import { subscribeAction } from "@/server/actions/billing";
@@ -27,8 +26,8 @@ export function SubscribeForm({
     publicKey,
     amountCents,
     payerEmail: defaultEmail,
-    async onSubmit(cardToken) {
-      const result = await subscribeAction({ cardToken, payerEmail: email });
+    async onSubmit(card) {
+      const result = await subscribeAction({ ...card, payerEmail: email });
       setState(result);
       if (result.status === "error") throw new Error("subscribe refused");
     },
@@ -51,16 +50,7 @@ export function SubscribeForm({
           aria-describedby="payer-email-description"
         />
       </FormRow>
-      {status === "loading" && <Skeleton className="h-72 w-full" />}
-      {status === "failed" && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            Não foi possível carregar o formulário do cartão. Recarregue a página para tentar de
-            novo.
-          </AlertDescription>
-        </Alert>
-      )}
-      <div id={containerId} />
+      <CardPaymentBrickFrame containerId={containerId} status={status} />
       <FormMessage state={state} />
       <p className="text-xs text-muted-foreground">
         Os dados do cartão vão direto para o Mercado Pago. O ClickStudio Bots não os recebe nem os

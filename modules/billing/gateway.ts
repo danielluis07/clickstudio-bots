@@ -16,6 +16,9 @@ export type ProviderSubscription = {
   // When the provider last changed it, so an older read never overwrites a
   // newer one.
   modifiedAt: Date;
+  // The card's brand as the provider names it (`visa`, `master`, …), when it
+  // says. The provider never returns the card's last digits.
+  cardBrand: string | null;
 };
 
 export type ProviderPayment = {
@@ -54,10 +57,14 @@ export type SubscriptionGateway = {
     subscription: NewProviderSubscription,
   ): Promise<{ ok: true; subscription: ProviderSubscription } | { ok: false; error: "rejected" }>;
   fetchSubscription(id: string): Promise<ProviderSubscription>;
-  updateSubscription(
+  updateSubscription(id: string, change: { status: "cancelled" }): Promise<ProviderSubscription>;
+  // Replaces the card that pays the Subscription; the amount and the charge
+  // date stay. `resume` also reactivates a paused one. A refused card or
+  // request is `rejected`; an unreachable provider throws.
+  changeCard(
     id: string,
-    change: { status?: "cancelled"; cardToken?: string },
-  ): Promise<ProviderSubscription>;
+    change: { cardToken: string; resume: boolean },
+  ): Promise<{ ok: true; subscription: ProviderSubscription } | { ok: false; error: "rejected" }>;
   fetchPayment(id: string): Promise<ProviderPayment>;
   // One monthly charge of a Subscription, and the payment that settled it.
   fetchAuthorizedPayment(id: string): Promise<{ subscriptionId: string; paymentId: string | null }>;

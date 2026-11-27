@@ -1,12 +1,14 @@
 import { BillingGuidance } from "@/components/billing/billing-guidance";
 import { BillingSummary } from "@/components/billing/billing-summary";
 import { SubscribeForm } from "@/components/billing/subscribe-form";
+import { SubscriptionCardSection } from "@/components/billing/subscription-card-section";
 import { DashboardPage } from "@/components/dashboard/dashboard-page";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { BillingCheckout } from "@/modules/billing";
 
 // The owner's billing page. The card form shows until the Tenant has a
-// Subscription that isn't cancelled.
+// Subscription that isn't cancelled; from then on, its card and "Alterar
+// cartão".
 export function BillingOverview({
   checkout,
   publicKey,
@@ -36,6 +38,12 @@ export function BillingOverview({
               </AlertDescription>
             </Alert>
           ))}
+        {checkout.canChangeCard && checkout.subscription && (
+          <SubscriptionCardSection
+            subscription={checkout.subscription}
+            publicKey={checkout.available ? publicKey : null}
+          />
+        )}
       </div>
     </DashboardPage>
   );

@@ -59,6 +59,7 @@ describe("Mercado Pago gateway", () => {
         nextChargeAt: new Date("2027-01-01T15:00:00Z"),
         lastCharge: null,
         modifiedAt: new Date("2026-12-01T12:00:00Z"),
+        cardBrand: null,
       },
     });
     expect(requests).toEqual([
@@ -148,6 +149,45 @@ describe("Mercado Pago gateway", () => {
         body: { status: "cancelled" },
       },
     ]);
+  });
+
+  test("changes a preapproval's card, resuming it when asked, and reads the brand", async () => {
+    const { gateway, requests } = gatewayAnswering(() =>
+      Response.json({ ...preapproval, card_id: 123123123, payment_method_id: "master" }),
+    );
+
+    expect(
+      await gateway.changeCard(preapproval.id, { cardToken: "new-card-token", resume: false }),
+    ).toMatchObject({
+      ok: true,
+      subscription: { id: preapproval.id, amountCents: 9990, cardBrand: "master" },
+    });
+    await gateway.changeCard(preapproval.id, { cardToken: "new-card-token", resume: true });
+    expect(requests.map(({ url, method, body }) => ({ url, method, body }))).toEqual([
+      {
+        url: `https://api.mercadopago.com/preapproval/${preapproval.id}`,
+        method: "PUT",
+        body: { card_token_id: "new-card-token" },
+      },
+      {
+        url: `https://api.mercadopago.com/preapproval/${preapproval.id}`,
+        method: "PUT",
+        body: { card_token_id: "new-card-token", status: "authorized" },
+      },
+    ]);
+  });
+
+  test("a refused new card is rejected; an unavailable provider throws", async () => {
+    const refused = gatewayAnswering(() => Response.json({ status: 400 }, { status: 400 }));
+    expect(
+      await refused.gateway.changeCard(preapproval.id, { cardToken: "bad", resume: false }),
+    ).toEqual({ ok: false, error: "rejected" });
+
+    const down = gatewayAnswering(() => new Response("down", { status: 502 }));
+    const failure = await down.gateway
+      .changeCard(preapproval.id, { cardToken: "new-card-token", resume: false })
+      .catch((error) => error);
+    expect(failure).toBeInstanceOf(MercadoPagoRequestError);
   });
 
   test("reads a payment, and the Subscription it charged", async () => {

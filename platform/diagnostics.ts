@@ -75,6 +75,7 @@ export const diagnosticKinds = [
   "database_connection_lost",
   "billing_notification_failed",
   "billing_subscribe_failed",
+  "billing_change_card_failed",
 ] as const;
 
 export type DiagnosticKind = (typeof diagnosticKinds)[number];

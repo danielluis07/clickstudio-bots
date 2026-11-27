@@ -7,8 +7,8 @@ export {
   type BillingCheckout,
   type TenantTrial,
 } from "@/modules/billing/billing";
-export { planAmountCents } from "@/modules/billing/subscriptions";
-export { billingSubscriptionStatusLabel } from "@/modules/billing/labels";
+export { planAmountCents, type BrickCard } from "@/modules/billing/subscriptions";
+export { billingCardLabel, billingSubscriptionStatusLabel } from "@/modules/billing/labels";
 export type {
   NewProviderSubscription,
   ProviderPayment,

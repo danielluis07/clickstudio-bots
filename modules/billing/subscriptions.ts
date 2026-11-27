@@ -17,6 +17,7 @@ const planReason = "ClickStudio Bots: plano mensal";
 // Mercado Pago's statuses for a Subscription that charges the card, and for
 // one that never will again.
 const activeStatus = "authorized";
+const pausedStatus = "paused";
 const cancelledStatus = "cancelled";
 
 // The Grace period (ADR 0012): how long after a failed monthly charge the
@@ -47,6 +48,11 @@ export const paysForPlan = (now: Date) => sql<boolean>`exists(
 
 // A charge attempt of a Subscription: when, and how much, in centavos.
 type Charge = { at: Date; amountCents: number };
+
+// A card from the Card Payment Brick: its token, and the last 4 digits the
+// Brick showed, when it gives them, kept only to show the owner which card
+// pays.
+export type BrickCard = { cardToken: string; lastFourDigits?: string | null };
 
 // How many Subscriptions one sweep run re-reads at most (ADR 0007).
 const reconcileBatch = 100;
@@ -97,6 +103,11 @@ export const createSubscriptions = ({
   // A Tenant subscribes when it has no Subscription or only a cancelled one.
   const canSubscribeOver = (stored: { status: string } | null) =>
     !stored || stored.status === cancelledStatus;
+
+  // Mercado Pago may still charge any Subscription that isn't cancelled, so
+  // its card can be changed, a paused one included.
+  const canChangeCardOf = (stored: { status: string } | null) =>
+    Boolean(stored) && stored!.status !== cancelledStatus;
 
   // One of our Subscriptions, found by Mercado Pago's id or by its Tenant.
   // Another preapproval on the account matches nothing.
@@ -246,6 +257,8 @@ export const createSubscriptions = ({
         available: Boolean(config),
         // Whether the card form shows.
         canSubscribe: canSubscribeOver(stored),
+        // Whether "Alterar cartão" shows.
+        canChangeCard: canChangeCardOf(stored),
         subscription: stored && {
           active: stored.status === activeStatus,
           status: stored.status,
@@ -255,6 +268,11 @@ export const createSubscriptions = ({
           // Set while a failed charge is overdue: the Bot stops on this date
           // unless a charge succeeds first.
           graceEndsAt: stored.graceEndsAt,
+          // The card that pays, or null when nothing is known of it.
+          card:
+            stored.cardBrand || stored.cardLastFour
+              ? { brand: stored.cardBrand, lastFour: stored.cardLastFour }
+              : null,
         },
       };
     },
@@ -263,7 +281,7 @@ export const createSubscriptions = ({
     // the Trial the first charge is on the Trial end; otherwise (Suspended,
     // or billing off) the card is charged now. A Tenant whose Subscription
     // isn't cancelled can't subscribe again.
-    async subscribe(scope: TenantScope, card: { cardToken: string; payerEmail: string }) {
+    async subscribe(scope: TenantScope, card: BrickCard & { payerEmail: string }) {
       if (!(await canManage(scope))) return forbidden;
       if (!config) return { ok: false as const, error: "unavailable" as const };
       if (!canSubscribeOver(await storedSubscription(scope.tenantId)))
@@ -272,7 +290,8 @@ export const createSubscriptions = ({
       const { trialEndsAt, suspended } = await tenantState(scope.tenantId);
       const startDate = !suspended && trialEndsAt && trialEndsAt > clock.now() ? trialEndsAt : null;
       const created = await config.gateway.createSubscription({
-        ...card,
+        cardToken: card.cardToken,
+        payerEmail: card.payerEmail,
         amountCents: planAmountCents,
         startDate,
         reason: planReason,
@@ -297,6 +316,8 @@ export const createSubscriptions = ({
         providerModifiedAt: provider.modifiedAt,
         graceEndsAt: null,
         lastChargedAt: null,
+        cardBrand: provider.cardBrand,
+        cardLastFour: card.lastFourDigits ?? null,
       };
       let stored: { id: string } | undefined;
       try {
@@ -320,6 +341,36 @@ export const createSubscriptions = ({
         return { ok: false as const, error: "already_subscribed" as const };
       }
       return { ok: true as const, firstChargeAt: startDate, suspended };
+    },
+
+    // "Alterar cartão": the owner's new card from the Brick replaces the one
+    // that pays the Subscription. Its id, amount and charge date stay, and a
+    // paused one is resumed. Mercado Pago doesn't document charging an
+    // overdue amount when the card changes: its retries charge the new card,
+    // and that charge ends the Grace period as any successful charge does.
+    // `overdue` says a failed charge is still waiting for one.
+    async changeCard(scope: TenantScope, card: BrickCard) {
+      if (!(await canManage(scope))) return forbidden;
+      if (!config) return { ok: false as const, error: "unavailable" as const };
+      const stored = await storedSubscription(scope.tenantId);
+      if (!stored || !canChangeCardOf(stored))
+        return { ok: false as const, error: "no_subscription" as const };
+
+      const changed = await config.gateway.changeCard(stored.mercadoPagoId, {
+        cardToken: card.cardToken,
+        resume: stored.status === pausedStatus,
+      });
+      if (!changed.ok) return { ok: false as const, error: "card_rejected" as const };
+      await db
+        .update(subscription)
+        .set({
+          cardBrand: changed.subscription.cardBrand,
+          cardLastFour: card.lastFourDigits ?? null,
+        })
+        .where(eq(subscription.mercadoPagoId, stored.mercadoPagoId));
+      await applySubscription(changed.subscription);
+      const after = await storedSubscription(scope.tenantId);
+      return { ok: true as const, overdue: Boolean(after?.graceEndsAt) };
     },
 
     // A verified Mercado Pago notification. The body is only a signal: the

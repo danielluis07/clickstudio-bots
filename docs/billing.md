@@ -4,14 +4,15 @@ Issues: [#253](https://github.com/danielluis07/clickstudio-bots/issues/253) (par
 [#255](https://github.com/danielluis07/clickstudio-bots/issues/255) (switch, Trial and Suspended),
 [#256](https://github.com/danielluis07/clickstudio-bots/issues/256) (extending a Trial),
 [#257](https://github.com/danielluis07/clickstudio-bots/issues/257) (subscribing),
-[#258](https://github.com/danielluis07/clickstudio-bots/issues/258) (failed charges, Grace period, reconciliation).
+[#258](https://github.com/danielluis07/clickstudio-bots/issues/258) (failed charges, Grace period, reconciliation),
+[#259](https://github.com/danielluis07/clickstudio-bots/issues/259) (changing the card).
 Decision: [ADR 0012](adr/0012-mercado-pago-subscriptions-with-card-payment-brick.md).
 Terms: `GLOSSARY.md` → Billing.
 
 Code: `modules/billing/` (the domain, and the `SubscriptionGateway` port in
 `gateway.ts`), `platform/mercado-pago.ts` (the Mercado Pago adapter and the
 webhook signature check), `server/mercado-pago-webhook.ts` (the webhook route)
-and `server/billing-subscription.ts` (the subscribe action).
+and `server/billing-subscription.ts` (the subscribe and change-card actions).
 
 ## The switch
 
@@ -132,6 +133,34 @@ subscribe again; a cancelled one is replaced. If two subscribes race, one row
 wins and the other `preapproval` is cancelled at Mercado Pago. A `preapproval`
 that Mercado Pago doesn't authorize at once is cancelled and reported to the
 owner as a refused card.
+
+## Changing the card
+
+Once the Tenant has a Subscription that isn't `cancelled` (a paused one
+included), the billing page shows the card that pays it under "Cartão",
+masked: the brand Mercado Pago names (`payment_method_id` on the
+preapproval) and the last 4 digits, as in "Visa •••• 3311". Mercado Pago
+returns no digits of the card, so the last 4 come from the Card Payment
+Brick's `AdditionalData.lastFourDigits`, sent with the token. They are kept
+only for display (`subscription.card_last_four`), and anything but 4 digits
+is dropped. Both are also stored when subscribing.
+
+"Alterar cartão" opens the Brick again. Only the owner sees it, as for
+subscribing. `billing.changeCard` sends `PUT /preapproval/{id}` with the new
+`card_token_id` ("Alterar cartão do meio de pagamento primário" in Mercado
+Pago's subscription management docs). The Subscription keeps its row, its
+`preapproval` id, its amount and its next charge date. A paused Subscription
+is also sent `status: "authorized"`, so the new card resumes it. A 4xx is
+reported as a refused card and the old card stays; an unreachable Mercado
+Pago is reported as `billing_change_card_failed`.
+
+**During a Grace period** this is how the owner fixes a failed charge. The
+billing page asks for a new card, before and after the Tenant is Suspended.
+Mercado Pago's docs don't say whether changing the card charges the overdue
+amount at once or waits for the next retry, so nothing is charged by us: the
+next retry charges the new card, and that charge ends the Grace period and
+any suspension like any successful charge (see below). The owner is told the
+overdue charge will be made on the new card at Mercado Pago's next try.
 
 ## Mercado Pago notifications
 
@@ -317,7 +346,8 @@ Checked on 2026-11-27, for the Grace period and reconciliation:
   don't move.
 - **A paused Subscription**: the owner can't subscribe again over it (only a
   `cancelled` one is replaced), so a Tenant Suspended with one needs
-  "Alterar cartão" (#259) or a cancellation.
+  "Alterar cartão", which also sends `status: "authorized"`, or a
+  cancellation.
 - **Which webhook a refusal fires**: not documented. The adapter treats a
   `rejected` payment as the refusal, whether it arrives as `payment` or
   through `subscription_authorized_payment`. Confirm it in the sandbox with
@@ -329,3 +359,18 @@ Checked on 2026-11-27, for the Grace period and reconciliation:
   `date_created`, and when there is more than one page it reads the last page
   (`offset`, `limit`), assuming the oldest come first. Confirm this on a
   Subscription with many charges.
+
+Checked on 2026-11-27, for changing the card:
+
+- **The card change**: settled. `PUT /preapproval/{id}` with `card_token_id`.
+- **Card details on the preapproval**: the reference shows `card_id` and
+  `payment_method_id`, with no last digits or first digits. The last 4 come
+  from the Brick's `AdditionalData`, which `sdk-js`'s
+  `docs/bricks/card-payment.md` types as `bin`, `lastFourDigits`,
+  `cardholderName` and `paymentTypeId`. Confirm the live Brick passes it.
+- **The overdue charge after a card change**: not documented, neither an
+  immediate charge nor a retry schedule. Confirm in the sandbox that a
+  refused renewal is retried on the new card, and how soon.
+- **Resuming a paused Subscription**: the management docs pause and
+  reactivate with `status`. Confirm that a Subscription Mercado Pago paused
+  after failed retries accepts `status: "authorized"` with a new card.
