@@ -401,7 +401,10 @@ test("with the retry's webhook dropped, the sweep sees the charge and clears the
 
   clock.advance(3 * day);
   charge("retry", "approved");
-  gateway.authorizedPayments.set("invoice-1", { subscriptionId: "preapproval-1", paymentId: "retry" });
+  gateway.authorizedPayments.set("invoice-1", {
+    subscriptionId: "preapproval-1",
+    paymentId: "retry",
+  });
   gateway.subscriptions.set("preapproval-1", {
     ...gateway.subscriptions.get("preapproval-1")!,
     nextChargeAt: new Date("2027-01-31T12:00:00Z"),

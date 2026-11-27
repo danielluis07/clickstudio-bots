@@ -67,9 +67,7 @@ const authorizedPaymentSchema = z.object({
 
 const authorizedPaymentSearchSchema = z.object({
   paging: z.object({ total: z.number(), limit: z.number() }),
-  results: z.array(
-    authorizedPaymentSchema.extend({ date_created: z.string().min(1) }),
-  ),
+  results: z.array(authorizedPaymentSchema.extend({ date_created: z.string().min(1) })),
 });
 
 const toSubscription = (body: unknown) => {
