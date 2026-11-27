@@ -5,7 +5,7 @@ import { CardPaymentBrickFrame } from "@/components/billing/card-payment-brick-f
 import { FormMessage } from "@/components/forms/form-message";
 import { FormRow } from "@/components/forms/form-row";
 import { Input } from "@/components/ui/input";
-import { useCardPaymentBrick } from "@/modules/billing/hooks";
+import { useCardPaymentBrick, useRefreshBillingStatus } from "@/modules/billing/hooks";
 import { idleFormState, type FormState } from "@/server/actions/form-state";
 import { subscribeAction } from "@/server/actions/billing";
 
@@ -22,6 +22,7 @@ export function SubscribeForm({
 }) {
   const [email, setEmail] = useState(defaultEmail);
   const [state, setState] = useState<FormState>(idleFormState);
+  const refreshBillingStatus = useRefreshBillingStatus();
   const { containerId, status } = useCardPaymentBrick({
     publicKey,
     amountCents,
@@ -30,6 +31,7 @@ export function SubscribeForm({
       const result = await subscribeAction({ ...card, payerEmail: email });
       setState(result);
       if (result.status === "error") throw new Error("subscribe refused");
+      void refreshBillingStatus();
     },
   });
 

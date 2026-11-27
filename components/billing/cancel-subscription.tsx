@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FormMessage } from "@/components/forms/form-message";
 import { Button } from "@/components/ui/button";
+import { useRefreshBillingStatus } from "@/modules/billing/hooks";
 import { formatDate } from "@/platform/format";
 import { useConfirm } from "@/providers/confirm-provider";
 import { idleFormState, type FormState } from "@/server/actions/form-state";
@@ -13,6 +14,7 @@ import { cancelSubscriptionAction } from "@/server/actions/billing";
 export function CancelSubscription({ botActiveUntil }: { botActiveUntil: Date | null }) {
   const { confirm } = useConfirm();
   const [state, setState] = useState<FormState>(idleFormState);
+  const refreshBillingStatus = useRefreshBillingStatus();
 
   return (
     <section aria-labelledby="cancel-subscription" className="flex flex-col gap-3 border-t pt-6">
@@ -35,7 +37,10 @@ export function CancelSubscription({ botActiveUntil }: { botActiveUntil: Date | 
               message: botActiveUntil
                 ? `O cartão não será mais cobrado. O Bot continua respondendo até ${formatDate(botActiveUntil)} e depois para. Até lá, você pode assinar de novo sem pagar duas vezes.`
                 : "O cartão não será mais cobrado e o Bot para de responder.",
-              action: async () => setState(await cancelSubscriptionAction()),
+              action: async () => {
+                setState(await cancelSubscriptionAction());
+                void refreshBillingStatus();
+              },
             })
           }
         >
