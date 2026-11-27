@@ -377,6 +377,7 @@ describe("tRPC router", () => {
     const attendant = { userId: "attendant", activeTenantId: "tenant-b" };
     expect(await callerFor(ownerB, clock).billing.status()).toEqual({
       suspended: false,
+      trialDaysLeft: null,
       isOwner: true,
       billingPage: true,
     });
@@ -386,21 +387,40 @@ describe("tRPC router", () => {
     try {
       expect(await callerFor(ownerB, clock).billing.status()).toEqual({
         suspended: true,
+        trialDaysLeft: null,
         isOwner: true,
         billingPage: true,
       });
       expect(await callerFor(attendant, clock).billing.status()).toEqual({
         suspended: true,
+        trialDaysLeft: null,
         isOwner: false,
         billingPage: false,
       });
       expect(await callerFor(ownerB, clock, () => signupConfig, false).billing.status()).toEqual({
         suspended: false,
+        trialDaysLeft: null,
         isOwner: true,
         billingPage: false,
       });
     } finally {
       await createBilling({ db, clock, enabled: false }).sweep();
+      await db.update(organization).set({ trialEndsAt: null });
+    }
+  });
+
+  test("every Member is told the days left in an ending Trial", async () => {
+    const clock = createTestClock(new Date("2026-12-01T12:00:00Z"));
+    const launchedAt = createTestClock(new Date("2026-11-04T12:00:00Z"));
+    await createBilling({ db, clock: launchedAt, enabled: true }).launch();
+    try {
+      expect(
+        await callerFor(
+          { userId: "attendant", activeTenantId: "tenant-b" },
+          clock,
+        ).billing.status(),
+      ).toEqual({ suspended: false, trialDaysLeft: 3, isOwner: false, billingPage: false });
+    } finally {
       await db.update(organization).set({ trialEndsAt: null });
     }
   });

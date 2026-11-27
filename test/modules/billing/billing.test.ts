@@ -37,6 +37,7 @@ test("launching gives every Tenant without a Trial end 30 days from that day, an
   expect(await billing(true).status(first)).toEqual({
     trialEndsAt: new Date("2026-12-31T12:00:00Z"),
     suspended: false,
+    trialDaysLeft: null,
   });
 
   clock.advance(day);
@@ -50,7 +51,11 @@ test("with billing off, launching is refused and no Tenant has a Trial end", asy
   const scope = await seedTenant("tenant");
 
   expect(await billing(false).launch()).toEqual({ ok: false, error: "billing_disabled" });
-  expect(await billing(true).status(scope)).toEqual({ trialEndsAt: null, suspended: false });
+  expect(await billing(true).status(scope)).toEqual({
+    trialEndsAt: null,
+    suspended: false,
+    trialDaysLeft: null,
+  });
 });
 
 test("the sweep Suspends a Tenant once its Trial has ended, and not before", async () => {
@@ -156,7 +161,11 @@ test("the platform administrator extends a Suspended Tenant's Trial, which lifts
     tenantName: "tenant",
     trialEndsAt: newEnd,
   });
-  expect(await billing(true).status(scope)).toEqual({ trialEndsAt: newEnd, suspended: false });
+  expect(await billing(true).status(scope)).toEqual({
+    trialEndsAt: newEnd,
+    suspended: false,
+    trialDaysLeft: null,
+  });
   // The sweep leaves it alone until the new end.
   await billing(true).sweep();
   expect((await billing(true).status(scope)).suspended).toBe(false);
@@ -226,4 +235,33 @@ test("the platform administrator lists every Tenant's Trial end and whether it i
   });
   expect(await billing(true).trials(first.userId)).toEqual({ ok: false, error: "forbidden" });
   expect(await billing(false).trials(adminId)).toEqual({ ok: false, error: "billing_disabled" });
+});
+
+test("Members are told the days left in the Trial from exactly 7 days before it ends, and not after it ends", async () => {
+  const scope = await seedTenant("tenant");
+  await billing(true).launch();
+  const daysLeft = async () => (await billing(true).status(scope)).trialDaysLeft;
+
+  clock.advance(23 * day - 1);
+  expect(await daysLeft()).toBeNull();
+
+  clock.advance(1);
+  expect(await daysLeft()).toBe(7);
+
+  clock.advance(day + 1);
+  expect(await daysLeft()).toBe(6);
+
+  clock.advance(6 * day - 2);
+  expect(await daysLeft()).toBe(1);
+
+  clock.advance(1);
+  expect(await daysLeft()).toBeNull();
+});
+
+test("with billing off, Members are not told the Trial is ending", async () => {
+  const scope = await seedTenant("tenant");
+  await billing(true).launch();
+  clock.advance(25 * day);
+
+  expect((await billing(false).status(scope)).trialDaysLeft).toBeNull();
 });

@@ -134,6 +134,17 @@ test("an owner on Trial subscribes: the Subscription is active and the first cha
   expect((await billing().status(owner)).suspended).toBe(false);
 });
 
+test("Members stop being told the Trial is ending once the owner subscribes", async () => {
+  const owner = await seedMember("owner");
+  await billing().launch();
+  clock.advance(25 * day);
+  expect((await billing().status(owner)).trialDaysLeft).toBe(5);
+
+  await billing().subscribe(owner, card);
+
+  expect((await billing().status(owner)).trialDaysLeft).toBeNull();
+});
+
 test("a Suspended owner is charged now, and the suspension ends once Mercado Pago approves the charge", async () => {
   const owner = await seedMember("owner");
   await billing().launch();
