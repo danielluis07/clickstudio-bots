@@ -189,7 +189,8 @@ at once, the second waits for the first's row and then skips it, and its
 the sweep's reconciliation of each Subscription it re-reads, write with
 single `UPDATE`s outside any transaction, after the Mercado Pago call that
 fed them: the `subscription` row (rank 4: its state, its Grace period, its
-last charge), then, for an approved charge, the one Tenant row's
+last charge, and for the sweep `reconciled_at` before the calls), then, for
+an approved charge, the one Tenant row's
 `suspended_at` (rank 2), never both at once. Starting a Grace period reads
 the Tenant row's `suspended_at` in a subquery, which takes no row lock.
 Tenant deletion cascades into `subscription` under the Tenant row it already

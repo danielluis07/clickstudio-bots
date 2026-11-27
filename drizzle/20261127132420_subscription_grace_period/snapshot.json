@@ -2,7 +2,7 @@
   "type": "diff",
   "version": "9",
   "dialect": "postgres",
-  "id": "03087b28-3850-4e3e-bec4-59c365718294",
+  "id": "4aaa7dc8-c03b-4989-98e2-8fac3633948c",
   "prevIds": [
     "f24e8dd1-7a24-477b-aa01-4294a53c421d"
   ],
@@ -42,6 +42,24 @@
         "n|tbl|public.subscription",
         "n|sch|public"
       ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "subscription",
+        "reconciled_at"
+      ],
+      "writes": [
+        "s|col|public.subscription.reconciled_at",
+        "n|col|public.subscription.reconciled_at",
+        "e|col|public.subscription.reconciled_at"
+      ],
+      "reads": [
+        "n|tbl|public.subscription",
+        "n|sch|public"
+      ]
     }
   ],
   "deltas": [
@@ -67,6 +85,22 @@
         "schema": "public",
         "table": "subscription",
         "name": "last_charged_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subscription",
+        "name": "reconciled_at",
         "type": "timestamp with time zone",
         "typeSchema": null,
         "notNull": false,

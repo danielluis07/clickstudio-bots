@@ -273,8 +273,9 @@ the alerts matter most then. Each run:
    as `operation`. For `credential_rejected` and `removed`, ask the owner to
    reconnect; for `banned` and `restricted`, the owner appeals to Meta.
 4. Enforces billing (`enforce-billing`): first re-checks with Mercado Pago
-   the active Subscriptions whose charge is due or that have a Grace period,
-   so a lost webhook doesn't leave a status wrong. Then Suspends every Tenant
+   up to 100 active Subscriptions whose charge is due or that have a Grace
+   period, so a lost webhook doesn't leave a status wrong. It stops at the
+   first failed call. Then Suspends every Tenant
    whose Trial has ended without an active Subscription, or whose Grace
    period ended with the charge unpaid, so its Bot stops replying. If
    Mercado Pago is unreachable it still Suspends from what is stored and the

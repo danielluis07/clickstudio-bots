@@ -44,6 +44,14 @@ const seedMember = async (
 
 const card = { cardToken: "card-token", payerEmail: "pagamentos@sorriso.example" };
 
+// A second Tenant and its owner.
+const seedOtherTenant = async (values: { trialEndsAt?: Date } = {}) => {
+  await db.insert(organization).values({ id: "other", name: "Outra", slug: "other", ...values });
+  await db.insert(user).values({ id: "other-owner", name: "Dona", email: "dona@outra.example" });
+  await db.insert(member).values({ organizationId: "other", userId: "other-owner", role: "owner" });
+  return (await resolveTenantScope(db, { userId: "other-owner" }))!;
+};
+
 // An owner who subscribed during the Trial, now at the Trial end: the day of
 // the first monthly charge (2026-12-31T12:00Z).
 const subscribedAtTrialEnd = async () => {
@@ -471,21 +479,53 @@ test("the sweep fetches only Subscriptions with a charge due or a Grace period",
   expect(fetched).toEqual([]);
 });
 
+test("a retry approved before the Grace period ends lifts the suspension even when its webhook arrives later", async () => {
+  const owner = await subscribedAtTrialEnd();
+  charge("refused", "rejected");
+  await billing().receiveNotification({ type: "payment", id: "refused" });
+
+  clock.advance(7 * day - 60_000);
+  charge("retry", "approved");
+  clock.advance(2 * 60_000);
+  await billing().sweep();
+  expect(await suspended(owner)).toBe(true);
+
+  await billing().receiveNotification({ type: "payment", id: "retry" });
+  expect(await suspended(owner)).toBe(false);
+});
+
+test("with Mercado Pago failing, the sweep stops at the first failure and starts with another Subscription next run", async () => {
+  const owner = await seedMember("owner");
+  const other = await seedOtherTenant();
+  await billing().launch();
+  await billing().subscribe(owner, card);
+  await billing().subscribe(other, card);
+  clock.advance(30 * day);
+  const fetched: string[] = [];
+  const fetchSubscription = gateway.fetchSubscription;
+  gateway.fetchSubscription = async (id) => {
+    fetched.push(id);
+    if (fetched.length === 1) throw new Error("Mercado Pago is down");
+    return fetchSubscription(id);
+  };
+
+  await expect(billing().sweep()).rejects.toThrow("Mercado Pago is down");
+  expect(fetched).toHaveLength(1);
+
+  const [failed] = fetched;
+  const untried = failed === "preapproval-1" ? "preapproval-2" : "preapproval-1";
+  clock.advance(30 * 60_000);
+  await billing().sweep();
+  expect(fetched.slice(1)).toEqual([untried, failed]);
+});
+
 test("with Mercado Pago down, the sweep still Suspends and then reports the failure", async () => {
   const owner = await subscribedAtTrialEnd();
   gateway.fetchSubscription = async () => {
     throw new Error("Mercado Pago is down");
   };
   // Trial ended, no Subscription: Suspended despite Mercado Pago being down.
-  await db.insert(organization).values({
-    id: "other",
-    name: "Outra",
-    slug: "other",
-    trialEndsAt: clock.now(),
-  });
-  await db.insert(user).values({ id: "other-owner", name: "Dona", email: "dona@outra.example" });
-  await db.insert(member).values({ organizationId: "other", userId: "other-owner", role: "owner" });
-  const other = (await resolveTenantScope(db, { userId: "other-owner" }))!;
+  const other = await seedOtherTenant({ trialEndsAt: clock.now() });
 
   await expect(billing().sweep()).rejects.toThrow("Mercado Pago is down");
   expect(await suspended(owner)).toBe(false);

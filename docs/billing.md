@@ -52,8 +52,8 @@ Extending also lifts the Tenant's suspension at once, so its Bot replies
 again with no sweep needed. A Tenant Suspended after its Grace period still
 has its `authorized` Subscription, so extending is refused for it and only a
 successful charge lifts that suspension. Once Mercado Pago has cancelled or
-paused that Subscription, the administrator may extend the Trial, which
-deliberately gives the Tenant more free days.
+paused that Subscription, extending is no longer refused, as for any Tenant
+without an active Subscription.
 
 Each extension is recorded in the activity log as `trial.extended`, with the
 administrator as actor ([Member activity](member-activity.md)).
@@ -194,7 +194,9 @@ Mercado Pago retries the card. Its Bot keeps replying. The end is stored in
   `grace_ends_at` and lifts a suspension that began before it. Each of the
   three charge signals counts.
 - **When it ends unpaid**, the next sweep run Suspends the Tenant (at most 30
-  minutes later). A retry that succeeds after that still ends the suspension.
+  minutes later). A retry that succeeds after that still ends the suspension,
+  and so does one that succeeded in time but was reported only after the
+  sweep had Suspended the Tenant.
 - **If Mercado Pago cancels or pauses** the Subscription once its retries are
   used up, the Tenant keeps its Bot until the Grace period ends and is then
   Suspended.
@@ -226,9 +228,19 @@ For each one, three calls:
    ends it.
 
 The writes are the same idempotent ones as for notifications, so a sweep
-that runs while a webhook arrives changes nothing more. One Subscription's
-failure doesn't stop the others. If Mercado Pago is unreachable, the task
-still Suspends from what is stored, then reports `sweep_task_failed`.
+that runs while a webhook arrives changes nothing more. A run re-reads at
+most 100 Subscriptions, the ones re-read longest ago first
+(`subscription.reconciled_at`). The first failed call ends the run: Mercado
+Pago is likely down, and waiting out a 10-second timeout per Subscription
+would use up the sweep's 60-second limit before the Bot's own recovery. The
+failed Subscription goes to the back of the queue, so it doesn't block the
+others next run. Either way the task still Suspends from what is stored,
+then reports `sweep_task_failed`.
+
+A Tenant Suspended after its Grace period keeps an `authorized`
+Subscription with a Grace period until Mercado Pago cancels or pauses it,
+so it is re-read every run. That costs three Mercado Pago calls and no extra
+database work, and it is how a late retry with a lost webhook is found.
 
 ## Mercado Pago setup
 
@@ -295,7 +307,17 @@ Checked on 2026-11-27, for the Grace period and reconciliation:
   Pago cancels or pauses the Subscription when retries run out, or whether
   `next_payment_date` moves after a refusal. The Grace period therefore
   depends on none of these: it is 7 days from the refusal, whatever Mercado
-  Pago does, and both cancelled and paused are handled.
+  Pago does, and both cancelled and paused are handled. If `next_payment_date`
+  does move after a refusal whose webhook is lost, the sweep stops seeing
+  the charge as due and finds the refusal only at the next charge date or
+  through a later notification.
+- **`summarized.last_charged_date` and `last_charged_amount`**: the docs
+  don't say whether they count only successful charges. They are read as a
+  successful charge, as since #257. Confirm on a refused renewal that they
+  don't move.
+- **A paused Subscription**: the owner can't subscribe again over it (only a
+  `cancelled` one is replaced), so a Tenant Suspended with one needs
+  "Alterar cartão" (#259) or a cancellation.
 - **Which webhook a refusal fires**: not documented. The adapter treats a
   `rejected` payment as the refusal, whether it arrives as `payment` or
   through `subscription_authorized_payment`. Confirm it in the sandbox with

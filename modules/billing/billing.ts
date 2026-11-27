@@ -72,7 +72,7 @@ export const createBilling = ({
           .where(isNotNull(organization.suspendedAt));
         return 0;
       }
-      const reconciled = await reconcile().then(
+      const reconcileFailure = await reconcile().then(
         () => null,
         (error: unknown) => ({ error }),
       );
@@ -89,7 +89,7 @@ export const createBilling = ({
           ),
         )
         .returning({ id: organization.id });
-      if (reconciled) throw reconciled.error;
+      if (reconcileFailure) throw reconcileFailure.error;
       return suspended.length;
     },
 

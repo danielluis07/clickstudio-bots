@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, lt, lte, notExists, or, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lt, lte, notExists, or, sql } from "drizzle-orm";
 import type { Database } from "@/db/database";
 import { organization, subscription } from "@/db/schema";
 import { isPlatformAdmin } from "@/modules/identity";
@@ -21,7 +21,7 @@ const cancelledStatus = "cancelled";
 
 // The Grace period (ADR 0012): how long after a failed monthly charge the
 // Tenant keeps its Bot while Mercado Pago retries.
-export const graceDays = 7;
+const graceDays = 7;
 const graceMs = graceDays * 24 * 60 * 60 * 1000;
 const graceEndFrom = (failedAt: Date) => new Date(failedAt.getTime() + graceMs);
 
@@ -44,6 +44,12 @@ export const paysForPlan = (now: Date) => sql<boolean>`exists(
     or (${subscription.status} = ${activeStatus} and ${subscription.graceEndsAt} is null)
   )
 )`;
+
+// A charge attempt of a Subscription: when, and how much, in centavos.
+type Charge = { at: Date; amountCents: number };
+
+// How many Subscriptions one sweep run re-reads at most (ADR 0007).
+const reconcileBatch = 100;
 
 export type SubscriptionsConfig = {
   gateway: SubscriptionGateway;
@@ -112,16 +118,19 @@ export const createSubscriptions = ({
   type OurSubscription = NonNullable<Awaited<ReturnType<typeof ourSubscription>>>;
 
   // A successful charge of the Subscription's amount ends a Grace period that
-  // began before it, and a suspension that began before it. The card check
+  // began before it, and the suspension that Grace period led to, even when
+  // the charge is reported only after the sweep Suspended the Tenant. Without
+  // a Grace period it ends a suspension that began before it. The card check
   // Mercado Pago makes when subscribing is smaller, and a charge from before
   // either (a replayed notification) settles nothing.
-  const recordCharge = async (row: OurSubscription, charge: { at: Date; amountCents: number }) => {
+  const recordCharge = async (row: OurSubscription, charge: Charge) => {
     if (charge.amountCents < row.amountCents) return;
     const ours = eq(subscription.mercadoPagoId, row.mercadoPagoId);
-    await db
+    const endedGrace = await db
       .update(subscription)
       .set({ graceEndsAt: null })
-      .where(and(ours, lte(subscription.graceEndsAt, graceEndFrom(charge.at))));
+      .where(and(ours, lte(subscription.graceEndsAt, graceEndFrom(charge.at))))
+      .returning({ id: subscription.id });
     await db
       .update(subscription)
       .set({ lastChargedAt: charge.at })
@@ -134,13 +143,18 @@ export const createSubscriptions = ({
     await db
       .update(organization)
       .set({ suspendedAt: null })
-      .where(and(eq(organization.id, row.tenantId), lte(organization.suspendedAt, charge.at)));
+      .where(
+        and(
+          eq(organization.id, row.tenantId),
+          endedGrace.length ? undefined : lte(organization.suspendedAt, charge.at),
+        ),
+      );
   };
 
   // A refused charge of the Subscription's amount starts its Grace period,
   // unless one is already running, a later charge succeeded, or the Tenant is
   // already Suspended (it has no Bot to keep).
-  const recordFailure = (row: OurSubscription, failure: { at: Date; amountCents: number }) =>
+  const recordFailedCharge = (row: OurSubscription, failure: Charge) =>
     failure.amountCents < row.amountCents
       ? undefined
       : db
@@ -194,7 +208,7 @@ export const createSubscriptions = ({
     if (payment.status === "approved" && payment.approvedAt)
       await recordCharge(row, { at: payment.approvedAt, amountCents: payment.amountCents });
     else if (payment.status === "rejected")
-      await recordFailure(row, { at: payment.createdAt, amountCents: payment.amountCents });
+      await recordFailedCharge(row, { at: payment.createdAt, amountCents: payment.amountCents });
   };
 
   // A payment notification: refreshes the Subscription, then applies the
@@ -334,8 +348,11 @@ export const createSubscriptions = ({
     // cheap (ADR 0011) it reads only active Subscriptions whose charge is due
     // (a successful one moves the next charge a month ahead) or that have a
     // Grace period; one on Trial, already charged this month, or cancelled
-    // costs nothing. One Subscription's failure doesn't stop the others; the
-    // first is rethrown at the end.
+    // costs nothing. At most `reconcileBatch` per run, the ones re-read
+    // longest ago first. The first failure ends the run and is rethrown:
+    // Mercado Pago is likely down, and waiting out each call's timeout would
+    // use up the sweep's time limit. The failed one goes to the back, so it
+    // doesn't block the others next run.
     async reconcile() {
       if (!config) return;
       const { gateway } = config;
@@ -351,19 +368,19 @@ export const createSubscriptions = ({
             eq(subscription.status, activeStatus),
             or(isNotNull(subscription.graceEndsAt), lte(subscription.nextChargeAt, clock.now())),
           ),
-        );
-      const failures: unknown[] = [];
+        )
+        .orderBy(sql`${subscription.reconciledAt} asc nulls first`, asc(subscription.id))
+        .limit(reconcileBatch);
       for (const row of due) {
-        try {
-          await applySubscription(await gateway.fetchSubscription(row.mercadoPagoId));
-          const invoice = await gateway.fetchLatestAuthorizedPayment(row.mercadoPagoId);
-          if (invoice?.paymentId)
-            await applyPayment(row, await gateway.fetchPayment(invoice.paymentId));
-        } catch (error) {
-          failures.push(error);
-        }
+        await db
+          .update(subscription)
+          .set({ reconciledAt: clock.now() })
+          .where(eq(subscription.mercadoPagoId, row.mercadoPagoId));
+        await applySubscription(await gateway.fetchSubscription(row.mercadoPagoId));
+        const latestCharge = await gateway.fetchLatestAuthorizedPayment(row.mercadoPagoId);
+        if (latestCharge?.paymentId)
+          await applyPayment(row, await gateway.fetchPayment(latestCharge.paymentId));
       }
-      if (failures.length) throw failures[0];
     },
   };
 };
