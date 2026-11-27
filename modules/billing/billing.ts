@@ -12,7 +12,10 @@ import {
 } from "@/modules/billing/subscriptions";
 
 export const trialDays = 30;
-const trialMs = trialDays * 24 * 60 * 60 * 1000;
+const dayMs = 24 * 60 * 60 * 1000;
+const trialMs = trialDays * dayMs;
+// How long before the Trial end Members are warned it is ending.
+const trialWarningDays = 7;
 
 // Billing behind its per-environment switch (ADR 0012). While `enabled` is
 // false no Trial counts down and no Tenant is Suspended. `subscriptions` is
@@ -148,16 +151,28 @@ export const createBilling = ({
       });
     },
 
-    // What the scope's Tenant's Members see of billing.
+    // What the scope's Tenant's Members see of billing. `trialDaysLeft` counts
+    // whole days, rounded up, to the Trial end, from exactly
+    // `trialWarningDays` before it, for a Tenant without an active
+    // Subscription.
     async status(scope: TenantScope) {
-      if (!enabled) return { trialEndsAt: null, suspended: false };
+      if (!enabled) return { trialEndsAt: null, suspended: false, trialDaysLeft: null };
       const [found] = await db
-        .select({ trialEndsAt: organization.trialEndsAt, suspendedAt: organization.suspendedAt })
+        .select({
+          trialEndsAt: organization.trialEndsAt,
+          suspendedAt: organization.suspendedAt,
+          subscribed: hasActiveSubscription,
+        })
         .from(organization)
         .where(eq(organization.id, scope.tenantId));
+      const trialEndsAt = found?.trialEndsAt ?? null;
+      const msLeft =
+        trialEndsAt && !found?.subscribed ? trialEndsAt.getTime() - clock.now().getTime() : 0;
       return {
-        trialEndsAt: found?.trialEndsAt ?? null,
+        trialEndsAt,
         suspended: Boolean(found?.suspendedAt),
+        trialDaysLeft:
+          msLeft > 0 && msLeft <= trialWarningDays * dayMs ? Math.ceil(msLeft / dayMs) : null,
       };
     },
   };
